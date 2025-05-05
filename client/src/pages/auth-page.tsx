@@ -70,7 +70,7 @@ export default function AuthPage() {
     <div className="min-h-screen bg-neutral-100 flex flex-col md:flex-row">
       {/* Left side - Auth Forms */}
       <div className="w-full md:w-1/2 flex items-center justify-center p-6">
-        <Card className="w-full max-w-md">
+        <Card className="w-full max-w-md shadow-lg rounded-xl">
           <CardHeader className="space-y-1">
             <CardTitle className="text-2xl font-bold text-center">Lean Canvas SaaS</CardTitle>
             <CardDescription className="text-center">
@@ -114,7 +114,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+                    <Button type="submit" className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700" disabled={loginMutation.isPending}>
                       {loginMutation.isPending ? "Logging in..." : "Login"}
                     </Button>
                   </form>
@@ -164,7 +164,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="w-full" disabled={registerMutation.isPending}>
+                    <Button type="submit" className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700" disabled={registerMutation.isPending}>
                       {registerMutation.isPending ? "Creating account..." : "Create Account"}
                     </Button>
                   </form>
@@ -176,7 +176,7 @@ export default function AuthPage() {
       </div>
       
       {/* Right side - Hero Section */}
-      <div className="w-full md:w-1/2 bg-primary-600 text-white p-10 flex flex-col justify-center">
+      <div className="w-full md:w-1/2 bg-gradient-to-br from-primary-500 to-primary-700 text-white p-10 flex flex-col justify-center">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center mb-6">
             <ClipboardList size={40} className="mr-3" />
