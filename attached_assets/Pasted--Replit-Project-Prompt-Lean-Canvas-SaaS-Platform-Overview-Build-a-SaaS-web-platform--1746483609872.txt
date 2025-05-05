@@ -1,0 +1,61 @@
+### Replit Project Prompt: Lean Canvas SaaS Platform
+
+#### Overview:
+
+Build a SaaS web platform allowing users to create, view, and manage business ideas, each represented as individual "projects." Each project will include a Lean Canvas generated through integration with an external n8n scenario triggered via webhook.
+
+#### Functional Requirements:
+
+1. **User Authentication:**
+
+   * Implement sign-up/login using email and password.
+   * Provide secure user sessions with logout functionality.
+
+2. **Project Management (CMS-like structure):**
+
+   * Allow authenticated users to view a dashboard listing their ideas (projects).
+   * Each idea should show a status (e.g., "Draft," "Generating," "Completed").
+   * Allow users to click on an idea to view detailed information and its associated Lean Canvas.
+
+3. **Creating New Ideas:**
+
+   * Provide a form to submit new ideas.
+   * Required Field:
+
+     * `Idea` (text)
+   * Optional Fields:
+
+     * Founder Name
+     * Founder Email
+     * Company Stage
+     * Website URL
+     * Company Name
+   * Form submission triggers the external n8n scenario via webhook.
+
+4. **Webhook Integration:**
+
+   * After form submission, the app must send data via webhook POST request to trigger the n8n scenario.
+   * The n8n scenario processes and generates a Lean Canvas, writes data to its internal systems (like Supabase), and sends results back via webhook to the application.
+
+5. **Notification System:**
+
+   * Upon receiving completion webhook from n8n scenario, update project status.
+   * Display real-time on-screen notifications informing users that their Lean Canvas has been generated.
+
+6. **Lean Canvas Management:**
+
+   * Display generated Lean Canvas clearly structured in sections: Problem, Customer Segments, Unique Value Proposition, Solution, Channels, Revenue Streams, Cost Structure, Key Metrics, Unfair Advantage.
+   * Allow users to edit and save changes to any Lean Canvas section.
+   * Provide functionality to regenerate the Lean Canvas via triggering the webhook again with existing or updated inputs.
+
+#### Technical Stack Suggestion:
+
+* Front-end: React or Next.js with Tailwind CSS or Material UI.
+* Backend/API: Node.js or Python FastAPI.
+* Database: Supabase/PostgreSQL.
+* Webhooks: n8n, Axios or Fetch API for integration.
+
+#### Future-Proofing:
+
+* Keep architecture flexible to add new sections or integrations later.
+* Ensure robust error handling and clear user messaging for a seamless user experience.
