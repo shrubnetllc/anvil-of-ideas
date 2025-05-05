@@ -79,7 +79,7 @@ export default function AuthPage() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsList className="grid w-full grid-cols-2 mb-6 bg-gray-100">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Register</TabsTrigger>
               </TabsList>
@@ -114,7 +114,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700" disabled={loginMutation.isPending}>
+                    <Button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700" disabled={loginMutation.isPending}>
                       {loginMutation.isPending ? "Logging in..." : "Login"}
                     </Button>
                   </form>
@@ -164,7 +164,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700" disabled={registerMutation.isPending}>
+                    <Button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700" disabled={registerMutation.isPending}>
                       {registerMutation.isPending ? "Creating account..." : "Create Account"}
                     </Button>
                   </form>
@@ -176,7 +176,7 @@ export default function AuthPage() {
       </div>
       
       {/* Right side - Hero Section */}
-      <div className="w-full md:w-1/2 bg-gradient-to-br from-primary-500 to-primary-700 text-white p-10 flex flex-col justify-center">
+      <div className="w-full md:w-1/2 bg-gradient-to-br from-blue-600 to-blue-800 text-white p-10 flex flex-col justify-center">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center mb-6">
             <ClipboardList size={40} className="mr-3" />
@@ -188,28 +188,28 @@ export default function AuthPage() {
           </p>
           <div className="space-y-4">
             <div className="flex items-start">
-              <div className="flex-shrink-0 bg-primary-500 rounded-full p-1 mt-1">
+              <div className="flex-shrink-0 bg-blue-400 rounded-full p-1 mt-1">
                 <svg className="h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="ml-3 text-primary-100">Automatically generate Lean Canvas for your business ideas</p>
+              <p className="ml-3 text-white font-medium">Automatically generate Lean Canvas for your business ideas</p>
             </div>
             <div className="flex items-start">
-              <div className="flex-shrink-0 bg-primary-500 rounded-full p-1 mt-1">
+              <div className="flex-shrink-0 bg-blue-400 rounded-full p-1 mt-1">
                 <svg className="h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="ml-3 text-primary-100">Track and manage multiple business concepts in one place</p>
+              <p className="ml-3 text-white font-medium">Track and manage multiple business concepts in one place</p>
             </div>
             <div className="flex items-start">
-              <div className="flex-shrink-0 bg-primary-500 rounded-full p-1 mt-1">
+              <div className="flex-shrink-0 bg-blue-400 rounded-full p-1 mt-1">
                 <svg className="h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="ml-3 text-primary-100">Edit and refine your canvas as your idea evolves</p>
+              <p className="ml-3 text-white font-medium">Edit and refine your canvas as your idea evolves</p>
             </div>
           </div>
         </div>

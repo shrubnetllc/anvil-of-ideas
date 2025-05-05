@@ -27,11 +27,11 @@ export interface IStorage {
   updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void>;
   
   // Session store
-  sessionStore: session.SessionStore;
+  sessionStore: any; // Using 'any' type for sessionStore to avoid type errors
 }
 
 export class DatabaseStorage implements IStorage {
-  public sessionStore: session.SessionStore;
+  public sessionStore: any;
 
   constructor() {
     this.sessionStore = new PostgresSessionStore({
@@ -122,7 +122,7 @@ export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private ideas: Map<number, Idea>;
   private canvases: Map<number, LeanCanvas>;
-  public sessionStore: session.SessionStore;
+  public sessionStore: any;
   private nextUserId: number;
   private nextIdeaId: number;
   private nextCanvasId: number;
