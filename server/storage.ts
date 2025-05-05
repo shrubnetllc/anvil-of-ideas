@@ -1,8 +1,12 @@
 import { users, type User, type InsertUser, ideas, leanCanvas, type Idea, type LeanCanvas, type InsertIdea, type InsertLeanCanvas, type UpdateLeanCanvas, ProjectStatus } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
+import connectPg from "connect-pg-simple";
+import { eq, and } from "drizzle-orm";
+import { db, pool } from "./db";
 
 const MemoryStore = createMemoryStore(session);
+const PostgresSessionStore = connectPg(session);
 
 export interface IStorage {
   // User operations
@@ -24,6 +28,94 @@ export interface IStorage {
   
   // Session store
   sessionStore: session.SessionStore;
+}
+
+export class DatabaseStorage implements IStorage {
+  public sessionStore: session.SessionStore;
+
+  constructor() {
+    this.sessionStore = new PostgresSessionStore({
+      pool,
+      createTableIfMissing: true,
+    });
+  }
+
+  // User operations
+  async getUser(id: number): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.username, username));
+    return user;
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  // Idea operations
+  async getIdeasByUser(userId: number): Promise<Idea[]> {
+    return await db.select().from(ideas).where(eq(ideas.userId, userId));
+  }
+
+  async getIdeaById(id: number): Promise<Idea | undefined> {
+    const [idea] = await db.select().from(ideas).where(eq(ideas.id, id));
+    return idea;
+  }
+
+  async createIdea(idea: InsertIdea & { userId: number }): Promise<Idea> {
+    const [newIdea] = await db.insert(ideas).values({
+      ...idea,
+      status: "Draft"
+    }).returning();
+    return newIdea;
+  }
+
+  async updateIdeaStatus(id: number, status: ProjectStatus): Promise<void> {
+    await db.update(ideas)
+      .set({
+        status,
+        updatedAt: new Date()
+      })
+      .where(eq(ideas.id, id));
+  }
+
+  async deleteIdea(id: number): Promise<void> {
+    // First delete any associated canvas
+    await db.delete(leanCanvas).where(eq(leanCanvas.ideaId, id));
+    
+    // Then delete the idea
+    await db.delete(ideas).where(eq(ideas.id, id));
+  }
+
+  // Lean Canvas operations
+  async getLeanCanvasByIdeaId(ideaId: number): Promise<LeanCanvas | undefined> {
+    const [canvas] = await db.select().from(leanCanvas).where(eq(leanCanvas.ideaId, ideaId));
+    return canvas;
+  }
+
+  async createLeanCanvas(canvas: InsertLeanCanvas): Promise<LeanCanvas> {
+    const [newCanvas] = await db.insert(leanCanvas).values(canvas).returning();
+    return newCanvas;
+  }
+
+  async updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void> {
+    // Update the canvas
+    await db.update(leanCanvas)
+      .set({
+        ...updates,
+        updatedAt: new Date()
+      })
+      .where(eq(leanCanvas.ideaId, ideaId));
+    
+    // Update the related idea's updatedAt timestamp
+    await db.update(ideas)
+      .set({ updatedAt: new Date() })
+      .where(eq(ideas.id, ideaId));
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -163,4 +255,5 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Use the database storage implementation
+export const storage = new DatabaseStorage();

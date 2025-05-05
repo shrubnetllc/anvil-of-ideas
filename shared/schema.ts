@@ -1,42 +1,9 @@
-import { pgTable, text, serial, integer, boolean, json, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
-});
-
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
-
 export const projectStatuses = ["Draft", "Generating", "Completed"] as const;
 export type ProjectStatus = typeof projectStatuses[number];
-
-export const ideas = pgTable("ideas", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull(),
-  idea: text("idea").notNull(),
-  founderName: text("founder_name"),
-  founderEmail: text("founder_email"),
-  companyStage: text("company_stage"),
-  websiteUrl: text("website_url"),
-  companyName: text("company_name"),
-  status: text("status").notNull().default("Draft"),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-
-export const insertIdeaSchema = createInsertSchema(ideas).omit({
-  id: true,
-  userId: true,
-  status: true,
-  createdAt: true,
-  updatedAt: true,
-});
 
 export const canvasSections = [
   "Problem",
@@ -51,9 +18,30 @@ export const canvasSections = [
 ] as const;
 export type CanvasSection = typeof canvasSections[number];
 
+// Define tables
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+});
+
+export const ideas = pgTable("ideas", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  idea: text("idea").notNull(),
+  founderName: text("founder_name"),
+  founderEmail: text("founder_email"),
+  companyStage: text("company_stage"),
+  websiteUrl: text("website_url"),
+  companyName: text("company_name"),
+  status: text("status").notNull().default("Draft"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const leanCanvas = pgTable("lean_canvas", {
   id: serial("id").primaryKey(),
-  ideaId: integer("idea_id").notNull(),
+  ideaId: integer("idea_id").notNull().references(() => ideas.id),
   problem: text("problem"),
   customerSegments: text("customer_segments"),
   uniqueValueProposition: text("unique_value_proposition"),
@@ -65,6 +53,20 @@ export const leanCanvas = pgTable("lean_canvas", {
   unfairAdvantage: text("unfair_advantage"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Define schemas
+export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
+});
+
+export const insertIdeaSchema = createInsertSchema(ideas).omit({
+  id: true,
+  userId: true,
+  status: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 export const insertLeanCanvasSchema = createInsertSchema(leanCanvas).omit({
@@ -85,6 +87,7 @@ export const updateLeanCanvasSchema = createInsertSchema(leanCanvas).pick({
   unfairAdvantage: true,
 });
 
+// Export types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 
