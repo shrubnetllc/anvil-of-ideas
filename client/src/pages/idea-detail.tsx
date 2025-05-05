@@ -1,0 +1,320 @@
+import { useParams, useLocation } from "wouter";
+import { useIdea } from "@/hooks/use-ideas";
+import { useLeanCanvas } from "@/hooks/use-lean-canvas";
+import { Sidebar } from "@/components/sidebar";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, RotateCcw, ExternalLinkIcon } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatDate } from "@/lib/utils";
+import { CanvasSection, canvasSections } from "@shared/schema";
+import { CanvasSectionComponent } from "@/components/canvas-section";
+
+export default function IdeaDetail() {
+  const { id } = useParams<{ id: string }>();
+  const [, navigate] = useLocation();
+  const ideaId = parseInt(id);
+  const { idea, isLoading: isLoadingIdea } = useIdea(ideaId);
+  const { canvas, isLoading: isLoadingCanvas, regenerateCanvas, isRegenerating } = useLeanCanvas(ideaId);
+
+  const handleBackClick = () => {
+    navigate("/");
+  };
+
+  const handleRegenerateCanvasClick = () => {
+    regenerateCanvas();
+  };
+
+  if (isLoadingIdea) {
+    return (
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col md:ml-64 min-h-screen">
+          <main className="flex-1 overflow-y-auto focus:outline-none custom-scrollbar">
+            <div className="py-6 max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+              <div className="flex items-center mb-6">
+                <Button variant="ghost" size="icon" className="mr-4" onClick={handleBackClick}>
+                  <ArrowLeft className="h-6 w-6" />
+                </Button>
+                <Skeleton className="h-8 w-80" />
+              </div>
+              <div className="animate-pulse">Loading...</div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (!idea) {
+    return (
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col md:ml-64 min-h-screen">
+          <main className="flex-1 overflow-y-auto focus:outline-none custom-scrollbar">
+            <div className="py-6 max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+              <div className="text-center py-12">
+                <h1 className="text-2xl font-bold text-neutral-900">Idea not found</h1>
+                <p className="mt-2 text-neutral-600">The idea you're looking for doesn't exist or you don't have access to it.</p>
+                <Button className="mt-4" onClick={handleBackClick}>
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back to Dashboard
+                </Button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar />
+      <div className="flex-1 flex flex-col md:ml-64 min-h-screen">
+        <main className="flex-1 overflow-y-auto focus:outline-none custom-scrollbar">
+          <div className="py-6 max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
+            {/* Header with back button */}
+            <div className="flex items-center mb-6">
+              <Button variant="ghost" size="icon" className="mr-4" onClick={handleBackClick}>
+                <ArrowLeft className="h-6 w-6" />
+              </Button>
+              <h1 className="text-2xl font-bold text-neutral-900">{idea.idea}</h1>
+            </div>
+
+            <div className="flex flex-col lg:flex-row lg:space-x-6">
+              {/* Project details sidebar */}
+              <div className="w-full lg:w-1/4 mb-6 lg:mb-0">
+                <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">
+                  <div className="p-5">
+                    <h3 className="font-medium text-neutral-900 mb-4">Project Details</h3>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-neutral-500">Status</p>
+                        <div className="mt-1 flex items-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                            ${idea.status === 'Completed' ? 'bg-green-100 text-secondary-500' : ''}
+                            ${idea.status === 'Generating' ? 'bg-yellow-100 text-yellow-800' : ''}
+                            ${idea.status === 'Draft' ? 'bg-neutral-100 text-neutral-800' : ''}`}>
+                            {idea.status}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm font-medium text-neutral-500">Created</p>
+                        <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.createdAt)}</p>
+                      </div>
+                      
+                      <div>
+                        <p className="text-sm font-medium text-neutral-500">Last Updated</p>
+                        <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.updatedAt)}</p>
+                      </div>
+                      
+                      {idea.companyName && (
+                        <div>
+                          <p className="text-sm font-medium text-neutral-500">Company</p>
+                          <p className="mt-1 text-sm text-neutral-900">{idea.companyName}</p>
+                        </div>
+                      )}
+                      
+                      {idea.companyStage && (
+                        <div>
+                          <p className="text-sm font-medium text-neutral-500">Stage</p>
+                          <p className="mt-1 text-sm text-neutral-900">{idea.companyStage}</p>
+                        </div>
+                      )}
+                      
+                      {idea.founderName && (
+                        <div>
+                          <p className="text-sm font-medium text-neutral-500">Founder</p>
+                          <p className="mt-1 text-sm text-neutral-900">{idea.founderName}</p>
+                        </div>
+                      )}
+                      
+                      {idea.websiteUrl && (
+                        <div>
+                          <p className="text-sm font-medium text-neutral-500">Website</p>
+                          <a 
+                            href={idea.websiteUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="mt-1 text-sm text-primary-600 hover:text-primary-800 flex items-center"
+                          >
+                            {idea.websiteUrl}
+                            <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="border-t border-neutral-200 p-5">
+                    <Button 
+                      className="w-full flex items-center justify-center" 
+                      onClick={handleRegenerateCanvasClick}
+                      disabled={isRegenerating || idea.status === 'Generating'}
+                    >
+                      <RotateCcw className="mr-2 h-5 w-5" />
+                      Regenerate Canvas
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Lean Canvas main content */}
+              <div className="w-full lg:w-3/4">
+                {/* Tabs */}
+                <div className="border-b border-neutral-200">
+                  <Tabs defaultValue="canvas">
+                    <TabsList className="w-auto">
+                      <TabsTrigger value="canvas" className="text-sm">Lean Canvas</TabsTrigger>
+                      <TabsTrigger value="history" className="text-sm">History</TabsTrigger>
+                      <TabsTrigger value="analytics" className="text-sm">Analytics</TabsTrigger>
+                    </TabsList>
+                  
+                    {/* Lean Canvas Content */}
+                    <TabsContent value="canvas" className="mt-6">
+                      {isLoadingCanvas ? (
+                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-5">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {[...Array(9)].map((_, index) => (
+                              <div key={index} className="bg-neutral-50 rounded-lg p-4 border border-neutral-200">
+                                <div className="flex justify-between items-start mb-3">
+                                  <Skeleton className="h-5 w-24" />
+                                  <Skeleton className="h-4 w-4" />
+                                </div>
+                                <Skeleton className="h-4 w-full mb-2" />
+                                <Skeleton className="h-4 w-3/4 mb-2" />
+                                <Skeleton className="h-4 w-5/6" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : idea.status === 'Draft' ? (
+                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
+                          <h3 className="text-lg font-medium text-neutral-900 mb-2">Canvas not generated yet</h3>
+                          <p className="text-neutral-600 mb-4">
+                            Generate your Lean Canvas to see the details of your business idea structured in the Lean Canvas format.
+                          </p>
+                          <Button 
+                            onClick={handleRegenerateCanvasClick}
+                            disabled={isRegenerating}
+                          >
+                            Generate Canvas
+                          </Button>
+                        </div>
+                      ) : idea.status === 'Generating' ? (
+                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
+                          <div className="animate-spin mb-4 mx-auto">
+                            <RotateCcw className="h-10 w-10 text-primary-500" />
+                          </div>
+                          <h3 className="text-lg font-medium text-neutral-900 mb-2">Generating your Lean Canvas</h3>
+                          <p className="text-neutral-600">
+                            Please wait while we analyze your idea and generate your Lean Canvas. This may take a moment.
+                          </p>
+                        </div>
+                      ) : canvas ? (
+                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">
+                          <div className="p-5">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="Problem"
+                                content={canvas.problem || ""}
+                              />
+                              
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="CustomerSegments"
+                                content={canvas.customerSegments || ""}
+                              />
+                              
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="UniqueValueProposition"
+                                content={canvas.uniqueValueProposition || ""}
+                              />
+                              
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="Solution"
+                                content={canvas.solution || ""}
+                              />
+                              
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="Channels"
+                                content={canvas.channels || ""}
+                              />
+                              
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="RevenueStreams"
+                                content={canvas.revenueStreams || ""}
+                              />
+                              
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="CostStructure"
+                                content={canvas.costStructure || ""}
+                              />
+                              
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="KeyMetrics"
+                                content={canvas.keyMetrics || ""}
+                              />
+                              
+                              <CanvasSectionComponent
+                                ideaId={idea.id}
+                                section="UnfairAdvantage"
+                                content={canvas.unfairAdvantage || ""}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
+                          <h3 className="text-lg font-medium text-neutral-900 mb-2">No canvas data found</h3>
+                          <p className="text-neutral-600 mb-4">
+                            Something went wrong with your canvas generation. Try regenerating it.
+                          </p>
+                          <Button 
+                            onClick={handleRegenerateCanvasClick}
+                            disabled={isRegenerating}
+                          >
+                            Regenerate Canvas
+                          </Button>
+                        </div>
+                      )}
+                    </TabsContent>
+                    
+                    <TabsContent value="history" className="mt-6">
+                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
+                        <h3 className="text-lg font-medium text-neutral-900">History Coming Soon</h3>
+                        <p className="text-neutral-600">
+                          Track the history and changes to your Lean Canvas over time. This feature is coming soon.
+                        </p>
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="analytics" className="mt-6">
+                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
+                        <h3 className="text-lg font-medium text-neutral-900">Analytics Coming Soon</h3>
+                        <p className="text-neutral-600">
+                          Get insights and analytics about your business idea. This feature is coming soon.
+                        </p>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}

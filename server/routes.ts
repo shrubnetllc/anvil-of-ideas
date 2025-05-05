@@ -1,0 +1,216 @@
+import type { Express, Request, Response, NextFunction } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { setupAuth } from "./auth";
+import { z } from "zod";
+import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema } from "@shared/schema";
+
+function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ message: "Unauthorized" });
+}
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // sets up /api/register, /api/login, /api/logout, /api/user
+  setupAuth(app);
+
+  // Ideas routes
+  app.get("/api/ideas", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideas = await storage.getIdeasByUser(req.user!.id);
+      res.json(ideas);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/ideas", isAuthenticated, async (req, res, next) => {
+    try {
+      const validatedData = insertIdeaSchema.parse(req.body);
+      const idea = await storage.createIdea({
+        ...validatedData,
+        userId: req.user!.id,
+      });
+      res.status(201).json(idea);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const idea = await storage.getIdeaById(parseInt(req.params.id));
+      
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+      
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      res.json(idea);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const idea = await storage.getIdeaById(parseInt(req.params.id));
+      
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+      
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      await storage.deleteIdea(parseInt(req.params.id));
+      res.status(200).json({ message: "Idea deleted successfully" });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Canvas generation route
+  app.post("/api/ideas/:id/generate", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+      
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+      
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Update idea status to Generating
+      await storage.updateIdeaStatus(ideaId, "Generating");
+      
+      // Trigger the webhook to n8n
+      try {
+        const webhookUrl = process.env.N8N_WEBHOOK_URL;
+        if (!webhookUrl) {
+          throw new Error("N8N webhook URL not configured");
+        }
+        
+        // Send the idea data to n8n
+        await fetch(webhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ideaId,
+            idea: idea.idea,
+            founderName: idea.founderName,
+            founderEmail: idea.founderEmail,
+            companyStage: idea.companyStage,
+            websiteUrl: idea.websiteUrl,
+            companyName: idea.companyName,
+          }),
+        });
+        
+        res.status(200).json({ message: "Canvas generation started" });
+      } catch (error) {
+        console.error("Error triggering webhook:", error);
+        await storage.updateIdeaStatus(ideaId, "Draft");
+        throw new Error("Failed to start canvas generation");
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Webhook endpoint for n8n to send back the generated canvas
+  app.post("/api/webhook/canvas", async (req, res, next) => {
+    try {
+      const data = webhookResponseSchema.parse(req.body);
+      const { ideaId, ...canvasData } = data;
+      
+      // Update idea status to Completed
+      await storage.updateIdeaStatus(ideaId, "Completed");
+      
+      // Check if a canvas already exists for this idea
+      const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      
+      if (existingCanvas) {
+        // Update existing canvas
+        await storage.updateLeanCanvas(ideaId, canvasData);
+      } else {
+        // Create new canvas
+        await storage.createLeanCanvas({ ideaId, ...canvasData });
+      }
+      
+      res.status(200).json({ message: "Canvas created successfully" });
+    } catch (error) {
+      console.error("Error processing webhook:", error);
+      next(error);
+    }
+  });
+
+  // Canvas routes
+  app.get("/api/ideas/:id/canvas", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+      
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+      
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      
+      if (!canvas) {
+        return res.status(404).json({ message: "Canvas not found" });
+      }
+      
+      res.json(canvas);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch("/api/ideas/:id/canvas", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+      
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+      
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      
+      if (!canvas) {
+        return res.status(404).json({ message: "Canvas not found" });
+      }
+      
+      const validatedData = updateLeanCanvasSchema.partial().parse(req.body);
+      await storage.updateLeanCanvas(ideaId, validatedData);
+      
+      const updatedCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      res.json(updatedCanvas);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  const httpServer = createServer(app);
+
+  return httpServer;
+}
