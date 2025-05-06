@@ -1,7 +1,30 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Idea, InsertIdea } from "@shared/schema";
+import { Idea, InsertIdea, LeanCanvas } from "@shared/schema";
 import { useToast } from "./use-toast";
+
+// Extended type with lean canvas data
+type IdeaWithCanvas = InsertIdea & {
+  leanCanvas?: {
+    problem?: string;
+    customerSegments?: string;
+    uniqueValueProposition?: string;
+    solution?: string;
+    channels?: string;
+    revenueStreams?: string;
+    costStructure?: string;
+    keyMetrics?: string;
+    unfairAdvantage?: string;
+  };
+  tractionEvidence?: {
+    customerInterviews?: number;
+    waitlistSignups?: number;
+    payingCustomers?: number;
+  };
+  additionalNotes?: string;
+  targetLaunchDate?: string;
+  preferredPricingModel?: string;
+};
 
 export function useIdeas() {
   const { toast } = useToast();
@@ -11,7 +34,7 @@ export function useIdeas() {
   });
 
   const createIdeaMutation = useMutation({
-    mutationFn: async (newIdea: InsertIdea) => {
+    mutationFn: async (newIdea: IdeaWithCanvas) => {
       const res = await apiRequest("POST", "/api/ideas", newIdea);
       return res.json();
     },

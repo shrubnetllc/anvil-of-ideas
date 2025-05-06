@@ -28,11 +28,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/ideas", isAuthenticated, async (req, res, next) => {
     try {
-      const validatedData = insertIdeaSchema.parse(req.body);
+      // Extract and validate the base idea fields
+      const validatedIdeaData = insertIdeaSchema.parse(req.body);
+      
+      // Create the idea
       const idea = await storage.createIdea({
-        ...validatedData,
+        ...validatedIdeaData,
         userId: req.user!.id,
       });
+      
+      // Check if lean canvas data was submitted
+      if (req.body.leanCanvas) {
+        try {
+          // Create the lean canvas
+          await storage.createLeanCanvas({
+            ideaId: idea.id,
+            problem: req.body.leanCanvas.problem || null,
+            customerSegments: req.body.leanCanvas.customerSegments || null,
+            uniqueValueProposition: req.body.leanCanvas.uniqueValueProposition || null,
+            solution: req.body.leanCanvas.solution || null,
+            channels: req.body.leanCanvas.channels || null,
+            revenueStreams: req.body.leanCanvas.revenueStreams || null,
+            costStructure: req.body.leanCanvas.costStructure || null,
+            keyMetrics: req.body.leanCanvas.keyMetrics || null,
+            unfairAdvantage: req.body.leanCanvas.unfairAdvantage || null,
+          });
+          
+          // Update the idea status to Completed if there's canvas data
+          if (Object.values(req.body.leanCanvas).some(val => val)) {
+            await storage.updateIdeaStatus(idea.id, "Completed");
+          }
+        } catch (canvasError) {
+          console.error("Error creating lean canvas:", canvasError);
+          // We don't fail the entire request if canvas creation fails
+          // Just log the error and continue
+        }
+      }
+      
       res.status(201).json(idea);
     } catch (error) {
       next(error);

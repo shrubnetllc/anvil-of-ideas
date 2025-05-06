@@ -1,0 +1,40 @@
+{
+  "idea": "The Buildverse - Idea Factory: A dynamic SaaS platform integrated with agentic AI-driven frameworks (HLP/Project Converge) designed to rapidly validate, refine, and launch startup ideas using automated Lean Canvas generation, customer validation, and workflow management tools.",
+
+  "founder_name": "Brandon Cross",
+  "founder_email": "brandon@hoyack.com",
+  "company_stage": "MVP",
+  "website_url": "https://buildverse.shrubnet.com",
+  "company_name": "Buildverse",
+
+  "lean_canvas": {
+    "problem": "Startup founders often struggle with effectively validating, refining, and quickly operationalizing their ideas, leading to delayed launches, wasted resources, and increased risks of failure. Manual processes and disconnected tools add friction, slowing momentum and complicating management.",
+
+    "customer_segments": "Early-stage startup founders, incubators, accelerators, entrepreneurship hubs, innovation labs, and venture studios seeking streamlined, AI-driven idea validation, rapid prototyping, and scalable launch processes.",
+
+    "unique_value_proposition": "The Buildverse Idea Factory accelerates idea-to-launch timelines through an integrated platform leveraging hierarchical, agentic AI planning frameworks (HLP/Project Converge) for automated Lean Canvas generation, real-time market validation, and workflow-driven project management—enabling founders to rapidly validate and confidently scale ideas.",
+
+    "solution": "The platform offers a centralized interface where founders input an initial idea, triggering automated workflows powered by AI-driven analysis (via HLP/Project Converge methodologies). These workflows include automated Lean Canvas generation, real-time validation against market data, customer interviews via agentic AI personas, task automation via integrated tools (n8n, Supabase, Airtable), and easy management of project milestones and deliverables through visual Kanban-style interfaces.",
+
+    "channels": "Strategic partnerships with entrepreneurship hubs (Geekdom, Launch SA), content-driven organic SEO (startup idea validation and launch guides), targeted LinkedIn outreach, co-hosted webinars with accelerators, freemium trials via Vibe Coding sessions, community engagement through localized tech startup events and digital channels.",
+
+    "revenue_streams": "Subscription-based SaaS tiers (Idea, MVP, Scale-up), premium modules for deeper analytics and integrations, custom consulting and workflow integrations for enterprise clients, affiliate revenue through partner platforms, and monetization of aggregated startup validation data.",
+
+    "cost_structure": "Development and maintenance of AI frameworks, cloud hosting (AWS/Azure/GCP), licensing/API costs for external integrations (n8n, Supabase, Airtable), customer success and onboarding teams, ongoing R&D for AI agent enhancements, content production, marketing (ads, SEO, events), and legal compliance (GDPR, CCPA).",
+
+    "key_metrics": "Number of active projects, time-to-validation (speed of canvas generation and market feedback), conversion from free trials to paying subscriptions, customer retention rate, Net Promoter Score (NPS), number of completed projects transitioned from idea to MVP, overall platform usage, and growth in registered users.",
+
+    "unfair_advantage": "Exclusive integration with proprietary agentic AI frameworks (HLP/Project Converge), established local entrepreneurship ecosystem partnerships (Geekdom, Launch SA), unique automation pipeline built around proven startup methodologies, and deep AI-driven insights from ongoing accumulation of startup success/failure data."
+  },
+
+  "traction_evidence": {
+    "customer_interviews": 45,
+    "waitlist_signups": 620,
+    "paying_customers": 12
+  },
+
+  "target_launch_date": "2025-08-01",
+  "preferred_pricing_model": "tiered_subscription",
+  "additional_notes": "Currently piloting with local incubators and accelerators; strong initial feedback and strategic partnership opportunities for co-branded launch events.",
+  "unique-user-id": "ce3960f1-c11f-45d0-9120-9ecb30f34e17"
+}
