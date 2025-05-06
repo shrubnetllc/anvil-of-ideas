@@ -128,15 +128,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Trigger the webhook to n8n
       try {
         const webhookUrl = process.env.N8N_WEBHOOK_URL;
+        const username = process.env.N8N_AUTH_USERNAME;
+        const password = process.env.N8N_AUTH_PASSWORD;
+        
         if (!webhookUrl) {
           throw new Error("N8N webhook URL not configured");
         }
         
-        // Send the idea data to n8n
+        if (!username || !password) {
+          throw new Error("N8N authentication credentials not configured");
+        }
+        
+        // Create basic auth header
+        const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+        
+        // Send the idea data to n8n with basic auth
         await fetch(webhookUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "Authorization": authHeader
           },
           body: JSON.stringify({
             ideaId,
@@ -162,6 +173,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Webhook endpoint for n8n to send back the generated canvas
   app.post("/api/webhook/canvas", async (req, res, next) => {
+    // Verify n8n credentials if they are configured
+    if (process.env.N8N_AUTH_USERNAME && process.env.N8N_AUTH_PASSWORD) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Basic ')) {
+        return res.status(401).json({ message: "Unauthorized - Missing credentials" });
+      }
+      
+      // Decode and verify the credentials
+      const base64Credentials = authHeader.split(' ')[1];
+      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+      const [username, password] = credentials.split(':');
+      
+      if (username !== process.env.N8N_AUTH_USERNAME || password !== process.env.N8N_AUTH_PASSWORD) {
+        return res.status(401).json({ message: "Unauthorized - Invalid credentials" });
+      }
+    }
     try {
       const data = webhookResponseSchema.parse(req.body);
       const { ideaId, ...canvasData } = data;
