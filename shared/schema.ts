@@ -42,6 +42,7 @@ export const ideas = pgTable("ideas", {
 export const leanCanvas = pgTable("lean_canvas", {
   id: serial("id").primaryKey(),
   ideaId: integer("idea_id").notNull().references(() => ideas.id),
+  projectId: text("project_id"),  // Store the project_id returned from n8n
   problem: text("problem"),
   customerSegments: text("customer_segments"),
   uniqueValueProposition: text("unique_value_proposition"),
@@ -76,6 +77,7 @@ export const insertLeanCanvasSchema = createInsertSchema(leanCanvas).omit({
 });
 
 export const updateLeanCanvasSchema = createInsertSchema(leanCanvas).pick({
+  projectId: true,
   problem: true,
   customerSegments: true,
   uniqueValueProposition: true,
@@ -102,6 +104,7 @@ export const webhookResponseSchema = z.object({
   // ID fields
   ideaId: z.number().optional(), // Might be part of unique-user-id
   "unique-user-id": z.string().optional(), // Format: user-{userId}-idea-{ideaId}
+  projectId: z.string().optional(), // Project ID from n8n response
   
   // Canvas fields - using our internal property names
   problem: z.string().optional(),
@@ -156,6 +159,7 @@ export const webhookResponseSchema = z.object({
   
   return {
     ideaId: data.ideaId,
+    projectId: data.projectId, // Include project_id from response
     problem: data.problem,
     customerSegments: data.customerSegments,
     uniqueValueProposition: data.uniqueValueProposition,

@@ -19,7 +19,60 @@ export async function fetchLeanCanvasData(ideaId: number) {
   try {
     console.log(`Fetching lean canvas data for idea ${ideaId} from Supabase`);
     
-    // In Supabase, the field is 'project_id' not 'idea_id'
+    // Step 1: Try to get the lean canvas from our local database to get the project_id
+    try {
+      const { db } = await import('./db');
+      const { leanCanvas, eq } = await import('@shared/schema');
+      
+      // Query our local database for the project_id
+      const [localCanvas] = await db.select().from(leanCanvas).where(eq(leanCanvas.ideaId, ideaId));
+      
+      if (localCanvas && localCanvas.projectId) {
+        console.log(`Found project_id ${localCanvas.projectId} for idea ${ideaId} in local database`);
+        
+        // Step 2: Use the project_id to query Supabase
+        const { data, error } = await supabase
+          .from('lean_canvas')
+          .select('*')
+          .eq('id', localCanvas.projectId)
+          .single();
+        
+        if (error) {
+          console.warn(`Error querying Supabase with project_id ${localCanvas.projectId}:`, error);
+          // Fall back to querying by idea_id below
+        } else if (data) {
+          console.log(`Supabase returned data for project_id ${localCanvas.projectId}:`, data);
+          
+          // Map Supabase column names to our app's expected format
+          return {
+            id: data.id,
+            ideaId: ideaId,
+            projectId: localCanvas.projectId,
+            problem: data.problem,
+            customerSegments: data.customer_segments,
+            uniqueValueProposition: data.unique_value_proposition,
+            solution: data.solution,
+            channels: data.channels,
+            revenueStreams: data.revenue_streams,
+            costStructure: data.cost_structure,
+            keyMetrics: data.key_metrics,
+            unfairAdvantage: data.unfair_advantage,
+            createdAt: data.created_at,
+            // Additional data available in Supabase
+            markdown: data.markdown,
+            html: data.html,
+            llmOutput: data.llm_output,
+            llmInput: data.llm_input
+          };
+        }
+      }
+    } catch (dbError) {
+      console.warn('Error querying local database for project_id:', dbError);
+      // Continue with fallback logic
+    }
+    
+    // Fallback: try to query using idea_id directly
+    console.log(`Falling back to querying Supabase by project_id=${ideaId}`);
     const { data, error } = await supabase
       .from('lean_canvas')
       .select('*')
@@ -30,10 +83,16 @@ export async function fetchLeanCanvasData(ideaId: number) {
       throw error;
     }
     
+    if (!data) {
+      console.log(`No data found for project_id ${ideaId} in Supabase`);
+      return null;
+    }
+    
     // Map Supabase column names to our app's expected format
     const mappedData = {
       id: data.id,
-      ideaId: parseInt(data.project_id),
+      ideaId: ideaId,
+      projectId: data.id.toString(),
       problem: data.problem,
       customerSegments: data.customer_segments,
       uniqueValueProposition: data.unique_value_proposition,

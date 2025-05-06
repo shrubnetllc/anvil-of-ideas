@@ -201,7 +201,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error(`Failed to call n8n webhook: ${responseStatus} ${responseText}`);
         }
         
-        res.status(200).json({ message: "Canvas generation started" });
+        // Extract the project_id from the response text
+        const projectId = responseText.trim();
+        console.log(`Extracted project_id from response: ${projectId}`);
+        
+        // Store the project_id in the database
+        if (projectId) {
+          try {
+            // Check if lean canvas already exists for this idea
+            const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+            
+            if (existingCanvas) {
+              // Update the existing canvas with the project_id
+              await storage.updateLeanCanvas(ideaId, { projectId });
+              console.log(`Updated existing canvas with project_id: ${projectId}`);
+            } else {
+              // Create a new canvas with the project_id
+              await storage.createLeanCanvas({ 
+                ideaId,
+                projectId,
+                problem: null,
+                customerSegments: null,
+                uniqueValueProposition: null,
+                solution: null,
+                channels: null,
+                revenueStreams: null,
+                costStructure: null,
+                keyMetrics: null,
+                unfairAdvantage: null
+              });
+              console.log(`Created new canvas with project_id: ${projectId}`);
+            }
+          } catch (dbError) {
+            console.error('Failed to store project_id in database:', dbError);
+            // Continue even if database storage fails
+          }
+        }
+        
+        res.status(200).json({ 
+          message: "Canvas generation started",
+          projectId: projectId || null 
+        });
       } catch (error) {
         console.error("Error triggering webhook:", error);
         await storage.updateIdeaStatus(ideaId, "Draft");
