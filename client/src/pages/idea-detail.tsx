@@ -320,6 +320,17 @@ export default function IdeaDetail() {
                           <h3 className="font-medium text-neutral-900 mb-4">Project Details</h3>
                           
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {/* Basic Information */}
+                            <div className="col-span-1 md:col-span-3 pb-2 mb-4 border-b border-neutral-100">
+                              <h4 className="font-medium text-neutral-700 mb-1">Basic Information</h4>
+                              <p className="text-xs text-neutral-500">Core details about your project</p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm font-medium text-neutral-500">Idea Name</p>
+                              <p className="mt-1 text-sm text-neutral-900 font-medium">{idea.idea}</p>
+                            </div>
+                            
                             <div>
                               <p className="text-sm font-medium text-neutral-500">Status</p>
                               <div className="mt-1 flex items-center">
@@ -332,34 +343,37 @@ export default function IdeaDetail() {
                               </div>
                             </div>
                             
-                            <div>
-                              <p className="text-sm font-medium text-neutral-500">Created</p>
-                              <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.createdAt)}</p>
-                            </div>
-                            
-                            <div>
-                              <p className="text-sm font-medium text-neutral-500">Last Updated</p>
-                              <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.updatedAt)}</p>
-                            </div>
-                            
                             {idea.companyName && (
                               <div>
                                 <p className="text-sm font-medium text-neutral-500">Company</p>
-                                <p className="mt-1 text-sm text-neutral-900">{idea.companyName}</p>
+                                <p className="mt-1 text-sm text-neutral-900 font-medium">{idea.companyName}</p>
                               </div>
                             )}
                             
+                            {/* Company Information */}
+                            <div className="col-span-1 md:col-span-3 pt-4 pb-2 mb-4 border-b border-neutral-100">
+                              <h4 className="font-medium text-neutral-700 mb-1">Company Information</h4>
+                              <p className="text-xs text-neutral-500">Details about the company and founders</p>
+                            </div>
+                            
                             {idea.companyStage && (
                               <div>
-                                <p className="text-sm font-medium text-neutral-500">Stage</p>
+                                <p className="text-sm font-medium text-neutral-500">Company Stage</p>
                                 <p className="mt-1 text-sm text-neutral-900">{idea.companyStage}</p>
                               </div>
                             )}
                             
                             {idea.founderName && (
                               <div>
-                                <p className="text-sm font-medium text-neutral-500">Founder</p>
+                                <p className="text-sm font-medium text-neutral-500">Founder Name</p>
                                 <p className="mt-1 text-sm text-neutral-900">{idea.founderName}</p>
+                              </div>
+                            )}
+                            
+                            {idea.founderEmail && (
+                              <div>
+                                <p className="text-sm font-medium text-neutral-500">Founder Email</p>
+                                <p className="mt-1 text-sm text-neutral-900">{idea.founderEmail}</p>
                               </div>
                             )}
                             
@@ -377,6 +391,27 @@ export default function IdeaDetail() {
                                 </a>
                               </div>
                             )}
+                            
+                            {/* System Information */}
+                            <div className="col-span-1 md:col-span-3 pt-4 pb-2 mb-4 border-b border-neutral-100">
+                              <h4 className="font-medium text-neutral-700 mb-1">System Information</h4>
+                              <p className="text-xs text-neutral-500">Technical details and timestamps</p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm font-medium text-neutral-500">Created</p>
+                              <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.createdAt)}</p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm font-medium text-neutral-500">Last Updated</p>
+                              <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.updatedAt)}</p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm font-medium text-neutral-500">ID</p>
+                              <p className="mt-1 text-sm text-neutral-900">{idea.id}</p>
+                            </div>
                           </div>
                           
                           <div className="mt-8">
