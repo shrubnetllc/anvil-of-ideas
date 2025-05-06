@@ -227,61 +227,77 @@ export default function IdeaDetail() {
                       ) : canvas ? (
                         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">
                           <div className="p-5">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="Problem"
-                                content={canvas.problem || ""}
-                              />
-                              
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="CustomerSegments"
-                                content={canvas.customerSegments || ""}
-                              />
-                              
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="UniqueValueProposition"
-                                content={canvas.uniqueValueProposition || ""}
-                              />
-                              
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="Solution"
-                                content={canvas.solution || ""}
-                              />
-                              
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="Channels"
-                                content={canvas.channels || ""}
-                              />
-                              
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="RevenueStreams"
-                                content={canvas.revenueStreams || ""}
-                              />
-                              
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="CostStructure"
-                                content={canvas.costStructure || ""}
-                              />
-                              
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="KeyMetrics"
-                                content={canvas.keyMetrics || ""}
-                              />
-                              
-                              <CanvasSectionComponent
-                                ideaId={idea.id}
-                                section="UnfairAdvantage"
-                                content={canvas.unfairAdvantage || ""}
-                              />
-                            </div>
+                            {/* If we have HTML content from Supabase and it's a valid format, show it */}
+                            {!isLoadingSupabase && supabaseData && supabaseData.data && supabaseData.data.html ? (
+                              <div>
+                                <div className="flex justify-between items-center mb-4">
+                                  <h3 className="font-medium text-neutral-900">Lean Canvas (HTML Format)</h3>
+                                  <Badge variant="outline" className="flex items-center">
+                                    <Database className="h-3 w-3 mr-1 text-primary-500" />
+                                    <span className="text-xs">Supabase</span>
+                                  </Badge>
+                                </div>
+                                <div className="prose prose-sm max-w-none overflow-auto mb-8">
+                                  <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="Problem"
+                                  content={canvas.problem || ""}
+                                />
+                                
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="CustomerSegments"
+                                  content={canvas.customerSegments || ""}
+                                />
+                                
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="UniqueValueProposition"
+                                  content={canvas.uniqueValueProposition || ""}
+                                />
+                                
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="Solution"
+                                  content={canvas.solution || ""}
+                                />
+                                
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="Channels"
+                                  content={canvas.channels || ""}
+                                />
+                                
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="RevenueStreams"
+                                  content={canvas.revenueStreams || ""}
+                                />
+                                
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="CostStructure"
+                                  content={canvas.costStructure || ""}
+                                />
+                                
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="KeyMetrics"
+                                  content={canvas.keyMetrics || ""}
+                                />
+                                
+                                <CanvasSectionComponent
+                                  ideaId={idea.id}
+                                  section="UnfairAdvantage"
+                                  content={canvas.unfairAdvantage || ""}
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
                       ) : (
