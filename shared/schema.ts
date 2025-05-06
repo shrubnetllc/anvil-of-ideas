@@ -52,6 +52,7 @@ export const leanCanvas = pgTable("lean_canvas", {
   costStructure: text("cost_structure"),
   keyMetrics: text("key_metrics"),
   unfairAdvantage: text("unfair_advantage"),
+  html: text("html"),  // HTML formatted version of the canvas from Supabase
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -87,6 +88,7 @@ export const updateLeanCanvasSchema = createInsertSchema(leanCanvas).pick({
   costStructure: true,
   keyMetrics: true,
   unfairAdvantage: true,
+  html: true,
 });
 
 // Export types

@@ -322,8 +322,21 @@ export default function IdeaDetail() {
                               </Badge>
                             </div>
                             
-                            <div className="border border-neutral-200 rounded-md p-4 mb-4 bg-neutral-50">
-                              <pre className="text-xs overflow-auto whitespace-pre-wrap max-h-[400px]">
+                            {/* HTML Content from Supabase */}
+                            {supabaseData.data.html && (
+                              <div className="border border-neutral-200 rounded-md p-4 mb-4 bg-white">
+                                <h4 className="font-medium text-neutral-700 mb-3">HTML Lean Canvas</h4>
+                                <div 
+                                  className="prose prose-sm max-w-none overflow-auto max-h-[600px] custom-scrollbar" 
+                                  dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} 
+                                />
+                              </div>
+                            )}
+                            
+                            {/* Raw JSON Data (for debugging) */}
+                            <div className="border border-neutral-200 rounded-md p-4 mb-4 bg-neutral-50 hidden md:block">
+                              <h4 className="font-medium text-neutral-700 mb-2">Raw Data</h4>
+                              <pre className="text-xs overflow-auto whitespace-pre-wrap max-h-[400px] custom-scrollbar">
                                 {JSON.stringify(supabaseData.data, null, 2)}
                               </pre>
                             </div>

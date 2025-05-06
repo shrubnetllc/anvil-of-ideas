@@ -117,7 +117,7 @@ function mapSupabaseData(data: any, ideaId: number, projectId: string) {
     createdAt: data.created_at,
     // Additional data available in Supabase
     markdown: data.markdown,
-    html: data.html,
+    html: data.html || '',  // Ensure HTML is always available, even if empty
     llmOutput: data.llm_output,
     llmInput: data.llm_input
   };
