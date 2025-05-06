@@ -1,14 +1,16 @@
 import { useParams, useLocation } from "wouter";
 import { useIdea } from "@/hooks/use-ideas";
 import { useLeanCanvas } from "@/hooks/use-lean-canvas";
+import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RotateCcw, ExternalLinkIcon } from "lucide-react";
+import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate } from "@/lib/utils";
 import { CanvasSection, canvasSections } from "@shared/schema";
 import { CanvasSectionComponent } from "@/components/canvas-section";
+import { Badge } from "@/components/ui/badge";
 
 export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();

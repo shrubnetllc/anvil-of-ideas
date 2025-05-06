@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
 import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema } from "@shared/schema";
+import { fetchLeanCanvasData, fetchUserIdeas } from "./supabase";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
@@ -313,6 +314,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const updatedCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
       res.json(updatedCanvas);
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Supabase integration routes
+  app.get("/api/supabase/canvas/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+      
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+      
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Fetch data from Supabase
+      try {
+        const supabaseCanvas = await fetchLeanCanvasData(ideaId);
+        res.json({
+          source: "supabase",
+          data: supabaseCanvas
+        });
+      } catch (supabaseError) {
+        console.error("Error fetching from Supabase:", supabaseError);
+        
+        // Fallback to local storage if Supabase fails
+        const localCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+        if (!localCanvas) {
+          return res.status(404).json({ message: "Canvas not found" });
+        }
+        
+        res.json({
+          source: "local",
+          data: localCanvas
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  app.get("/api/supabase/ideas", isAuthenticated, async (req, res, next) => {
+    try {
+      // Fetch data from Supabase
+      try {
+        const supabaseIdeas = await fetchUserIdeas(req.user!.id);
+        res.json({
+          source: "supabase",
+          data: supabaseIdeas
+        });
+      } catch (supabaseError) {
+        console.error("Error fetching ideas from Supabase:", supabaseError);
+        
+        // Fallback to local storage if Supabase fails
+        const localIdeas = await storage.getIdeasByUser(req.user!.id);
+        res.json({
+          source: "local",
+          data: localIdeas
+        });
+      }
     } catch (error) {
       next(error);
     }
