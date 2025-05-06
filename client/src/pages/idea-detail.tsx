@@ -18,6 +18,7 @@ export default function IdeaDetail() {
   const ideaId = parseInt(id);
   const { idea, isLoading: isLoadingIdea } = useIdea(ideaId);
   const { canvas, isLoading: isLoadingCanvas, regenerateCanvas, isRegenerating } = useLeanCanvas(ideaId);
+  const { data: supabaseData, isLoading: isLoadingSupabase } = useSupabaseCanvas(ideaId);
 
   const handleBackClick = () => {
     navigate("/");
@@ -172,6 +173,12 @@ export default function IdeaDetail() {
                   <Tabs defaultValue="canvas">
                     <TabsList className="w-auto">
                       <TabsTrigger value="canvas" className="text-sm">Lean Canvas</TabsTrigger>
+                      <TabsTrigger value="supabase" className="text-sm">
+                        <div className="flex items-center">
+                          <Database className="h-4 w-4 mr-1" /> 
+                          Supabase Data
+                        </div>
+                      </TabsTrigger>
                       <TabsTrigger value="history" className="text-sm">History</TabsTrigger>
                       <TabsTrigger value="analytics" className="text-sm">Analytics</TabsTrigger>
                     </TabsList>
@@ -289,6 +296,64 @@ export default function IdeaDetail() {
                           >
                             Regenerate Canvas
                           </Button>
+                        </div>
+                      )}
+                    </TabsContent>
+                    
+                    {/* Supabase Content */}
+                    <TabsContent value="supabase" className="mt-6">
+                      {isLoadingSupabase ? (
+                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-5">
+                          <div className="flex justify-center items-center p-8">
+                            <div className="animate-spin mr-3">
+                              <RotateCcw className="h-6 w-6 text-primary-500" />
+                            </div>
+                            <p>Loading data from Supabase...</p>
+                          </div>
+                        </div>
+                      ) : supabaseData ? (
+                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">
+                          <div className="p-5">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="font-medium text-neutral-900">Supabase Data</h3>
+                              <Badge variant="outline" className="flex items-center">
+                                <Database className="h-3 w-3 mr-1 text-primary-500" />
+                                <span className="text-xs">{supabaseData.source}</span>
+                              </Badge>
+                            </div>
+                            
+                            <div className="border border-neutral-200 rounded-md p-4 mb-4 bg-neutral-50">
+                              <pre className="text-xs overflow-auto whitespace-pre-wrap max-h-[400px]">
+                                {JSON.stringify(supabaseData.data, null, 2)}
+                              </pre>
+                            </div>
+                            
+                            {supabaseData.data && (
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {supabaseData.source === 'supabase' ? (
+                                  <div className="col-span-3">
+                                    <p className="text-sm text-green-600 font-medium flex items-center">
+                                      <Database className="h-4 w-4 mr-1" />
+                                      Successfully loaded data from Supabase
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="col-span-3">
+                                    <p className="text-sm text-amber-600 font-medium">
+                                      Fallback to local data - couldn't connect to Supabase
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
+                          <h3 className="text-lg font-medium text-neutral-900 mb-2">No Supabase data found</h3>
+                          <p className="text-neutral-600 mb-4">
+                            There was an error connecting to Supabase or no data exists for this idea.
+                          </p>
                         </div>
                       )}
                     </TabsContent>
