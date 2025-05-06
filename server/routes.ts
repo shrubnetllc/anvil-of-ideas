@@ -127,9 +127,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Trigger the webhook to n8n
       try {
+        console.log(`Starting canvas generation for idea ${ideaId}`);
+        
         const webhookUrl = process.env.N8N_WEBHOOK_URL;
         const username = process.env.N8N_AUTH_USERNAME;
         const password = process.env.N8N_AUTH_PASSWORD;
+        
+        console.log(`Webhook URL: ${webhookUrl ? 'configured' : 'missing'}`);
+        console.log(`Auth credentials: ${username && password ? 'configured' : 'missing'}`);
         
         if (!webhookUrl) {
           throw new Error("N8N webhook URL not configured");
@@ -142,45 +147,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create basic auth header
         const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
         
+        // Create the payload
+        const payload = {
+          idea: idea.idea,
+          founder_name: idea.founderName || "",
+          founder_email: idea.founderEmail || "",
+          company_stage: idea.companyStage || "",
+          website_url: idea.websiteUrl || "",
+          company_name: idea.companyName || "",
+          
+          lean_canvas: {
+            problem: "",
+            customer_segments: "",
+            unique_value_proposition: "",
+            solution: "",
+            channels: "",
+            revenue_streams: "",
+            cost_structure: "",
+            key_metrics: "",
+            unfair_advantage: ""
+          },
+          
+          traction_evidence: {
+            customer_interviews: 0,
+            waitlist_signups: 0,
+            paying_customers: 0
+          },
+          
+          target_launch_date: "2026-01-15",
+          preferred_pricing_model: "",
+          additional_notes: "",
+          "unique-user-id": `user-${idea.userId}-idea-${ideaId}`
+        };
+        
+        console.log(`Sending payload to n8n:`, JSON.stringify(payload, null, 2));
+        
         // Send the idea data to n8n with basic auth in the exact format required
-        await fetch(webhookUrl, {
+        const response = await fetch(webhookUrl, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": authHeader
           },
-          body: JSON.stringify({
-            idea: idea.idea,
-            founder_name: idea.founderName || "",
-            founder_email: idea.founderEmail || "",
-            company_stage: idea.companyStage || "",
-            website_url: idea.websiteUrl || "",
-            company_name: idea.companyName || "",
-            
-            lean_canvas: {
-              problem: "",
-              customer_segments: "",
-              unique_value_proposition: "",
-              solution: "",
-              channels: "",
-              revenue_streams: "",
-              cost_structure: "",
-              key_metrics: "",
-              unfair_advantage: ""
-            },
-            
-            traction_evidence: {
-              customer_interviews: 0,
-              waitlist_signups: 0,
-              paying_customers: 0
-            },
-            
-            target_launch_date: "2026-01-15",
-            preferred_pricing_model: "",
-            additional_notes: "",
-            "unique-user-id": `user-${idea.userId}-idea-${ideaId}`
-          }),
+          body: JSON.stringify(payload)
         });
+        
+        const responseStatus = response.status;
+        const responseText = await response.text();
+        console.log(`N8N webhook response: ${responseStatus} - ${responseText}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to call n8n webhook: ${responseStatus} ${responseText}`);
+        }
         
         res.status(200).json({ message: "Canvas generation started" });
       } catch (error) {
