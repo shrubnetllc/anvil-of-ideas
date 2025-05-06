@@ -117,7 +117,7 @@ export function NewIdeaModal({ open, onClose }: NewIdeaModalProps) {
       idea: "",
       founderName: "",
       founderEmail: "",
-      companyStage: "",
+      companyStage: "none",
       websiteUrl: "",
       companyName: "",
       leanCanvas: {
@@ -332,7 +332,7 @@ export function NewIdeaModal({ open, onClose }: NewIdeaModalProps) {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="none">None</SelectItem>
                             <SelectItem value="Concept">Concept</SelectItem>
                             <SelectItem value="Validation">Validation</SelectItem>
                             <SelectItem value="MVP">MVP</SelectItem>
