@@ -142,7 +142,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Create basic auth header
         const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
         
-        // Send the idea data to n8n with basic auth
+        // Send the idea data to n8n with basic auth in the exact format required
         await fetch(webhookUrl, {
           method: "POST",
           headers: {
@@ -150,13 +150,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
             "Authorization": authHeader
           },
           body: JSON.stringify({
-            ideaId,
             idea: idea.idea,
-            founderName: idea.founderName,
-            founderEmail: idea.founderEmail,
-            companyStage: idea.companyStage,
-            websiteUrl: idea.websiteUrl,
-            companyName: idea.companyName,
+            founder_name: idea.founderName || "",
+            founder_email: idea.founderEmail || "",
+            company_stage: idea.companyStage || "",
+            website_url: idea.websiteUrl || "",
+            company_name: idea.companyName || "",
+            
+            lean_canvas: {
+              problem: "",
+              customer_segments: "",
+              unique_value_proposition: "",
+              solution: "",
+              channels: "",
+              revenue_streams: "",
+              cost_structure: "",
+              key_metrics: "",
+              unfair_advantage: ""
+            },
+            
+            traction_evidence: {
+              customer_interviews: 0,
+              waitlist_signups: 0,
+              paying_customers: 0
+            },
+            
+            target_launch_date: "2026-01-15",
+            preferred_pricing_model: "",
+            additional_notes: "",
+            "unique-user-id": `user-${idea.userId}-idea-${ideaId}`
           }),
         });
         
@@ -190,20 +212,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     }
     try {
-      const data = webhookResponseSchema.parse(req.body);
-      const { ideaId, ...canvasData } = data;
+      console.log("Received webhook data from n8n:", JSON.stringify(req.body, null, 2));
+      
+      // Parse and transform the webhook data according to our schema
+      // The schema transform will throw if ideaId is missing
+      const transformedData = webhookResponseSchema.parse(req.body);
+      const { ideaId, ...canvasData } = transformedData;
       
       // Update idea status to Completed
+      console.log(`Updating idea ${ideaId} status to Completed`);
       await storage.updateIdeaStatus(ideaId, "Completed");
       
       // Check if a canvas already exists for this idea
       const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
       
+      console.log(`Canvas data to save:`, JSON.stringify(canvasData, null, 2));
+      
       if (existingCanvas) {
         // Update existing canvas
+        console.log(`Updating existing canvas for idea ${ideaId}`);
         await storage.updateLeanCanvas(ideaId, canvasData);
       } else {
         // Create new canvas
+        console.log(`Creating new canvas for idea ${ideaId}`);
         await storage.createLeanCanvas({ ideaId, ...canvasData });
       }
       

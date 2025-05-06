@@ -99,7 +99,11 @@ export type InsertLeanCanvas = z.infer<typeof insertLeanCanvasSchema>;
 export type UpdateLeanCanvas = z.infer<typeof updateLeanCanvasSchema>;
 
 export const webhookResponseSchema = z.object({
-  ideaId: z.number(),
+  // ID fields
+  ideaId: z.number().optional(), // Might be part of unique-user-id
+  "unique-user-id": z.string().optional(), // Format: user-{userId}-idea-{ideaId}
+  
+  // Canvas fields - using our internal property names
   problem: z.string().optional(),
   customerSegments: z.string().optional(),
   uniqueValueProposition: z.string().optional(),
@@ -109,6 +113,59 @@ export const webhookResponseSchema = z.object({
   costStructure: z.string().optional(),
   keyMetrics: z.string().optional(),
   unfairAdvantage: z.string().optional(),
+  
+  // Canvas fields - using the n8n-expected naming convention
+  lean_canvas: z.object({
+    problem: z.string().optional(),
+    customer_segments: z.string().optional(),
+    unique_value_proposition: z.string().optional(),
+    solution: z.string().optional(),
+    channels: z.string().optional(),
+    revenue_streams: z.string().optional(),
+    cost_structure: z.string().optional(),
+    key_metrics: z.string().optional(),
+    unfair_advantage: z.string().optional()
+  }).optional(),
+}).transform(data => {
+  // Extract ideaId from unique-user-id if it's present and ideaId is not
+  if (!data.ideaId && data["unique-user-id"]) {
+    const match = data["unique-user-id"].match(/user-\d+-idea-(\d+)/);
+    if (match && match[1]) {
+      data.ideaId = parseInt(match[1], 10);
+    }
+  }
+  
+  // Map n8n's response format to our format if lean_canvas is present
+  if (data.lean_canvas) {
+    if (data.lean_canvas.problem) data.problem = data.lean_canvas.problem;
+    if (data.lean_canvas.customer_segments) data.customerSegments = data.lean_canvas.customer_segments;
+    if (data.lean_canvas.unique_value_proposition) data.uniqueValueProposition = data.lean_canvas.unique_value_proposition;
+    if (data.lean_canvas.solution) data.solution = data.lean_canvas.solution;
+    if (data.lean_canvas.channels) data.channels = data.lean_canvas.channels;
+    if (data.lean_canvas.revenue_streams) data.revenueStreams = data.lean_canvas.revenue_streams;
+    if (data.lean_canvas.cost_structure) data.costStructure = data.lean_canvas.cost_structure;
+    if (data.lean_canvas.key_metrics) data.keyMetrics = data.lean_canvas.key_metrics;
+    if (data.lean_canvas.unfair_advantage) data.unfairAdvantage = data.lean_canvas.unfair_advantage;
+  }
+  
+  // Filter out the lean_canvas and unique-user-id properties to avoid DB issues
+  // Ensure ideaId is a number and exists (this is a required field for our database)
+  if (!data.ideaId) {
+    throw new Error("Could not determine ideaId from webhook data");
+  }
+  
+  return {
+    ideaId: data.ideaId,
+    problem: data.problem,
+    customerSegments: data.customerSegments,
+    uniqueValueProposition: data.uniqueValueProposition,
+    solution: data.solution,
+    channels: data.channels,
+    revenueStreams: data.revenueStreams,
+    costStructure: data.costStructure,
+    keyMetrics: data.keyMetrics,
+    unfairAdvantage: data.unfairAdvantage
+  };
 });
 
 export type WebhookResponse = z.infer<typeof webhookResponseSchema>;
