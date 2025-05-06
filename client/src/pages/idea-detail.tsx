@@ -92,7 +92,7 @@ export default function IdeaDetail() {
                   <div className="p-5">
                     <h3 className="font-medium text-neutral-900 mb-4">Project Details</h3>
                     
-                    <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm font-medium text-neutral-500">Status</p>
                         <div className="mt-1 flex items-center">
@@ -137,7 +137,7 @@ export default function IdeaDetail() {
                       )}
                       
                       {idea.websiteUrl && (
-                        <div>
+                        <div className="col-span-2">
                           <p className="text-sm font-medium text-neutral-500">Website</p>
                           <a 
                             href={idea.websiteUrl} 

@@ -118,6 +118,7 @@ export const webhookResponseSchema = z.object({
   costStructure: z.string().optional(),
   keyMetrics: z.string().optional(),
   unfairAdvantage: z.string().optional(),
+  html: z.string().optional(), // HTML content from Supabase
   
   // Canvas fields - using the n8n-expected naming convention
   lean_canvas: z.object({
@@ -170,7 +171,8 @@ export const webhookResponseSchema = z.object({
     revenueStreams: data.revenueStreams,
     costStructure: data.costStructure,
     keyMetrics: data.keyMetrics,
-    unfairAdvantage: data.unfairAdvantage
+    unfairAdvantage: data.unfairAdvantage,
+    html: data.html // Include HTML content if available
   };
 });
 
