@@ -4,7 +4,7 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database } from "lucide-react";
+import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate } from "@/lib/utils";
@@ -86,93 +86,19 @@ export default function IdeaDetail() {
             </div>
 
             <div className="flex flex-col lg:flex-row lg:space-x-6">
-              {/* Project details sidebar */}
-              <div className="w-full lg:w-1/4 mb-6 lg:mb-0">
-                <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">
-                  <div className="p-5">
-                    <h3 className="font-medium text-neutral-900 mb-4">Project Details</h3>
-                    
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm font-medium text-neutral-500">Status</p>
-                        <div className="mt-1 flex items-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                            ${idea.status === 'Completed' ? 'bg-green-100 text-secondary-500' : ''}
-                            ${idea.status === 'Generating' ? 'bg-yellow-100 text-yellow-800' : ''}
-                            ${idea.status === 'Draft' ? 'bg-neutral-100 text-neutral-800' : ''}`}>
-                            {idea.status}
-                          </span>
-                        </div>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm font-medium text-neutral-500">Created</p>
-                        <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.createdAt)}</p>
-                      </div>
-                      
-                      <div>
-                        <p className="text-sm font-medium text-neutral-500">Last Updated</p>
-                        <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.updatedAt)}</p>
-                      </div>
-                      
-                      {idea.companyName && (
-                        <div>
-                          <p className="text-sm font-medium text-neutral-500">Company</p>
-                          <p className="mt-1 text-sm text-neutral-900">{idea.companyName}</p>
-                        </div>
-                      )}
-                      
-                      {idea.companyStage && (
-                        <div>
-                          <p className="text-sm font-medium text-neutral-500">Stage</p>
-                          <p className="mt-1 text-sm text-neutral-900">{idea.companyStage}</p>
-                        </div>
-                      )}
-                      
-                      {idea.founderName && (
-                        <div>
-                          <p className="text-sm font-medium text-neutral-500">Founder</p>
-                          <p className="mt-1 text-sm text-neutral-900">{idea.founderName}</p>
-                        </div>
-                      )}
-                      
-                      {idea.websiteUrl && (
-                        <div className="col-span-2">
-                          <p className="text-sm font-medium text-neutral-500">Website</p>
-                          <a 
-                            href={idea.websiteUrl} 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
-                            className="mt-1 text-sm text-primary-600 hover:text-primary-800 flex items-center"
-                          >
-                            {idea.websiteUrl}
-                            <ExternalLinkIcon className="h-3 w-3 ml-1" />
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="border-t border-neutral-200 p-5">
-                    <Button 
-                      className="w-full flex items-center justify-center" 
-                      onClick={handleRegenerateCanvasClick}
-                      disabled={isRegenerating || idea.status === 'Generating'}
-                    >
-                      <RotateCcw className="mr-2 h-5 w-5" />
-                      Regenerate Canvas
-                    </Button>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Lean Canvas main content */}
-              <div className="w-full lg:w-3/4">
+              {/* Main content */}
+              <div className="w-full">
                 {/* Tabs */}
                 <div className="border-b border-neutral-200">
                   <Tabs defaultValue="canvas">
                     <TabsList className="w-auto">
                       <TabsTrigger value="canvas" className="text-sm">Lean Canvas</TabsTrigger>
+                      <TabsTrigger value="details" className="text-sm">
+                        <div className="flex items-center">
+                          <Info className="h-4 w-4 mr-1" /> 
+                          Details
+                        </div>
+                      </TabsTrigger>
                       <TabsTrigger value="supabase" className="text-sm">
                         <div className="flex items-center">
                           <Database className="h-4 w-4 mr-1" /> 
@@ -385,6 +311,86 @@ export default function IdeaDetail() {
                           </p>
                         </div>
                       )}
+                    </TabsContent>
+                    
+                    {/* Details Content */}
+                    <TabsContent value="details" className="mt-6">
+                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">
+                        <div className="p-5">
+                          <h3 className="font-medium text-neutral-900 mb-4">Project Details</h3>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                              <p className="text-sm font-medium text-neutral-500">Status</p>
+                              <div className="mt-1 flex items-center">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                  ${idea.status === 'Completed' ? 'bg-green-100 text-secondary-500' : ''}
+                                  ${idea.status === 'Generating' ? 'bg-yellow-100 text-yellow-800' : ''}
+                                  ${idea.status === 'Draft' ? 'bg-neutral-100 text-neutral-800' : ''}`}>
+                                  {idea.status}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm font-medium text-neutral-500">Created</p>
+                              <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.createdAt)}</p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm font-medium text-neutral-500">Last Updated</p>
+                              <p className="mt-1 text-sm text-neutral-900">{formatDate(idea.updatedAt)}</p>
+                            </div>
+                            
+                            {idea.companyName && (
+                              <div>
+                                <p className="text-sm font-medium text-neutral-500">Company</p>
+                                <p className="mt-1 text-sm text-neutral-900">{idea.companyName}</p>
+                              </div>
+                            )}
+                            
+                            {idea.companyStage && (
+                              <div>
+                                <p className="text-sm font-medium text-neutral-500">Stage</p>
+                                <p className="mt-1 text-sm text-neutral-900">{idea.companyStage}</p>
+                              </div>
+                            )}
+                            
+                            {idea.founderName && (
+                              <div>
+                                <p className="text-sm font-medium text-neutral-500">Founder</p>
+                                <p className="mt-1 text-sm text-neutral-900">{idea.founderName}</p>
+                              </div>
+                            )}
+                            
+                            {idea.websiteUrl && (
+                              <div className="col-span-1 md:col-span-3">
+                                <p className="text-sm font-medium text-neutral-500">Website</p>
+                                <a 
+                                  href={idea.websiteUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="mt-1 text-sm text-primary-600 hover:text-primary-800 flex items-center"
+                                >
+                                  {idea.websiteUrl}
+                                  <ExternalLinkIcon className="h-3 w-3 ml-1" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="mt-8">
+                            <Button 
+                              className="flex items-center justify-center" 
+                              onClick={handleRegenerateCanvasClick}
+                              disabled={isRegenerating || idea.status === 'Generating'}
+                            >
+                              <RotateCcw className="mr-2 h-5 w-5" />
+                              Regenerate Canvas
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </TabsContent>
                     
                     <TabsContent value="history" className="mt-6">
