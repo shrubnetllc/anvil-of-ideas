@@ -10,7 +10,7 @@ import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { IdeaCard } from "@/components/idea-card";
 import { NewIdeaModal } from "@/components/new-idea-modal";
-import { PlusIcon, SearchIcon } from "lucide-react";
+import { SearchIcon, Hammer, Sparkles } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 
@@ -57,16 +57,16 @@ export default function Dashboard() {
             {/* Dashboard Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
               <div>
-                <h1 className="text-2xl font-bold text-neutral-900">Your Ideas</h1>
-                <p className="mt-1 text-sm text-neutral-500">Manage and track all your business ideas</p>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-primary-500 to-amber-500 bg-clip-text text-transparent">Your Idea Forge</h1>
+                <p className="mt-1 text-sm text-neutral-500">Craft and refine your business ideas in the anvil</p>
               </div>
               <div className="mt-4 sm:mt-0">
                 <Button 
                   onClick={handleNewIdea}
                   className="inline-flex items-center"
                 >
-                  <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
-                  New Idea
+                  <Hammer className="-ml-1 mr-2 h-5 w-5" />
+                  Forge New Idea
                 </Button>
               </div>
             </div>
@@ -162,8 +162,8 @@ export default function Dashboard() {
                 </p>
                 <div className="mt-6">
                   <Button onClick={handleNewIdea}>
-                    <PlusIcon className="-ml-1 mr-2 h-5 w-5" />
-                    New Idea
+                    <Hammer className="-ml-1 mr-2 h-5 w-5" />
+                    Forge New Idea
                   </Button>
                 </div>
               </div>

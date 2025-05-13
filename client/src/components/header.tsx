@@ -89,8 +89,8 @@ export function Header() {
                     setIsMobileNavOpen(false);
                   }}
                 >
-                  <Plus className="mr-3 h-5 w-5" />
-                  New Idea
+                  <Hammer className="mr-3 h-5 w-5 text-primary-500" />
+                  Forge New Idea
                 </a>
                 
                 <a 
