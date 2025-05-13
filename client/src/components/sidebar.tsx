@@ -4,7 +4,16 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { CalendarClock, Home, LogOut, Plus, Settings, ClipboardList } from "lucide-react";
+import { 
+  CalendarClock, 
+  Home, 
+  LogOut, 
+  Plus, 
+  Settings, 
+  Hammer, 
+  Flame, 
+  Sparkles
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,8 +41,11 @@ export function Sidebar() {
         <div className="flex-1 flex flex-col min-h-0">
           <div className="flex items-center h-16 px-4 border-b border-neutral-200">
             <div className="flex items-center">
-              <ClipboardList className="h-8 w-8 text-primary-500" />
-              <span className="ml-2 text-lg font-semibold text-neutral-800">Lean Canvas</span>
+              <div className="relative">
+                <Hammer className="h-8 w-8 text-primary-500" />
+                <Sparkles className="h-4 w-4 absolute -top-1 -right-1 text-amber-400" />
+              </div>
+              <span className="ml-2 text-lg font-semibold text-neutral-800 bg-gradient-to-r from-primary-500 to-amber-500 bg-clip-text text-transparent">Anvil of Ideas</span>
             </div>
           </div>
           
@@ -43,8 +55,8 @@ export function Sidebar() {
                 ${isActive('/') 
                   ? 'text-primary-500 bg-primary-50' 
                   : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800'}`}>
-                <Home className="mr-3 h-5 w-5" />
-                Dashboard
+                <Flame className="mr-3 h-5 w-5 text-amber-500" />
+                Ideas Forge
               </a>
             </Link>
             
@@ -53,8 +65,8 @@ export function Sidebar() {
                 ${isActive('/new') 
                   ? 'text-primary-500 bg-primary-50' 
                   : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800'}`}>
-                <Plus className="mr-3 h-5 w-5" />
-                New Idea
+                <Hammer className="mr-3 h-5 w-5 text-primary-500" />
+                Forge New Idea
               </a>
             </Link>
             

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { ClipboardList, Menu } from "lucide-react";
+import { Menu, Hammer, Sparkles, Flame } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Home, Settings, CalendarClock, Plus, LogOut } from "lucide-react";
+import { Settings, CalendarClock, LogOut } from "lucide-react";
 
 export function Header() {
   const [location, navigate] = useLocation();
@@ -38,8 +38,11 @@ export function Header() {
     <header className={`md:hidden sticky top-0 z-10 bg-white ${isScrolled ? 'shadow-sm' : ''}`}>
       <div className="flex items-center justify-between h-16 px-4 border-b border-neutral-200">
         <div className="flex items-center">
-          <ClipboardList className="h-8 w-8 text-primary-500" />
-          <span className="ml-2 text-lg font-semibold text-neutral-800">Lean Canvas</span>
+          <div className="relative">
+            <Hammer className="h-8 w-8 text-primary-500" />
+            <Sparkles className="h-4 w-4 absolute -top-1 -right-1 text-amber-400" />
+          </div>
+          <span className="ml-2 text-lg font-semibold bg-gradient-to-r from-primary-500 to-amber-500 bg-clip-text text-transparent">Anvil of Ideas</span>
         </div>
         
         <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
@@ -53,8 +56,11 @@ export function Header() {
             <div className="flex flex-col h-full">
               <div className="flex items-center h-16 px-4 border-b border-neutral-200">
                 <div className="flex items-center">
-                  <ClipboardList className="h-8 w-8 text-primary-500" />
-                  <span className="ml-2 text-lg font-semibold text-neutral-800">Lean Canvas</span>
+                  <div className="relative">
+                    <Hammer className="h-8 w-8 text-primary-500" />
+                    <Sparkles className="h-4 w-4 absolute -top-1 -right-1 text-amber-400" />
+                  </div>
+                  <span className="ml-2 text-lg font-semibold bg-gradient-to-r from-primary-500 to-amber-500 bg-clip-text text-transparent">Anvil of Ideas</span>
                 </div>
               </div>
               
@@ -69,8 +75,8 @@ export function Header() {
                     setIsMobileNavOpen(false);
                   }}
                 >
-                  <Home className="mr-3 h-5 w-5" />
-                  Dashboard
+                  <Flame className="mr-3 h-5 w-5 text-amber-500" />
+                  Ideas Forge
                 </a>
                 
                 <a 
