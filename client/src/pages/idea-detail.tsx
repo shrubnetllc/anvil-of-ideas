@@ -11,6 +11,8 @@ import { formatDate } from "@/lib/utils";
 import { CanvasSection, canvasSections } from "@shared/schema";
 import { CanvasSectionComponent } from "@/components/canvas-section";
 import { Badge } from "@/components/ui/badge";
+import { useState, useEffect } from "react";
+import { queryClient } from "@/lib/queryClient";
 
 export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();
@@ -19,6 +21,50 @@ export default function IdeaDetail() {
   const { idea, isLoading: isLoadingIdea } = useIdea(ideaId);
   const { canvas, isLoading: isLoadingCanvas, regenerateCanvas, isRegenerating } = useLeanCanvas(ideaId);
   const { data: supabaseData, isLoading: isLoadingSupabase } = useSupabaseCanvas(ideaId);
+  
+  // Add state for the 2-minute auto-completion timer
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const [prevStatus, setPrevStatus] = useState<string | null>(null);
+  
+  // Effect to handle the auto-completion timer
+  useEffect(() => {
+    // If idea status changed to Generating and we haven't started a timer yet
+    if (idea?.status === "Generating" && prevStatus !== "Generating") {
+      // Set initial time to 2 minutes (120 seconds)
+      setTimeRemaining(120);
+      setPrevStatus("Generating");
+    }
+    
+    // If status is no longer Generating, reset timer
+    if (idea?.status !== "Generating" && timeRemaining !== null) {
+      setTimeRemaining(null);
+      setPrevStatus(idea?.status || null);
+    }
+  }, [idea?.status, prevStatus]);
+  
+  // Effect to count down the timer
+  useEffect(() => {
+    let timer: number | null = null;
+    
+    if (timeRemaining !== null && timeRemaining > 0) {
+      timer = window.setTimeout(() => {
+        setTimeRemaining(prev => prev !== null ? prev - 1 : null);
+      }, 1000);
+    } else if (timeRemaining === 0) {
+      // When timer reaches zero, refresh the idea data to get the updated status
+      queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}/canvas`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/supabase/canvas/${ideaId}`] });
+      // Reset timer
+      setTimeRemaining(null);
+    }
+    
+    return () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+    };
+  }, [timeRemaining, ideaId]);
 
   const handleBackClick = () => {
     navigate("/");
@@ -26,6 +72,9 @@ export default function IdeaDetail() {
 
   const handleRegenerateCanvasClick = () => {
     regenerateCanvas();
+    // Reset timer when manually regenerating
+    setTimeRemaining(120);
+    setPrevStatus("Generating");
   };
 
   if (isLoadingIdea) {
@@ -152,9 +201,16 @@ export default function IdeaDetail() {
                             </div>
                           </div>
                           <h3 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">Forging Your Canvas</h3>
-                          <p className="text-neutral-600">
+                          <p className="text-neutral-600 mb-2">
                             Please wait while we hammer out your idea and forge your Lean Canvas. The forge is heating up...
                           </p>
+                          {timeRemaining !== null && (
+                            <div className="flex items-center justify-center mt-4">
+                              <Badge variant="outline" className="px-3 py-1">
+                                <span className="text-xs">Auto-completing in {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}</span>
+                              </Badge>
+                            </div>
+                          )}
                         </div>
                       ) : canvas ? (
                         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">

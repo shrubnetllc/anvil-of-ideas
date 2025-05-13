@@ -126,6 +126,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update idea status to Generating
       await storage.updateIdeaStatus(ideaId, "Generating");
       
+      // Set a timeout to automatically update the status to Completed after 2 minutes
+      // This will handle the case where n8n webhook doesn't call back
+      setTimeout(async () => {
+        try {
+          const currentIdea = await storage.getIdeaById(ideaId);
+          // Only update if the idea is still in Generating status after 2 minutes
+          if (currentIdea && currentIdea.status === "Generating") {
+            console.log(`Auto-updating idea ${ideaId} status to Completed after timeout`);
+            await storage.updateIdeaStatus(ideaId, "Completed");
+          }
+        } catch (timeoutError) {
+          console.error(`Error auto-updating idea status: ${timeoutError}`);
+        }
+      }, 120000); // 2 minutes in milliseconds
+      
       // Trigger the webhook to n8n
       try {
         console.log(`Starting canvas generation for idea ${ideaId}`);
