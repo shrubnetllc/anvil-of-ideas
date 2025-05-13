@@ -4,7 +4,7 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info } from "lucide-react";
+import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate } from "@/lib/utils";
@@ -143,12 +143,17 @@ export default function IdeaDetail() {
                         </div>
                       ) : idea.status === 'Generating' ? (
                         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
-                          <div className="animate-spin mb-4 mx-auto">
-                            <RotateCcw className="h-10 w-10 text-primary-500" />
+                          <div className="mb-4 mx-auto relative w-16 h-16">
+                            <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                              <Flame className="h-14 w-14 text-amber-400" />
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                              <Hammer className="h-10 w-10 text-primary" />
+                            </div>
                           </div>
-                          <h3 className="text-lg font-medium text-neutral-900 mb-2">Generating your Lean Canvas</h3>
+                          <h3 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">Forging Your Canvas</h3>
                           <p className="text-neutral-600">
-                            Please wait while we analyze your idea and generate your Lean Canvas. This may take a moment.
+                            Please wait while we hammer out your idea and forge your Lean Canvas. The forge is heating up...
                           </p>
                         </div>
                       ) : canvas ? (
@@ -158,9 +163,15 @@ export default function IdeaDetail() {
                             {!isLoadingSupabase && supabaseData && supabaseData.data && supabaseData.data.html ? (
                               <div>
                                 <div className="flex justify-between items-center mb-4">
-                                  <h3 className="font-medium text-neutral-900">Lean Canvas (HTML Format)</h3>
+                                  <div className="flex items-center">
+                                    <div className="relative mr-2">
+                                      <Hammer className="h-5 w-5 text-primary" />
+                                      <Sparkles className="h-2.5 w-2.5 absolute -top-1 -right-1 text-amber-400" />
+                                    </div>
+                                    <h3 className="font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Forged Lean Canvas</h3>
+                                  </div>
                                   <Badge variant="outline" className="flex items-center">
-                                    <Database className="h-3 w-3 mr-1 text-primary-500" />
+                                    <Database className="h-3 w-3 mr-1 text-primary" />
                                     <span className="text-xs">Supabase</span>
                                   </Badge>
                                 </div>
@@ -229,15 +240,23 @@ export default function IdeaDetail() {
                         </div>
                       ) : (
                         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
-                          <h3 className="text-lg font-medium text-neutral-900 mb-2">No canvas data found</h3>
+                          <div className="relative w-16 h-16 mx-auto mb-4">
+                            <Hammer className="h-12 w-12 text-neutral-300 mx-auto" />
+                            <div className="absolute top-0 right-0">
+                              <Info className="h-5 w-5 text-amber-400" />
+                            </div>
+                          </div>
+                          <h3 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">Canvas Forging Failed</h3>
                           <p className="text-neutral-600 mb-4">
-                            Something went wrong with your canvas generation. Try regenerating it.
+                            The forge encountered an issue while hammering out your canvas. Try reforging it with the button below.
                           </p>
                           <Button 
-                            onClick={handleRegenerateCanvasClick}
+                            onClick={handleRegenerateCanvasClick} 
                             disabled={isRegenerating}
+                            className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
                           >
-                            Regenerate Canvas
+                            <Hammer className="mr-2 h-4 w-4" />
+                            {isRegenerating ? "Reforging..." : "Reforge Canvas"}
                           </Button>
                         </div>
                       )}
