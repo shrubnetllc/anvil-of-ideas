@@ -136,8 +136,9 @@ export default function IdeaDetail() {
                           <Button 
                             onClick={handleRegenerateCanvasClick}
                             disabled={isRegenerating}
+                            className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
                           >
-                            Generate Canvas
+                            <Hammer className="mr-2 h-4 w-4" /> Forge Canvas
                           </Button>
                         </div>
                       ) : idea.status === 'Generating' ? (
@@ -264,8 +265,25 @@ export default function IdeaDetail() {
                               </Badge>
                             </div>
                             
+                            {/* No Data Display */}
+                            {!supabaseData.data && (
+                              <div className="border border-neutral-200 rounded-md p-8 mb-4 bg-white text-center">
+                                <h4 className="font-medium text-neutral-700 mb-3">Waiting for Canvas Data</h4>
+                                <p className="text-neutral-600 mb-4">
+                                  The Lean Canvas is being generated. This may take a moment to process.
+                                </p>
+                                <Button
+                                  onClick={() => window.location.reload()}
+                                  className="bg-gradient-to-r from-primary to-secondary text-white"
+                                  size="sm"
+                                >
+                                  <RotateCcw className="mr-2 h-4 w-4" /> Refresh Data
+                                </Button>
+                              </div>
+                            )}
+                            
                             {/* HTML Content from Supabase */}
-                            {supabaseData.data.html && (
+                            {supabaseData.data && supabaseData.data.html && (
                               <div className="border border-neutral-200 rounded-md p-4 mb-4 bg-white">
                                 <h4 className="font-medium text-neutral-700 mb-3">HTML Lean Canvas</h4>
                                 <div 
@@ -276,12 +294,14 @@ export default function IdeaDetail() {
                             )}
                             
                             {/* Raw JSON Data (for debugging) */}
-                            <div className="border border-neutral-200 rounded-md p-4 mb-4 bg-neutral-50 hidden md:block">
-                              <h4 className="font-medium text-neutral-700 mb-2">Raw Data</h4>
-                              <pre className="text-xs overflow-auto whitespace-pre-wrap max-h-[400px] custom-scrollbar">
-                                {JSON.stringify(supabaseData.data, null, 2)}
-                              </pre>
-                            </div>
+                            {supabaseData.data && (
+                              <div className="border border-neutral-200 rounded-md p-4 mb-4 bg-neutral-50 hidden md:block">
+                                <h4 className="font-medium text-neutral-700 mb-2">Raw Data</h4>
+                                <pre className="text-xs overflow-auto whitespace-pre-wrap max-h-[400px] custom-scrollbar">
+                                  {JSON.stringify(supabaseData.data, null, 2)}
+                                </pre>
+                              </div>
+                            )}
                             
                             {supabaseData.data && (
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
