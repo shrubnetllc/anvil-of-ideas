@@ -2,7 +2,7 @@ import { users, type User, type InsertUser, ideas, leanCanvas, type Idea, type L
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import connectPg from "connect-pg-simple";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne, lt, desc } from "drizzle-orm";
 import { db, pool } from "./db";
 
 const MemoryStore = createMemoryStore(session);
