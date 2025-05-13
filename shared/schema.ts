@@ -35,6 +35,7 @@ export const ideas = pgTable("ideas", {
   websiteUrl: text("website_url"),
   companyName: text("company_name"),
   status: text("status").notNull().default("Draft"),
+  generationStartedAt: timestamp("generation_started_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

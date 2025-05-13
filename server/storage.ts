@@ -19,6 +19,8 @@ export interface IStorage {
   getIdeaById(id: number): Promise<Idea | undefined>;
   createIdea(idea: InsertIdea & { userId: number }): Promise<Idea>;
   updateIdeaStatus(id: number, status: ProjectStatus): Promise<void>;
+  startIdeaGeneration(id: number): Promise<void>;
+  checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number>;
   deleteIdea(id: number): Promise<void>;
   
   // Lean Canvas operations
@@ -81,6 +83,56 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date()
       })
       .where(eq(ideas.id, id));
+  }
+  
+  async startIdeaGeneration(id: number): Promise<void> {
+    const now = new Date();
+    await db.update(ideas)
+      .set({
+        status: "Generating",
+        generationStartedAt: now,
+        updatedAt: now
+      })
+      .where(eq(ideas.id, id));
+    console.log(`Started generation for idea ${id} at ${now.toISOString()}`);
+  }
+  
+  async checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number> {
+    // Calculate the cutoff time based on timeoutMinutes
+    const cutoffTime = new Date();
+    cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
+    
+    // Find ideas that have been in "Generating" status for longer than timeoutMinutes
+    const timedOutIdeas = await db.select()
+      .from(ideas)
+      .where(
+        and(
+          eq(ideas.status, "Generating"),
+          // Check that generationStartedAt is not null and is less than cutoffTime
+          // @ts-ignore - TS doesn't recognize the SQL operator correctly here
+          ideas.generationStartedAt.isNotNull(),
+          // @ts-ignore
+          ideas.generationStartedAt.lt(cutoffTime)
+        )
+      );
+    
+    // Update all timed out ideas to "Completed" status
+    let updateCount = 0;
+    if (timedOutIdeas.length > 0) {
+      const now = new Date();
+      for (const idea of timedOutIdeas) {
+        await db.update(ideas)
+          .set({
+            status: "Completed",
+            updatedAt: now
+          })
+          .where(eq(ideas.id, idea.id));
+        updateCount++;
+        console.log(`Auto-updated timed out idea ${idea.id} from "Generating" to "Completed" after ${timeoutMinutes} minutes`);
+      }
+    }
+    
+    return updateCount;
   }
 
   async deleteIdea(id: number): Promise<void> {
@@ -195,6 +247,45 @@ export class MemStorage implements IStorage {
       idea.updatedAt = new Date();
       this.ideas.set(id, idea);
     }
+  }
+  
+  async startIdeaGeneration(id: number): Promise<void> {
+    const idea = this.ideas.get(id);
+    if (idea) {
+      const now = new Date();
+      idea.status = "Generating";
+      idea.generationStartedAt = now;
+      idea.updatedAt = now;
+      this.ideas.set(id, idea);
+      console.log(`Started generation for idea ${id} at ${now.toISOString()}`);
+    }
+  }
+  
+  async checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number> {
+    // Calculate the cutoff time based on timeoutMinutes
+    const cutoffTime = new Date();
+    cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
+    
+    let updateCount = 0;
+    
+    // Check all ideas in the map
+    for (const [id, idea] of this.ideas.entries()) {
+      // If the idea is in Generating status and has a generationStartedAt older than the cutoff
+      if (
+        idea.status === "Generating" && 
+        idea.generationStartedAt && 
+        idea.generationStartedAt < cutoffTime
+      ) {
+        // Update to Completed
+        idea.status = "Completed";
+        idea.updatedAt = new Date();
+        this.ideas.set(id, idea);
+        updateCount++;
+        console.log(`Auto-updated timed out idea ${id} from "Generating" to "Completed" after ${timeoutMinutes} minutes`);
+      }
+    }
+    
+    return updateCount;
   }
 
   async deleteIdea(id: number): Promise<void> {
