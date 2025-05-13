@@ -7,7 +7,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ClipboardList } from "lucide-react";
+import { Hammer, Sparkles, Flame } from "lucide-react";
 import { Redirect } from "wouter";
 
 const loginSchema = z.object({
@@ -72,9 +72,17 @@ export default function AuthPage() {
       <div className="w-full md:w-1/2 flex items-center justify-center p-6">
         <Card className="w-full max-w-md shadow-lg rounded-xl">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center">Lean Canvas SaaS</CardTitle>
+            <div className="flex justify-center items-center mb-2">
+              <div className="relative mr-2">
+                <Hammer className="h-7 w-7 text-primary" />
+                <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-amber-400" />
+              </div>
+              <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                Anvil of Ideas
+              </CardTitle>
+            </div>
             <CardDescription className="text-center">
-              Sign in to manage your business ideas
+              Forge extraordinary business ideas into reality
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -114,7 +122,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700" disabled={loginMutation.isPending}>
+                    <Button type="submit" className="w-full bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90" disabled={loginMutation.isPending}>
                       {loginMutation.isPending ? "Logging in..." : "Login"}
                     </Button>
                   </form>
@@ -164,7 +172,7 @@ export default function AuthPage() {
                         </FormItem>
                       )}
                     />
-                    <Button type="submit" className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700" disabled={registerMutation.isPending}>
+                    <Button type="submit" className="w-full bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90" disabled={registerMutation.isPending}>
                       {registerMutation.isPending ? "Creating account..." : "Create Account"}
                     </Button>
                   </form>
@@ -176,40 +184,43 @@ export default function AuthPage() {
       </div>
       
       {/* Right side - Hero Section */}
-      <div className="w-full md:w-1/2 bg-gradient-to-br from-blue-600 to-blue-800 text-white p-10 flex flex-col justify-center">
+      <div className="w-full md:w-1/2 bg-gradient-to-br from-primary to-accent text-white p-10 flex flex-col justify-center">
         <div className="max-w-lg mx-auto">
           <div className="flex items-center mb-6">
-            <ClipboardList size={40} className="mr-3" />
-            <h1 className="text-3xl font-bold">Lean Canvas Platform</h1>
+            <div className="relative mr-3">
+              <Hammer size={40} className="text-white" />
+              <Sparkles className="h-6 w-6 absolute -top-1 -right-1 text-amber-300" />
+            </div>
+            <h1 className="text-3xl font-bold">Anvil of Ideas</h1>
           </div>
-          <h2 className="text-2xl font-semibold mb-4">Transform your business ideas into structured plans</h2>
+          <h2 className="text-2xl font-semibold mb-4">Forge extraordinary business ideas into reality</h2>
           <p className="text-lg mb-6">
-            Create, manage, and refine your business ideas using the powerful Lean Canvas methodology. Our platform helps you organize your thoughts and validate your concepts effectively.
+            Create, refine, and validate your business concepts with our powerful Lean Canvas platform. Our forge helps you hammer out the details and temper your ideas into successful ventures.
           </p>
           <div className="space-y-4">
             <div className="flex items-start">
-              <div className="flex-shrink-0 bg-blue-400 rounded-full p-1 mt-1">
+              <div className="flex-shrink-0 bg-secondary rounded-full p-1 mt-1">
                 <svg className="h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="ml-3 text-white font-medium">Automatically generate Lean Canvas for your business ideas</p>
+              <p className="ml-3 text-white font-medium">Forge perfect Lean Canvas models with AI-powered assistance</p>
             </div>
             <div className="flex items-start">
-              <div className="flex-shrink-0 bg-blue-400 rounded-full p-1 mt-1">
+              <div className="flex-shrink-0 bg-secondary rounded-full p-1 mt-1">
                 <svg className="h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="ml-3 text-white font-medium">Track and manage multiple business concepts in one place</p>
+              <p className="ml-3 text-white font-medium">Temper and strengthen multiple business concepts in one place</p>
             </div>
             <div className="flex items-start">
-              <div className="flex-shrink-0 bg-blue-400 rounded-full p-1 mt-1">
+              <div className="flex-shrink-0 bg-secondary rounded-full p-1 mt-1">
                 <svg className="h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="ml-3 text-white font-medium">Edit and refine your canvas as your idea evolves</p>
+              <p className="ml-3 text-white font-medium">Hammer out details and polish your ideas as they evolve</p>
             </div>
           </div>
         </div>
