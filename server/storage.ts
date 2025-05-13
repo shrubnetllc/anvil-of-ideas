@@ -233,6 +233,7 @@ export class MemStorage implements IStorage {
       websiteUrl: idea.websiteUrl || null,
       companyName: idea.companyName || null,
       status: "Draft",
+      generationStartedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -268,22 +269,25 @@ export class MemStorage implements IStorage {
     
     let updateCount = 0;
     
-    // Check all ideas in the map
-    for (const [id, idea] of this.ideas.entries()) {
-      // If the idea is in Generating status and has a generationStartedAt older than the cutoff
-      if (
-        idea.status === "Generating" && 
-        idea.generationStartedAt && 
-        idea.generationStartedAt < cutoffTime
-      ) {
-        // Update to Completed
-        idea.status = "Completed";
-        idea.updatedAt = new Date();
-        this.ideas.set(id, idea);
-        updateCount++;
-        console.log(`Auto-updated timed out idea ${id} from "Generating" to "Completed" after ${timeoutMinutes} minutes`);
+    // Check all ideas in the map using Array.from to avoid MapIterator issues
+    Array.from(this.ideas.keys()).forEach(id => {
+      const idea = this.ideas.get(id);
+      if (idea) {
+        // If the idea is in Generating status and has a generationStartedAt older than the cutoff
+        if (
+          idea.status === "Generating" && 
+          idea.generationStartedAt && 
+          idea.generationStartedAt < cutoffTime
+        ) {
+          // Update to Completed
+          idea.status = "Completed";
+          idea.updatedAt = new Date();
+          this.ideas.set(id, idea);
+          updateCount++;
+          console.log(`Auto-updated timed out idea ${id} from "Generating" to "Completed" after ${timeoutMinutes} minutes`);
+        }
       }
-    }
+    });
     
     return updateCount;
   }
@@ -310,6 +314,7 @@ export class MemStorage implements IStorage {
     const newCanvas: LeanCanvas = {
       id,
       ideaId: canvas.ideaId,
+      projectId: canvas.projectId || null,
       problem: canvas.problem || null,
       customerSegments: canvas.customerSegments || null,
       uniqueValueProposition: canvas.uniqueValueProposition || null,
@@ -319,6 +324,7 @@ export class MemStorage implements IStorage {
       costStructure: canvas.costStructure || null,
       keyMetrics: canvas.keyMetrics || null,
       unfairAdvantage: canvas.unfairAdvantage || null,
+      html: canvas.html || null,
       createdAt: now,
       updatedAt: now,
     };

@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { storage } from "./storage";
 
 const app = express();
 app.use(express.json());
@@ -66,5 +67,23 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Set up periodic check for timed-out generation tasks
+    const TIMEOUT_CHECK_INTERVAL = 30000; // Check every 30 seconds
+    const GENERATION_TIMEOUT_MINUTES = 2; // Set timeout to 2 minutes
+    
+    // Periodic check for timed out generation tasks
+    setInterval(async () => {
+      try {
+        const updatedCount = await storage.checkAndUpdateTimedOutIdeas(GENERATION_TIMEOUT_MINUTES);
+        if (updatedCount > 0) {
+          log(`Auto-completed ${updatedCount} timed-out canvas generation tasks`);
+        }
+      } catch (error) {
+        console.error("Error checking for timed-out generation tasks:", error);
+      }
+    }, TIMEOUT_CHECK_INTERVAL);
+    
+    log(`Initialized periodic check for timed-out generation tasks (every ${TIMEOUT_CHECK_INTERVAL/1000}s with ${GENERATION_TIMEOUT_MINUTES}min timeout)`);
   });
 })();
