@@ -93,7 +93,7 @@ export function Sidebar() {
 
           <div className="flex-shrink-0 border-t border-neutral-200 p-4">
             <div className="flex items-center">
-              <Avatar className="h-9 w-9 bg-primary-100 text-primary-700">
+              <Avatar className="h-9 w-9 bg-gradient-to-br from-primary to-secondary text-white">
                 <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
               <div className="ml-3">
