@@ -102,32 +102,25 @@ export class DatabaseStorage implements IStorage {
     const cutoffTime = new Date();
     cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
     
-    // Find ideas that have been in "Generating" status for longer than timeoutMinutes
-    // First find any "Generating" ideas with a valid timestamp
-    let timedOutIdeas = await db.select()
+    // Find all ideas that are in Generating status
+    const generatingIdeas = await db.select()
       .from(ideas)
-      .where(
-        and(
-          eq(ideas.status, "Generating"),
-          ne(ideas.generationStartedAt, null),
-          lt(ideas.generationStartedAt, cutoffTime)
-        )
-      );
+      .where(eq(ideas.status, "Generating"));
     
-    // ALSO find any "Generating" ideas with NULL generation time that are older than cutoff
-    // based on updatedAt timestamp
-    const legacyTimedOutIdeas = await db.select()
-      .from(ideas)
-      .where(
-        and(
-          eq(ideas.status, "Generating"),
-          eq(ideas.generationStartedAt, null),
-          lt(ideas.updatedAt, cutoffTime)
-        )
-      );
-    
-    // Combine both results
-    timedOutIdeas = [...timedOutIdeas, ...legacyTimedOutIdeas];
+    // Filter out the ones that should be updated
+    const timedOutIdeas = generatingIdeas.filter(idea => {
+      // Case 1: Has generationStartedAt timestamp and it's older than cutoff
+      if (idea.generationStartedAt && idea.generationStartedAt < cutoffTime) {
+        return true;
+      }
+      
+      // Case 2: No generationStartedAt timestamp but updatedAt is older than cutoff
+      if (!idea.generationStartedAt && idea.updatedAt < cutoffTime) {
+        return true;
+      }
+      
+      return false;
+    });
     
     // Update all timed out ideas to "Completed" status
     let updateCount = 0;
