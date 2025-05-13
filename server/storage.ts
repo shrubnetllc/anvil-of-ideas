@@ -109,10 +109,8 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(ideas.status, "Generating"),
           // Check that generationStartedAt is not null and is less than cutoffTime
-          // @ts-ignore - TS doesn't recognize the SQL operator correctly here
-          ideas.generationStartedAt.isNotNull(),
-          // @ts-ignore
-          ideas.generationStartedAt.lt(cutoffTime)
+          ne(ideas.generationStartedAt, null),
+          lt(ideas.generationStartedAt, cutoffTime)
         )
       );
     
