@@ -2,7 +2,7 @@ import { users, type User, type InsertUser, ideas, leanCanvas, type Idea, type L
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import connectPg from "connect-pg-simple";
-import { eq, and, ne, lt, desc } from "drizzle-orm";
+import { eq, and, ne, lt, desc, isNull } from "drizzle-orm";
 import { db, pool } from "./db";
 
 const MemoryStore = createMemoryStore(session);
@@ -103,16 +103,31 @@ export class DatabaseStorage implements IStorage {
     cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
     
     // Find ideas that have been in "Generating" status for longer than timeoutMinutes
-    const timedOutIdeas = await db.select()
+    // First find any "Generating" ideas with a valid timestamp
+    let timedOutIdeas = await db.select()
       .from(ideas)
       .where(
         and(
           eq(ideas.status, "Generating"),
-          // Check that generationStartedAt is not null and is less than cutoffTime
           ne(ideas.generationStartedAt, null),
           lt(ideas.generationStartedAt, cutoffTime)
         )
       );
+    
+    // ALSO find any "Generating" ideas with NULL generation time that are older than cutoff
+    // based on updatedAt timestamp
+    const legacyTimedOutIdeas = await db.select()
+      .from(ideas)
+      .where(
+        and(
+          eq(ideas.status, "Generating"),
+          eq(ideas.generationStartedAt, null),
+          lt(ideas.updatedAt, cutoffTime)
+        )
+      );
+    
+    // Combine both results
+    timedOutIdeas = [...timedOutIdeas, ...legacyTimedOutIdeas];
     
     // Update all timed out ideas to "Completed" status
     let updateCount = 0;
