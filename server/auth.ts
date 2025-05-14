@@ -7,6 +7,7 @@ import { promisify } from "util";
 import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
 import { emailService } from "./email";
+import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
 
 declare global {
   namespace Express {
@@ -77,13 +78,29 @@ export function setupAuth(app: Express) {
       req.login(user, async (err) => {
         if (err) return next(err);
         
-        // Send welcome email if email address was provided
+        // Handle email verification and welcome email if email address was provided
         if (req.body.email) {
           try {
+            // Generate verification token
+            const token = generateVerificationToken();
+            const expiryDate = generateTokenExpiry(24); // 24 hours
+            
+            // Store token in database
+            await storage.setVerificationToken(user.id, token, expiryDate);
+            
+            // Determine base URL for verification link
+            const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+            const verificationUrl = buildVerificationUrl(baseUrl, user.id, token);
+            
+            // Send verification email
+            await emailService.sendVerificationEmail(req.body.email, user.username, verificationUrl);
+            console.log(`Verification email sent to ${req.body.email}`);
+            
+            // Also send welcome email
             await emailService.sendWelcomeEmail(req.body.email, user.username);
             console.log(`Welcome email sent to ${req.body.email}`);
           } catch (emailError) {
-            console.error('Failed to send welcome email:', emailError);
+            console.error('Failed to send email:', emailError);
             // Continue even if email sending fails
           }
         }

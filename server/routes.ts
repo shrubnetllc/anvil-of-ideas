@@ -6,6 +6,7 @@ import { z } from "zod";
 import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema } from "@shared/schema";
 import { fetchLeanCanvasData, fetchUserIdeas } from "./supabase";
 import { emailService } from "./email";
+import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
@@ -604,6 +605,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.setSetting(key, value);
       res.json({ key, value });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Email verification endpoints
+  app.get("/api/verify-email", async (req, res, next) => {
+    try {
+      const userId = parseInt(req.query.userId as string);
+      const token = req.query.token as string;
+      
+      if (!userId || !token) {
+        return res.status(400).json({ message: "Missing userId or token" });
+      }
+      
+      const verified = await storage.verifyEmail(userId, token);
+      
+      if (verified) {
+        // Email successfully verified, redirect to success page
+        res.redirect('/?verified=true');
+      } else {
+        // Verification failed, redirect to error page
+        res.redirect('/?verified=false');
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  app.post("/api/resend-verification", isAuthenticated, async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const user = req.user;
+      
+      // Check if user email is already verified
+      const isVerified = await storage.isEmailVerified(user.id);
+      if (isVerified) {
+        return res.status(400).json({ message: "Email is already verified" });
+      }
+      
+      // Generate new verification token
+      const token = generateVerificationToken();
+      const expiryDate = generateTokenExpiry(24); // 24 hours
+      
+      // Store token in database
+      await storage.setVerificationToken(user.id, token, expiryDate);
+      
+      // Determine base URL for verification link
+      const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const verificationUrl = buildVerificationUrl(baseUrl, user.id, token);
+      
+      // Send verification email
+      const success = await emailService.sendVerificationEmail(user.email!, user.username, verificationUrl);
+      
+      if (success) {
+        res.json({ success: true, message: "Verification email sent successfully" });
+      } else {
+        res.status(500).json({ success: false, message: "Failed to send verification email" });
+      }
     } catch (error) {
       next(error);
     }

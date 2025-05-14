@@ -514,6 +514,45 @@ export class MemStorage implements IStorage {
     });
     return result;
   }
+  
+  // Email verification methods
+  async setVerificationToken(userId: number, token: string, expiryDate: Date): Promise<void> {
+    const user = this.users.get(userId);
+    if (user) {
+      user.verificationToken = token;
+      user.verificationTokenExpiry = expiryDate;
+      this.users.set(userId, user);
+    }
+  }
+  
+  async verifyEmail(userId: number, token: string): Promise<boolean> {
+    const user = this.users.get(userId);
+    
+    if (!user) {
+      return false;
+    }
+    
+    if (user.verificationToken !== token) {
+      return false;
+    }
+    
+    if (!user.verificationTokenExpiry || new Date() > new Date(user.verificationTokenExpiry)) {
+      return false; // Token expired
+    }
+    
+    // Mark email as verified and clear token
+    user.emailVerified = "true";
+    user.verificationToken = null;
+    user.verificationTokenExpiry = null;
+    this.users.set(userId, user);
+    
+    return true;
+  }
+  
+  async isEmailVerified(userId: number): Promise<boolean> {
+    const user = this.users.get(userId);
+    return user?.emailVerified === "true";
+  }
 }
 
 // Use the database storage implementation
