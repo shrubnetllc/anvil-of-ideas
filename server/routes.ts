@@ -505,7 +505,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const isVerified = await storage.isEmailVerified(req.user.id);
-      res.json({ isVerified });
+      res.json({ 
+        isVerified,
+        email: req.user.email || null
+      });
     } catch (error) {
       next(error);
     }

@@ -19,10 +19,38 @@ import { useLocation } from "wouter";
 export default function Dashboard() {
   const { user } = useAuth();
   const { ideas, isLoading, generateCanvas } = useIdeas();
+  const { toast } = useToast();
+  const [location] = useLocation();
   const [showNewIdeaModal, setShowNewIdeaModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "All">("All");
   const [sortOrder, setSortOrder] = useState<string>("newest");
+  
+  // Check for verification success from URL params
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const verified = urlParams.get('verified');
+    
+    if (verified === 'true') {
+      toast({
+        title: "Email Verified Successfully",
+        description: "Your email has been verified. Welcome to Anvil of Ideas!",
+        variant: "default"
+      });
+      
+      // Clear the URL parameter after showing the toast
+      window.history.replaceState({}, document.title, location.split('?')[0]);
+    } else if (verified === 'false') {
+      toast({
+        title: "Email Verification Failed",
+        description: "There was a problem verifying your email. Please try again or contact support.",
+        variant: "destructive"
+      });
+      
+      // Clear the URL parameter after showing the toast
+      window.history.replaceState({}, document.title, location.split('?')[0]);
+    }
+  }, [toast, location]);
 
   // Filter ideas based on search and status
   const filteredIdeas = ideas
