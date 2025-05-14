@@ -40,13 +40,17 @@ app.use((req, res, next) => {
 (async () => {
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  // Create a properly named sendError function to avoid reference errors
+  function sendError(err: any, req: Request, res: Response, next: NextFunction) {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-
+    
+    console.error('Error caught by server:', err);
     res.status(status).json({ message });
-    throw err;
-  });
+  }
+  
+  // Global error handler
+  app.use(sendError);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route

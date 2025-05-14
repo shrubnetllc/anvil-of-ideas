@@ -22,6 +22,7 @@ function Router() {
       <ProtectedRoute path="/settings" component={Settings} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/confirm-email/:userId/:token" component={EmailVerification} />
+      <Route path="/verify" component={EmailVerification} />
       <Route component={NotFound} />
     </Switch>
   );
