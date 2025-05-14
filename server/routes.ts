@@ -497,6 +497,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Email verification status endpoint
+  app.get("/api/email/verification-status", isAuthenticated, async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      
+      const isVerified = await storage.isEmailVerified(req.user.id);
+      res.json({ isVerified });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
   // Get email configuration
   app.get("/api/email/config", isAuthenticated, async (req, res, next) => {
     try {

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle, Save, User, RefreshCw, X } from "lucide-react";
+import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle, Save, User, RefreshCw, X, Info as InfoIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
@@ -455,14 +455,72 @@ export default function Settings() {
               <TabsContent value="account" className="space-y-6 mt-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Account Settings</CardTitle>
+                    <CardTitle className="flex items-center">
+                      <User className="h-5 w-5 mr-2 text-primary" />
+                      Account Information
+                    </CardTitle>
                     <CardDescription>
-                      Manage your account settings and preferences
+                      View and manage your account details and verification status
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-neutral-500">Account settings will be implemented in a future update.</p>
+                  <CardContent className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="username">Username</Label>
+                        <Input id="username" value={user?.username || ''} disabled />
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="email" className="flex items-center gap-2">
+                          Email Address
+                          {isEmailVerified === null ? (
+                            <Skeleton className="h-5 w-20" />
+                          ) : isEmailVerified ? (
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 flex items-center gap-1">
+                              <CheckCircle className="h-3 w-3" /> Verified
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" /> Unverified
+                            </Badge>
+                          )}
+                        </Label>
+                        <Input id="email" value={user?.email || ''} disabled />
+                        {!isEmailVerified && user?.email && (
+                          <div className="mt-2">
+                            <p className="text-sm text-amber-700 mb-2">
+                              Your email address hasn't been verified. Please check your inbox for a verification email or click the button below to resend it.
+                            </p>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={handleResendVerification} 
+                              disabled={isResendingVerification}
+                              className="flex items-center gap-1"
+                            >
+                              {isResendingVerification ? (
+                                <>
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                  Sending...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="h-4 w-4" />
+                                  Resend Verification Email
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </CardContent>
+                  <CardFooter className="bg-neutral-50 border-t px-6 py-4">
+                    <div className="flex items-center text-sm text-neutral-500">
+                      <InfoIcon className="h-4 w-4 mr-2 text-blue-500" />
+                      Email verification helps secure your account and enables full access to all features
+                    </div>
+                  </CardFooter>
                 </Card>
               </TabsContent>
               
