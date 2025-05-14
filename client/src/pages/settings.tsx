@@ -34,15 +34,24 @@ export default function Settings() {
 
   // Load email configuration when component mounts
   useEffect(() => {
+    // Use a mounted flag to prevent state updates after component unmounts
+    let mounted = true;
+    
     const loadEmailConfig = async () => {
+      if (!mounted) return;
       setIsLoadingConfig(true);
+      
       try {
         const response = await apiRequest("GET", "/api/email/config");
+        if (!mounted) return;
+        
         const data = await response.json();
-        if (data.fromAddress) {
+        if (mounted && data.fromAddress) {
           setEmailFromAddress(data.fromAddress);
         }
       } catch (error) {
+        if (!mounted) return;
+        
         console.error("Failed to load email configuration:", error);
         toast({
           title: "Configuration Error",
@@ -50,25 +59,40 @@ export default function Settings() {
           variant: "destructive"
         });
       } finally {
-        setIsLoadingConfig(false);
+        if (mounted) {
+          setIsLoadingConfig(false);
+        }
       }
     };
 
     const checkEmailVerificationStatus = async () => {
-      if (!user) return;
+      if (!user || !mounted) return;
       
       try {
         const response = await apiRequest("GET", "/api/email/verification-status");
+        if (!mounted) return;
+        
         const data = await response.json();
-        setIsEmailVerified(data.isVerified);
+        if (mounted) {
+          setIsEmailVerified(data.isVerified);
+        }
       } catch (error) {
+        if (!mounted) return;
+        
         console.error("Failed to check email verification status:", error);
-        setIsEmailVerified(null);
+        if (mounted) {
+          setIsEmailVerified(null);
+        }
       }
     };
 
     loadEmailConfig();
     checkEmailVerificationStatus();
+    
+    // Return cleanup function to prevent state updates after unmount
+    return () => {
+      mounted = false;
+    };
   }, [toast, user]);
 
   const handleSaveEmailConfig = async () => {
@@ -234,30 +258,42 @@ export default function Settings() {
       return;
     }
     
+    // Create a mounted flag to prevent state updates after navigation
+    let mounted = true;
     setIsResendingVerification(true);
     
     try {
       const response = await apiRequest("POST", "/api/resend-verification");
+      if (!mounted) return;
+      
       const data = await response.json();
       
-      if (data.success) {
+      if (data.success && mounted) {
         toast({
           title: "Verification Email Sent",
           description: "A new verification email has been sent to your email address.",
           variant: "default"
         });
-      } else {
+      } else if (mounted) {
         throw new Error(data.message || "Failed to send verification email");
       }
     } catch (error) {
+      if (!mounted) return;
+      
       toast({
         title: "Failed to Resend Verification",
         description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive"
       });
     } finally {
-      setIsResendingVerification(false);
+      if (mounted) {
+        setIsResendingVerification(false);
+      }
     }
+    
+    // Since this is a function that's called on demand (not a useEffect),
+    // we need to attach the cleanup to the component's outer scope
+    return () => { mounted = false; };
   };
 
   return (
