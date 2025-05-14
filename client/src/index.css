@@ -89,8 +89,24 @@
   @apply bg-neutral-50 dark:bg-accent font-medium;
 }
 
+/* Apply gradient styling to headings while allowing emojis to show through */
 .prose h1, .prose h2, .prose h3 {
   @apply font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
+}
+
+/* Allow emoji characters to show their native colors in the prose sections */
+.prose :is(h1, h2, h3) :is(img, object, svg, .emoji) {
+  display: inline !important;
+  background: none !important;
+  background-clip: unset !important;
+  -webkit-text-fill-color: initial !important;
+  color: initial !important;
+  text-decoration: none !important;
+}
+
+/* Specifically handle emoji characters with this fallback approach */
+.prose h1, .prose h2, .prose h3 {
+  font-family: "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
 }
 
 .prose ul, .prose ol {
