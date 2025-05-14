@@ -14,6 +14,25 @@ import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
 import { queryClient } from "@/lib/queryClient";
 
+// This function ensures emojis in HTML content render properly with their native colors
+function processHtmlEmojis(html: string): string {
+  if (!html) return "";
+  
+  // We'll use a simpler approach - wrap the first character of each heading if it looks like an emoji
+  // Match heading tags with content
+  return html.replace(
+    /(<h[1-3][^>]*>)(.)(.+?)(<\/h[1-3]>)/g,
+    (match, openTag, firstChar, restOfContent, closeTag) => {
+      // Check if the first character is likely an emoji (outside the standard ASCII range)
+      if (firstChar.charCodeAt(0) > 255) {
+        return `${openTag}<span style="background: none !important; color: initial !important; background-clip: initial !important; -webkit-text-fill-color: initial !important;">${firstChar}</span>${restOfContent}${closeTag}`;
+      }
+      // Otherwise return the original match
+      return match;
+    }
+  );
+}
+
 export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
@@ -204,7 +223,7 @@ export default function IdeaDetail() {
                                   </Badge>
                                 </div>
                                 <div className="prose prose-sm max-w-none overflow-auto mb-8">
-                                  <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
+                                  <div dangerouslySetInnerHTML={{ __html: processHtmlEmojis(supabaseData.data.html) }} />
                                 </div>
                               </div>
                             ) : (
@@ -335,7 +354,7 @@ export default function IdeaDetail() {
                                 <h4 className="font-medium text-neutral-700 mb-3">HTML Lean Canvas</h4>
                                 <div 
                                   className="prose prose-sm max-w-none overflow-auto max-h-[600px] custom-scrollbar" 
-                                  dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} 
+                                  dangerouslySetInnerHTML={{ __html: processHtmlEmojis(supabaseData.data.html) }} 
                                 />
                               </div>
                             )}
