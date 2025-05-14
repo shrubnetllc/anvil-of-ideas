@@ -22,7 +22,8 @@ interface NewIdeaModalProps {
 // Define our extended form data type that includes Lean Canvas fields
 type IdeaFormData = {
   // Base idea fields
-  idea: string;
+  title: string;      // Added title field
+  idea: string;       // Now used as description
   founderName: string;
   founderEmail: string;
   companyStage: string;
@@ -90,6 +91,7 @@ export function NewIdeaModal({ open, onClose }: NewIdeaModalProps) {
   
   // Extended form schema with lean canvas fields
   const extendedIdeaSchema = insertIdeaSchema.extend({
+    title: z.string().min(2, "Title must be at least 2 characters"),
     leanCanvas: z.object({
       problem: z.string().optional(),
       customerSegments: z.string().optional(),
@@ -246,20 +248,40 @@ export function NewIdeaModal({ open, onClose }: NewIdeaModalProps) {
               <div className="space-y-4">
                 <FormField
                   control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Idea Title <span className="text-red-500">*</span></FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Give your idea a clear, memorable title..."
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Create a concise, descriptive title for your business idea.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
                   name="idea"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Idea <span className="text-red-500">*</span></FormLabel>
+                      <FormLabel>Description <span className="text-red-500">*</span></FormLabel>
                       <FormControl>
                         <Textarea
-                          placeholder="Describe your business idea..."
+                          placeholder="Describe your business idea in detail..."
                           className="resize-none"
                           rows={4}
                           {...field}
                         />
                       </FormControl>
                       <FormDescription>
-                        Provide a concise yet comprehensive description of your business idea.
+                        Provide a comprehensive description of your business idea.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

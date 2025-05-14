@@ -28,6 +28,7 @@ export const users = pgTable("users", {
 export const ideas = pgTable("ideas", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id),
+  title: text("title").notNull().default(""),
   idea: text("idea").notNull(),
   founderName: text("founder_name"),
   founderEmail: text("founder_email"),
