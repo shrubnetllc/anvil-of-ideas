@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle } from "lucide-react";
+import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -24,6 +24,72 @@ export default function Settings() {
   const [notificationUsername, setNotificationUsername] = useState("");
   const [notificationIdeaTitle, setNotificationIdeaTitle] = useState("");
   const [isSendingNotificationEmail, setIsSendingNotificationEmail] = useState(false);
+  const [emailFromAddress, setEmailFromAddress] = useState("");
+  const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  // Load email configuration when component mounts
+  useEffect(() => {
+    const loadEmailConfig = async () => {
+      setIsLoadingConfig(true);
+      try {
+        const response = await apiRequest("GET", "/api/email/config");
+        const data = await response.json();
+        if (data.fromAddress) {
+          setEmailFromAddress(data.fromAddress);
+        }
+      } catch (error) {
+        console.error("Failed to load email configuration:", error);
+        toast({
+          title: "Configuration Error",
+          description: "Failed to load email configuration",
+          variant: "destructive"
+        });
+      } finally {
+        setIsLoadingConfig(false);
+      }
+    };
+
+    loadEmailConfig();
+  }, [toast]);
+
+  const handleSaveEmailConfig = async () => {
+    if (!emailFromAddress) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter a valid 'From' email address",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSavingConfig(true);
+    
+    try {
+      const response = await apiRequest("POST", "/api/email/config", { 
+        fromAddress: emailFromAddress
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        toast({
+          title: "Configuration Saved",
+          description: "Email configuration updated successfully",
+          variant: "default"
+        });
+      } else {
+        throw new Error(data.message || "Failed to save email configuration");
+      }
+    } catch (error) {
+      toast({
+        title: "Configuration Error",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSavingConfig(false);
+    }
+  };
 
   const handleSendTestEmail = async () => {
     if (!testEmailAddress) {
@@ -162,6 +228,60 @@ export default function Settings() {
               </TabsList>
               
               <TabsContent value="email" className="space-y-6 mt-6">
+                <Card className="mb-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Mail className="h-5 w-5 mr-2 text-primary" />
+                      Email Configuration
+                    </CardTitle>
+                    <CardDescription>
+                      Configure email service settings
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <h3 className="text-lg font-medium mb-4">Email Service Settings</h3>
+                      <div className="grid gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="email-from">From Address</Label>
+                          <Input
+                            id="email-from"
+                            placeholder="Anvil of Ideas <no-reply@anvilofideas.com>"
+                            value={emailFromAddress}
+                            onChange={(e) => setEmailFromAddress(e.target.value)}
+                            disabled={isLoadingConfig}
+                          />
+                          <p className="text-sm text-neutral-500">
+                            Format: "Display Name &lt;email@example.com&gt;" or just "email@example.com"
+                          </p>
+                        </div>
+                        <Button 
+                          onClick={handleSaveEmailConfig}
+                          disabled={isSavingConfig || !emailFromAddress || isLoadingConfig}
+                        >
+                          {isSavingConfig ? (
+                            <span className="flex items-center">
+                              <span className="mr-2">Saving</span>
+                              <AlertCircle className="h-4 w-4 animate-spin" />
+                            </span>
+                          ) : (
+                            <span className="flex items-center">
+                              <Save className="h-4 w-4 mr-2" />
+                              Save Configuration
+                            </span>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="bg-neutral-50 border-t px-6 py-4">
+                    <div className="flex items-center text-sm text-neutral-500">
+                      <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                      Email configuration is stored in the database
+                    </div>
+                  </CardFooter>
+                </Card>
+                
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center">
