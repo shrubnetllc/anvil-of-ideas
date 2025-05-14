@@ -116,6 +116,7 @@ export function NewIdeaModal({ open, onClose }: NewIdeaModalProps) {
   const form = useForm<IdeaFormData>({
     resolver: zodResolver(extendedIdeaSchema),
     defaultValues: {
+      title: "",
       idea: "",
       founderName: "",
       founderEmail: "",

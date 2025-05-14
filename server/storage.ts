@@ -232,6 +232,7 @@ export class MemStorage implements IStorage {
     const newIdea: Idea = {
       id,
       userId: idea.userId,
+      title: idea.title || "",
       idea: idea.idea,
       founderName: idea.founderName || null,
       founderEmail: idea.founderEmail || null,
