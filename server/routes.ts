@@ -90,6 +90,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+      
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+      
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      
+      // Only allow updating specific fields
+      const allowedFields = ['title', 'idea', 'companyName', 'companyStage', 'founderName', 'founderEmail', 'websiteUrl'];
+      const updates: Record<string, any> = {};
+      
+      for (const field of allowedFields) {
+        if (field in req.body) {
+          updates[field] = req.body[field];
+        }
+      }
+      
+      // Update the idea
+      if (Object.keys(updates).length > 0) {
+        await storage.updateIdea(ideaId, updates);
+        const updatedIdea = await storage.getIdeaById(ideaId);
+        res.json(updatedIdea);
+      } else {
+        res.status(400).json({ message: "No valid fields to update" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.delete("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
     try {
       const idea = await storage.getIdeaById(parseInt(req.params.id));

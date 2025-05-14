@@ -18,6 +18,7 @@ export interface IStorage {
   getIdeasByUser(userId: number): Promise<Idea[]>;
   getIdeaById(id: number): Promise<Idea | undefined>;
   createIdea(idea: InsertIdea & { userId: number }): Promise<Idea>;
+  updateIdea(id: number, updates: Partial<Idea>): Promise<void>;
   updateIdeaStatus(id: number, status: ProjectStatus): Promise<void>;
   startIdeaGeneration(id: number): Promise<void>;
   checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number>;
@@ -76,6 +77,19 @@ export class DatabaseStorage implements IStorage {
     return newIdea;
   }
 
+  async updateIdea(id: number, updates: Partial<Idea>): Promise<void> {
+    // Remove non-updatable fields
+    const { id: _, userId: __, status: ___, createdAt: ____, updatedAt: _____, generationStartedAt: ______, ...validUpdates } = updates;
+    
+    // Add updated timestamp
+    await db.update(ideas)
+      .set({
+        ...validUpdates,
+        updatedAt: new Date()
+      })
+      .where(eq(ideas.id, id));
+  }
+  
   async updateIdeaStatus(id: number, status: ProjectStatus): Promise<void> {
     await db.update(ideas)
       .set({
@@ -248,6 +262,23 @@ export class MemStorage implements IStorage {
     return newIdea;
   }
 
+  async updateIdea(id: number, updates: Partial<Idea>): Promise<void> {
+    const idea = this.ideas.get(id);
+    if (idea) {
+      // Remove non-updatable fields
+      const { id: _, userId: __, status: ___, createdAt: ____, updatedAt: _____, generationStartedAt: ______, ...validUpdates } = updates;
+      
+      // Update the idea with valid fields
+      const updatedIdea = {
+        ...idea,
+        ...validUpdates,
+        updatedAt: new Date()
+      };
+      
+      this.ideas.set(id, updatedIdea);
+    }
+  }
+  
   async updateIdeaStatus(id: number, status: ProjectStatus): Promise<void> {
     const idea = this.ideas.get(id);
     if (idea) {

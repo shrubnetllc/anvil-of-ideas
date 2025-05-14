@@ -97,11 +97,35 @@ export function useIdeas() {
     },
   });
 
+  const updateIdeaMutation = useMutation({
+    mutationFn: async ({ ideaId, updates }: { ideaId: number, updates: Partial<Idea> }) => {
+      const res = await apiRequest("PATCH", `/api/ideas/${ideaId}`, updates);
+      return res.json();
+    },
+    onSuccess: (_, { ideaId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ideas"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
+      toast({
+        title: "Success",
+        description: "Your idea details have been updated.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update idea",
+        variant: "destructive",
+      });
+    },
+  });
+
   return {
     ideas: ideas || [],
     isLoading,
     createIdea: createIdeaMutation.mutate,
     isCreating: createIdeaMutation.isPending,
+    updateIdea: updateIdeaMutation.mutate,
+    isUpdating: updateIdeaMutation.isPending,
     generateCanvas: generateCanvasMutation.mutate,
     isGenerating: generateCanvasMutation.isPending,
     deleteIdea: deleteIdeaMutation.mutate,
