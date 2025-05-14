@@ -64,6 +64,7 @@ export const leanCanvas = pgTable("lean_canvas", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  email: true,
 });
 
 export const insertIdeaSchema = createInsertSchema(ideas).omit({
