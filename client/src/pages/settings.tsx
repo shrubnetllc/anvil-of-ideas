@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle, Save } from "lucide-react";
+import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle, Save, User, RefreshCw, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Settings() {
   const { user } = useAuth();
@@ -27,6 +29,8 @@ export default function Settings() {
   const [emailFromAddress, setEmailFromAddress] = useState("");
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState<boolean | null>(null);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
 
   // Load email configuration when component mounts
   useEffect(() => {
@@ -50,8 +54,22 @@ export default function Settings() {
       }
     };
 
+    const checkEmailVerificationStatus = async () => {
+      if (!user) return;
+      
+      try {
+        const response = await apiRequest("GET", "/api/email/verification-status");
+        const data = await response.json();
+        setIsEmailVerified(data.isVerified);
+      } catch (error) {
+        console.error("Failed to check email verification status:", error);
+        setIsEmailVerified(null);
+      }
+    };
+
     loadEmailConfig();
-  }, [toast]);
+    checkEmailVerificationStatus();
+  }, [toast, user]);
 
   const handleSaveEmailConfig = async () => {
     if (!emailFromAddress) {
@@ -203,6 +221,42 @@ export default function Settings() {
       });
     } finally {
       setIsSendingNotificationEmail(false);
+    }
+  };
+  
+  const handleResendVerification = async () => {
+    if (!user || !user.email) {
+      toast({
+        title: "Missing Information",
+        description: "No email address associated with your account.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    setIsResendingVerification(true);
+    
+    try {
+      const response = await apiRequest("POST", "/api/resend-verification");
+      const data = await response.json();
+      
+      if (data.success) {
+        toast({
+          title: "Verification Email Sent",
+          description: "A new verification email has been sent to your email address.",
+          variant: "default"
+        });
+      } else {
+        throw new Error(data.message || "Failed to send verification email");
+      }
+    } catch (error) {
+      toast({
+        title: "Failed to Resend Verification",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+        variant: "destructive"
+      });
+    } finally {
+      setIsResendingVerification(false);
     }
   };
 
