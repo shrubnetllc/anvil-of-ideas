@@ -4,10 +4,10 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles } from "lucide-react";
+import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDate } from "@/lib/utils";
+import { formatDate, jsonToCSV, downloadCSV } from "@/lib/utils";
 import { CanvasSection, canvasSections } from "@shared/schema";
 import { CanvasSectionComponent } from "@/components/canvas-section";
 import { Badge } from "@/components/ui/badge";
@@ -329,14 +329,28 @@ export default function IdeaDetail() {
                               </div>
                             )}
                             
-                            {/* HTML Content from Supabase */}
-                            {supabaseData.data && supabaseData.data.html && (
-                              <div className="border border-neutral-200 rounded-md p-4 mb-4 bg-white">
-                                <h4 className="font-medium text-neutral-700 mb-3">HTML Lean Canvas</h4>
-                                <div 
-                                  className="prose prose-sm max-w-none overflow-auto max-h-[600px] custom-scrollbar" 
-                                  dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} 
-                                />
+                            {/* CSV Download Option */}
+                            {supabaseData.data && (
+                              <div className="border border-neutral-200 rounded-md p-6 mb-4 bg-white">
+                                <div className="flex items-center justify-between mb-4">
+                                  <h4 className="font-medium text-neutral-700">Download Lean Canvas Data</h4>
+                                  <Badge variant="outline" className="text-xs">CSV</Badge>
+                                </div>
+                                
+                                <p className="text-neutral-600 mb-6 text-sm">
+                                  Download your Lean Canvas data as a CSV file for easy importing into spreadsheet applications or other tools.
+                                </p>
+                                
+                                <Button
+                                  onClick={() => {
+                                    const csvContent = jsonToCSV(supabaseData.data);
+                                    downloadCSV(csvContent, `lean-canvas-${idea.id}-${new Date().toISOString().split('T')[0]}.csv`);
+                                  }}
+                                  className="w-full sm:w-auto bg-gradient-to-r from-primary to-secondary text-white flex items-center justify-center"
+                                >
+                                  <Download className="h-4 w-4 mr-2" />
+                                  Download CSV
+                                </Button>
                               </div>
                             )}
                             
