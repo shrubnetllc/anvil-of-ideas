@@ -191,6 +191,39 @@ class EmailService {
   }
 
   /**
+   * Send an email verification link to a new user
+   */
+  async sendVerificationEmail(email: string, username: string, verificationUrl: string): Promise<boolean> {
+    const message: EmailMessage = {
+      to: email,
+      subject: 'Verify Your Email - Anvil of Ideas',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #FF8A00;">Verify Your Email Address</h1>
+          <p>Hello ${username},</p>
+          <p>Thank you for registering with Anvil of Ideas. Please verify your email address to access all features of our platform.</p>
+          <p>Click the button below to verify your email address:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${verificationUrl}" 
+              style="background-color: #FF8A00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
+              Verify My Email
+            </a>
+          </div>
+          <p>Or copy and paste this link in your browser:</p>
+          <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
+            ${verificationUrl}
+          </p>
+          <p>This verification link will expire in 24 hours.</p>
+          <p>If you did not register for an account, please ignore this email.</p>
+          <p>Best regards,<br>The Anvil of Ideas Team</p>
+        </div>
+      `,
+    };
+
+    return this.sendEmail(message);
+  }
+
+  /**
    * Send a test email to verify configuration
    */
   async sendTestEmail(email: string): Promise<boolean> {

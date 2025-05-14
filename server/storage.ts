@@ -34,6 +34,11 @@ export interface IStorage {
   setSetting(key: string, value: string): Promise<void>;
   getAllSettings(): Promise<Record<string, string>>;
   
+  // Email verification
+  setVerificationToken(userId: number, token: string, expiryDate: Date): Promise<void>;
+  verifyEmail(userId: number, token: string): Promise<boolean>;
+  isEmailVerified(userId: number): Promise<boolean>;
+  
   // Session store
   sessionStore: any; // Using 'any' type for sessionStore to avoid type errors
 }
@@ -60,7 +65,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db.insert(users).values(insertUser).returning();
+    // Set default values for verification fields
+    const userData = {
+      ...insertUser,
+      emailVerified: "false"
+    };
+    
+    const [user] = await db.insert(users).values(userData).returning();
     return user;
   }
 
@@ -233,6 +244,48 @@ export class DatabaseStorage implements IStorage {
     
     return result;
   }
+  
+  // Email verification methods
+  async setVerificationToken(userId: number, token: string, expiryDate: Date): Promise<void> {
+    await db.update(users)
+      .set({
+        verificationToken: token,
+        verificationTokenExpiry: expiryDate
+      })
+      .where(eq(users.id, userId));
+  }
+  
+  async verifyEmail(userId: number, token: string): Promise<boolean> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    
+    if (!user) {
+      return false;
+    }
+    
+    if (user.verificationToken !== token) {
+      return false;
+    }
+    
+    if (!user.verificationTokenExpiry || new Date() > new Date(user.verificationTokenExpiry)) {
+      return false; // Token expired
+    }
+    
+    // Mark email as verified and clear token
+    await db.update(users)
+      .set({
+        emailVerified: "true",
+        verificationToken: null,
+        verificationTokenExpiry: null
+      })
+      .where(eq(users.id, userId));
+    
+    return true;
+  }
+  
+  async isEmailVerified(userId: number): Promise<boolean> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    return user?.emailVerified === "true";
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -273,7 +326,11 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id,
       // Ensure email is either the provided value or null (not undefined)
-      email: insertUser.email || null 
+      email: insertUser.email || null,
+      // Default values for verification fields
+      emailVerified: "false",
+      verificationToken: null,
+      verificationTokenExpiry: null
     };
     this.users.set(id, user);
     return user;
