@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -60,6 +60,14 @@ export const leanCanvas = pgTable("lean_canvas", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const appSettings = pgTable("app_settings", {
+  id: serial("id").primaryKey(),
+  key: varchar("key", { length: 50 }).notNull().unique(),
+  value: text("value"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // Define schemas
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
@@ -105,6 +113,13 @@ export type InsertIdea = z.infer<typeof insertIdeaSchema>;
 export type LeanCanvas = typeof leanCanvas.$inferSelect;
 export type InsertLeanCanvas = z.infer<typeof insertLeanCanvasSchema>;
 export type UpdateLeanCanvas = z.infer<typeof updateLeanCanvasSchema>;
+
+export const insertAppSettingSchema = createInsertSchema(appSettings).pick({
+  key: true,
+  value: true
+});
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
 
 export const webhookResponseSchema = z.object({
   // ID fields

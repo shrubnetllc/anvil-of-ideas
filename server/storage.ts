@@ -1,4 +1,4 @@
-import { users, type User, type InsertUser, ideas, leanCanvas, type Idea, type LeanCanvas, type InsertIdea, type InsertLeanCanvas, type UpdateLeanCanvas, ProjectStatus } from "@shared/schema";
+import { users, type User, type InsertUser, ideas, leanCanvas, appSettings, type Idea, type LeanCanvas, type InsertIdea, type InsertLeanCanvas, type UpdateLeanCanvas, ProjectStatus, type AppSetting, type InsertAppSetting } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import connectPg from "connect-pg-simple";
@@ -28,6 +28,11 @@ export interface IStorage {
   getLeanCanvasByIdeaId(ideaId: number): Promise<LeanCanvas | undefined>;
   createLeanCanvas(canvas: InsertLeanCanvas): Promise<LeanCanvas>;
   updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void>;
+  
+  // App Settings operations
+  getSetting(key: string): Promise<string | null>;
+  setSetting(key: string, value: string): Promise<void>;
+  getAllSettings(): Promise<Record<string, string>>;
   
   // Session store
   sessionStore: any; // Using 'any' type for sessionStore to avoid type errors
