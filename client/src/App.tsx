@@ -10,7 +10,8 @@ import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
 import IdeaDetail from "@/pages/idea-detail";
 import Settings from "@/pages/settings";
-import EmailVerification from "@/pages/email-verification";
+// Using direct import instead of alias to avoid path issues
+import EmailVerification from "./pages/email-verification";
 import { ProtectedRoute } from "./lib/protected-route";
 
 function Router() {

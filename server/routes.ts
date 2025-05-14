@@ -627,7 +627,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Email verification endpoints
+  // Email verification endpoints - both legacy query param format and new path-based format
   app.get("/api/verify-email", async (req, res, next) => {
     try {
       const userId = parseInt(req.query.userId as string);
@@ -635,6 +635,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!userId || !token) {
         return res.status(400).json({ message: "Missing userId or token" });
+      }
+      
+      const verified = await storage.verifyEmail(userId, token);
+      
+      if (verified) {
+        // Get the user to send welcome email
+        const user = await storage.getUser(userId);
+        
+        if (user && user.email) {
+          try {
+            // Send welcome email upon successful verification
+            await emailService.sendWelcomeEmail(user.email, user.username);
+            console.log(`Welcome email sent to ${user.email} after verification`);
+          } catch (emailError) {
+            console.error('Failed to send welcome email after verification:', emailError);
+            // Continue even if welcome email fails
+          }
+        }
+        
+        // Email successfully verified, redirect to success page
+        res.redirect('/?verified=true');
+      } else {
+        // Verification failed, redirect to error page
+        res.redirect('/?verified=false');
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Add a server route to handle the new path-based URLs for email verification
+  app.get("/confirm-email/:userId/:token", async (req, res, next) => {
+    try {
+      const userId = parseInt(req.params.userId);
+      const token = req.params.token;
+      
+      if (isNaN(userId) || !token) {
+        return res.status(400).json({ message: "Invalid verification link" });
       }
       
       const verified = await storage.verifyEmail(userId, token);

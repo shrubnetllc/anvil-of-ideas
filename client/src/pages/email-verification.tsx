@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'wouter';
-import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { Button } from '@/components/ui/button';
@@ -12,30 +11,26 @@ export default function EmailVerification() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const verifyEmail = async () => {
-      try {
-        // Call API to verify email
-        const response = await apiRequest('GET', `/api/verify-email?userId=${params.userId}&token=${params.token}`);
-        
-        if (response.ok) {
-          setStatus('success');
-          // Redirect to dashboard after a short delay
-          setTimeout(() => {
-            setLocation('/?verified=true');
-          }, 3000);
-        } else {
-          const data = await response.json();
-          setError(data.message || 'Verification failed');
-          setStatus('error');
-        }
-      } catch (err) {
-        setError('An error occurred during verification');
-        setStatus('error');
-      }
-    };
-
-    if (params.userId && params.token) {
-      verifyEmail();
+    // The verification will happen automatically through our route at /confirm-email/:userId/:token
+    // which will redirect to /?verified=true or /?verified=false
+    // We can just check for verified param in the URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const verified = urlParams.get('verified');
+    
+    if (verified === 'true') {
+      setStatus('success');
+      // We're already redirected to the main page with a query parameter
+      setTimeout(() => {
+        // Remove query param after showing success message
+        setLocation('/');
+      }, 3000);
+    } else if (verified === 'false') {
+      setError('Verification failed. The link may have expired or already been used.');
+      setStatus('error');
+    } else if (params.userId && params.token) {
+      // If we have userId and token in the path, we'll wait for server to process
+      // Keep status as loading since the redirect will happen automatically
+      setStatus('loading');
     } else {
       setError('Invalid verification link');
       setStatus('error');
