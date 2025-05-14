@@ -204,7 +204,7 @@ export default function IdeaDetail() {
                                   </Badge>
                                 </div>
                                 <div className="prose prose-sm max-w-none overflow-auto mb-8">
-                                  <div dangerouslySetInnerHTML={{ __html: processHtmlEmojis(supabaseData.data.html) }} />
+                                  <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
                                 </div>
                               </div>
                             ) : (
@@ -335,7 +335,7 @@ export default function IdeaDetail() {
                                 <h4 className="font-medium text-neutral-700 mb-3">HTML Lean Canvas</h4>
                                 <div 
                                   className="prose prose-sm max-w-none overflow-auto max-h-[600px] custom-scrollbar" 
-                                  dangerouslySetInnerHTML={{ __html: processHtmlEmojis(supabaseData.data.html) }} 
+                                  dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} 
                                 />
                               </div>
                             )}
