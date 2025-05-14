@@ -496,6 +496,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get email configuration
+  app.get("/api/email/config", isAuthenticated, async (req, res, next) => {
+    try {
+      const fromAddress = await emailService.getFromAddress();
+      res.json({ fromAddress });
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Update email configuration
+  app.post("/api/email/config", isAuthenticated, async (req, res, next) => {
+    try {
+      const { fromAddress } = req.body;
+      
+      if (!fromAddress) {
+        return res.status(400).json({ message: "From address is required" });
+      }
+      
+      const result = await emailService.updateFromAddress(fromAddress);
+      
+      if (result) {
+        res.json({ success: true, message: "Email configuration updated successfully" });
+      } else {
+        res.status(500).json({ success: false, message: "Failed to update email configuration" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
   // Send welcome email route
   app.post("/api/email/welcome", isAuthenticated, async (req, res, next) => {
     try {
@@ -533,6 +564,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ success: false, message: "Failed to send canvas generation notification email" });
       }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // App Settings routes
+  app.get("/api/settings", isAuthenticated, async (req, res, next) => {
+    try {
+      const settings = await storage.getAllSettings();
+      res.json(settings);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/settings/:key", isAuthenticated, async (req, res, next) => {
+    try {
+      const key = req.params.key;
+      const value = await storage.getSetting(key);
+      
+      if (value === null) {
+        res.status(404).json({ message: `Setting '${key}' not found` });
+      } else {
+        res.json({ key, value });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/settings", isAuthenticated, async (req, res, next) => {
+    try {
+      const { key, value } = req.body;
+      
+      if (!key || typeof value !== 'string') {
+        return res.status(400).json({ message: "Key and value are required" });
+      }
+      
+      await storage.setSetting(key, value);
+      res.json({ key, value });
     } catch (error) {
       next(error);
     }

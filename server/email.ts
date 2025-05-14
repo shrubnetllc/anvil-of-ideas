@@ -1,5 +1,6 @@
 import formData from 'form-data';
 import Mailgun from 'mailgun.js';
+import { storage } from './storage';
 
 // Initialize Mailgun client
 const mailgun = new Mailgun(formData);
@@ -33,9 +34,60 @@ export interface EmailMessage {
 
 class EmailService {
   private defaultFrom: string;
+  private readonly defaultFromEmail = `Anvil of Ideas <no-reply@${domain}>`;
+  private readonly settingKey = 'email_from_address';
 
   constructor() {
-    this.defaultFrom = `Anvil of Ideas <no-reply@${domain}>`;
+    this.defaultFrom = this.defaultFromEmail;
+    // Initialize the from address from settings if available
+    this.initializeFromAddress();
+  }
+
+  /**
+   * Initialize the from address from app settings
+   */
+  private async initializeFromAddress(): Promise<void> {
+    try {
+      const fromAddress = await storage.getSetting(this.settingKey);
+      if (fromAddress) {
+        this.defaultFrom = fromAddress;
+        console.log(`Email 'from' address loaded from settings: ${fromAddress}`);
+      } else {
+        // If setting doesn't exist, initialize it with the default value
+        await storage.setSetting(this.settingKey, this.defaultFromEmail);
+        console.log(`Email 'from' address initialized with default: ${this.defaultFromEmail}`);
+      }
+    } catch (error) {
+      console.error('Failed to initialize email settings:', error);
+    }
+  }
+
+  /**
+   * Update the from address in settings
+   */
+  async updateFromAddress(fromAddress: string): Promise<boolean> {
+    try {
+      await storage.setSetting(this.settingKey, fromAddress);
+      this.defaultFrom = fromAddress;
+      console.log(`Email 'from' address updated to: ${fromAddress}`);
+      return true;
+    } catch (error) {
+      console.error('Failed to update email from address:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get the current from address
+   */
+  async getFromAddress(): Promise<string> {
+    try {
+      const fromAddress = await storage.getSetting(this.settingKey);
+      return fromAddress || this.defaultFromEmail;
+    } catch (error) {
+      console.error('Failed to get email from address:', error);
+      return this.defaultFromEmail;
+    }
   }
 
   /**
