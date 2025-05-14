@@ -196,36 +196,37 @@ class EmailService {
   async sendVerificationEmail(email: string, username: string, verificationUrl: string): Promise<boolean> {
     const message: EmailMessage = {
       to: email,
-      subject: 'Action Required: Verify Your Email - Anvil of Ideas',
+      subject: 'Please Verify Your Email - Anvil of Ideas',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #FF8A00;">Email Verification Required</h1>
+          <h1 style="color: #FF8A00;">Complete Your Registration</h1>
           <p>Hello ${username},</p>
-          <p>Thank you for registering with <strong>Anvil of Ideas</strong>! One more step is needed to complete your registration:</p>
+          <p>Thank you for joining <strong>Anvil of Ideas</strong>! Please confirm your email to finish setting up your account.</p>
           
           <div style="background-color: #FFF7ED; border-left: 4px solid #FF8A00; padding: 15px; margin: 20px 0;">
-            <p style="margin: 0; font-weight: bold;">Important:</p>
-            <p style="margin: 5px 0 0 0;">You must verify your email address to access all platform features.</p>
-            <p style="margin: 5px 0 0 0;">After verification, you'll receive a welcome email with next steps.</p>
+            <p style="margin: 0;">Confirming your email helps us:</p>
+            <p style="margin: 5px 0 0 0;">• Ensure you receive important notifications</p>
+            <p style="margin: 5px 0 0 0;">• Protect your account security</p>
+            <p style="margin: 5px 0 0 0;">• Enable all platform features</p>
           </div>
           
-          <p>Please click the button below to verify your email address:</p>
+          <p>Please click the button below to confirm your email:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${verificationUrl}" 
               style="background-color: #FF8A00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-              Verify My Email Now
+              Confirm My Email
             </a>
           </div>
           
-          <p>Or copy and paste this link in your browser:</p>
+          <p>Link not working? Copy this URL into your browser:</p>
           <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px;">
             ${verificationUrl}
           </p>
           
-          <p>This verification link will expire in 24 hours.</p>
+          <p>This confirmation link expires in 24 hours.</p>
           <hr style="border: none; border-top: 1px solid #EEE; margin: 20px 0;" />
-          <p style="font-size: 12px; color: #666;">If you did not register for an account, you can safely ignore this email.</p>
-          <p>Best regards,<br>The Anvil of Ideas Team</p>
+          <p style="font-size: 12px; color: #666;">If you didn't create an account with us, you can ignore this email.</p>
+          <p>Thanks,<br>The Anvil of Ideas Team</p>
         </div>
       `,
     };

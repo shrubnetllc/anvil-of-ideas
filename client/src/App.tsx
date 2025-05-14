@@ -10,6 +10,7 @@ import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
 import IdeaDetail from "@/pages/idea-detail";
 import Settings from "@/pages/settings";
+import EmailVerification from "@/pages/email-verification";
 import { ProtectedRoute } from "./lib/protected-route";
 
 function Router() {
@@ -19,6 +20,7 @@ function Router() {
       <ProtectedRoute path="/ideas/:id" component={IdeaDetail} />
       <ProtectedRoute path="/settings" component={Settings} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/confirm-email/:userId/:token" component={EmailVerification} />
       <Route component={NotFound} />
     </Switch>
   );
