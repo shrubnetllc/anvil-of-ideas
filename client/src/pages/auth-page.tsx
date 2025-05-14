@@ -62,6 +62,7 @@ export default function AuthPage() {
     registerMutation.mutate({
       username: values.username,
       password: values.password,
+      email: values.email,
     });
   };
 
