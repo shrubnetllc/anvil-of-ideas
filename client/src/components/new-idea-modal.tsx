@@ -149,6 +149,7 @@ export function NewIdeaModal({ open, onClose }: NewIdeaModalProps) {
   // Extract base idea fields for API submission
   const extractBaseIdeaFields = (data: IdeaFormData): InsertIdea => {
     return {
+      title: data.title,
       idea: data.idea,
       founderName: data.founderName,
       founderEmail: data.founderEmail,

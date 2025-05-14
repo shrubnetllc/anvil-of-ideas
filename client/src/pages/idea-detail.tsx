@@ -101,11 +101,16 @@ export default function IdeaDetail() {
         <main className="flex-1 overflow-y-auto focus:outline-none custom-scrollbar">
           <div className="py-6 max-w-7xl mx-auto px-4 sm:px-6 md:px-8">
             {/* Header with back button */}
-            <div className="flex items-center mb-6">
-              <Button variant="ghost" size="icon" className="mr-4" onClick={handleBackClick}>
+            <div className="flex items-start mb-6">
+              <Button variant="ghost" size="icon" className="mr-4 mt-1" onClick={handleBackClick}>
                 <ArrowLeft className="h-6 w-6" />
               </Button>
-              <h1 className="text-2xl font-bold text-neutral-900">{idea.idea}</h1>
+              <div>
+                <h1 className="text-2xl font-bold text-neutral-900">
+                  {idea.title || idea.companyName || idea.idea.split(' ').slice(0, 5).join(' ') + '...'}
+                </h1>
+                <p className="mt-1 text-neutral-600">{idea.idea}</p>
+              </div>
             </div>
 
             <div className="flex flex-col lg:flex-row lg:space-x-6">
@@ -408,7 +413,12 @@ export default function IdeaDetail() {
                             </div>
                             
                             <div>
-                              <p className="text-sm font-medium text-neutral-500">Idea Name</p>
+                              <p className="text-sm font-medium text-neutral-500">Title</p>
+                              <p className="mt-1 text-sm text-neutral-900 font-medium">{idea.title || "-"}</p>
+                            </div>
+                            
+                            <div>
+                              <p className="text-sm font-medium text-neutral-500">Description</p>
                               <p className="mt-1 text-sm text-neutral-900 font-medium">{idea.idea}</p>
                             </div>
                             
