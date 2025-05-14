@@ -28,28 +28,50 @@ export default function Dashboard() {
   
   // Check for verification success from URL params
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const verified = urlParams.get('verified');
+    let mounted = true;
     
-    if (verified === 'true') {
-      toast({
-        title: "Email Verified Successfully",
-        description: "Your email has been verified. Welcome to Anvil of Ideas!",
-        variant: "default"
-      });
+    const checkVerificationStatus = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const verified = urlParams.get('verified');
       
-      // Clear the URL parameter after showing the toast
-      window.history.replaceState({}, document.title, location.split('?')[0]);
-    } else if (verified === 'false') {
-      toast({
-        title: "Email Verification Failed",
-        description: "There was a problem verifying your email. Please try again or contact support.",
-        variant: "destructive"
-      });
+      if (!mounted) return;
       
-      // Clear the URL parameter after showing the toast
-      window.history.replaceState({}, document.title, location.split('?')[0]);
-    }
+      if (verified === 'true') {
+        toast({
+          title: "Email Verified Successfully",
+          description: "Your email has been verified. Welcome to Anvil of Ideas!",
+          variant: "default"
+        });
+        
+        // Clear the URL parameter after showing the toast
+        try {
+          window.history.replaceState({}, document.title, location.split('?')[0]);
+        } catch (error) {
+          console.error('Error updating URL state:', error);
+        }
+      } else if (verified === 'false') {
+        toast({
+          title: "Email Verification Failed",
+          description: "There was a problem verifying your email. Please try again or contact support.",
+          variant: "destructive"
+        });
+        
+        // Clear the URL parameter after showing the toast
+        try {
+          window.history.replaceState({}, document.title, location.split('?')[0]);
+        } catch (error) {
+          console.error('Error updating URL state:', error);
+        }
+      }
+    };
+    
+    // Small delay to ensure component is fully mounted
+    const timer = setTimeout(checkVerificationStatus, 100);
+    
+    return () => {
+      mounted = false;
+      clearTimeout(timer);
+    };
   }, [toast, location]);
 
   // Filter ideas based on search and status
