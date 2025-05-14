@@ -196,25 +196,35 @@ class EmailService {
   async sendVerificationEmail(email: string, username: string, verificationUrl: string): Promise<boolean> {
     const message: EmailMessage = {
       to: email,
-      subject: 'Verify Your Email - Anvil of Ideas',
+      subject: 'Action Required: Verify Your Email - Anvil of Ideas',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #FF8A00;">Verify Your Email Address</h1>
+          <h1 style="color: #FF8A00;">Email Verification Required</h1>
           <p>Hello ${username},</p>
-          <p>Thank you for registering with Anvil of Ideas. Please verify your email address to access all features of our platform.</p>
-          <p>Click the button below to verify your email address:</p>
+          <p>Thank you for registering with <strong>Anvil of Ideas</strong>! One more step is needed to complete your registration:</p>
+          
+          <div style="background-color: #FFF7ED; border-left: 4px solid #FF8A00; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; font-weight: bold;">Important:</p>
+            <p style="margin: 5px 0 0 0;">You must verify your email address to access all platform features.</p>
+            <p style="margin: 5px 0 0 0;">After verification, you'll receive a welcome email with next steps.</p>
+          </div>
+          
+          <p>Please click the button below to verify your email address:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${verificationUrl}" 
               style="background-color: #FF8A00; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">
-              Verify My Email
+              Verify My Email Now
             </a>
           </div>
+          
           <p>Or copy and paste this link in your browser:</p>
-          <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
+          <p style="background-color: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all; font-size: 12px;">
             ${verificationUrl}
           </p>
+          
           <p>This verification link will expire in 24 hours.</p>
-          <p>If you did not register for an account, please ignore this email.</p>
+          <hr style="border: none; border-top: 1px solid #EEE; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #666;">If you did not register for an account, you can safely ignore this email.</p>
           <p>Best regards,<br>The Anvil of Ideas Team</p>
         </div>
       `,

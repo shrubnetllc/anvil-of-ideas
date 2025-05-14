@@ -637,6 +637,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const verified = await storage.verifyEmail(userId, token);
       
       if (verified) {
+        // Get the user to send welcome email
+        const user = await storage.getUser(userId);
+        
+        if (user && user.email) {
+          try {
+            // Send welcome email upon successful verification
+            await emailService.sendWelcomeEmail(user.email, user.username);
+            console.log(`Welcome email sent to ${user.email} after verification`);
+          } catch (emailError) {
+            console.error('Failed to send welcome email after verification:', emailError);
+            // Continue even if welcome email fails
+          }
+        }
+        
         // Email successfully verified, redirect to success page
         res.redirect('/?verified=true');
       } else {

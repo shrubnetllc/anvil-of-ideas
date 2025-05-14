@@ -92,13 +92,9 @@ export function setupAuth(app: Express) {
             const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
             const verificationUrl = buildVerificationUrl(baseUrl, user.id, token);
             
-            // Send verification email
+            // Send only verification email during registration
             await emailService.sendVerificationEmail(req.body.email, user.username, verificationUrl);
             console.log(`Verification email sent to ${req.body.email}`);
-            
-            // Also send welcome email
-            await emailService.sendWelcomeEmail(req.body.email, user.username);
-            console.log(`Welcome email sent to ${req.body.email}`);
           } catch (emailError) {
             console.error('Failed to send email:', emailError);
             // Continue even if email sending fails

@@ -10,9 +10,11 @@ import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { IdeaCard } from "@/components/idea-card";
 import { NewIdeaModal } from "@/components/new-idea-modal";
-import { SearchIcon, Hammer, Sparkles } from "lucide-react";
+import { SearchIcon, Hammer, Sparkles, CheckCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
+import { useToast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 
 export default function Dashboard() {
   const { user } = useAuth();
