@@ -22,7 +22,7 @@ const loginSchema = z.object({
 const registerSchema = loginSchema.extend({
   email: z.string().email({
     message: "Please enter a valid email address.",
-  }).optional(),
+  }),
   confirmPassword: z.string().min(6, {
     message: "Password must be at least 6 characters.",
   }),
@@ -156,7 +156,7 @@ export default function AuthPage() {
                       name="email"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email (optional)</FormLabel>
+                          <FormLabel>Email</FormLabel>
                           <FormControl>
                             <Input type="email" placeholder="Enter your email address" {...field} />
                           </FormControl>

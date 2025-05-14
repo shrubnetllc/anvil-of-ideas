@@ -24,6 +24,9 @@ export const users = pgTable("users", {
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   email: text("email"),
+  emailVerified: text("email_verified").default("false"),
+  verificationToken: text("verification_token"),
+  verificationTokenExpiry: timestamp("verification_token_expiry"),
 });
 
 export const ideas = pgTable("ideas", {
