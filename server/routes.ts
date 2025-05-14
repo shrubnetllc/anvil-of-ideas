@@ -150,6 +150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Create the payload
         const payload = {
+          title: idea.title || "",
           idea: idea.idea,
           founder_name: idea.founderName || "",
           founder_email: idea.founderEmail || "",

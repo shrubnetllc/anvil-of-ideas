@@ -163,7 +163,8 @@ export async function fetchUserIdeas(userId: number) {
     const mappedData = data.map(item => ({
       id: parseInt(item.id),
       userId: parseInt(item.user_id),
-      idea: item.name || item.idea || item.title || '',
+      title: item.title || '',
+      idea: item.name || item.idea || item.description || '',
       status: item.status || 'Draft',
       companyName: item.company_name || '',
       companyStage: item.company_stage || '',
