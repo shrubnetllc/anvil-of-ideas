@@ -26,7 +26,8 @@ export default function Dashboard() {
   const filteredIdeas = ideas
     .filter(idea => 
       (statusFilter === "All" || idea.status === statusFilter) &&
-      (idea.idea.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (idea.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       idea.idea.toLowerCase().includes(searchQuery.toLowerCase()) || 
        (idea.companyName && idea.companyName.toLowerCase().includes(searchQuery.toLowerCase())))
     )
     .sort((a, b) => {
@@ -35,7 +36,9 @@ export default function Dashboard() {
       } else if (sortOrder === "oldest") {
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       } else if (sortOrder === "a-z") {
-        return a.idea.localeCompare(b.idea);
+        const aTitle = a.title || a.idea;
+        const bTitle = b.title || b.idea;
+        return aTitle.localeCompare(bTitle);
       }
       return 0;
     });
