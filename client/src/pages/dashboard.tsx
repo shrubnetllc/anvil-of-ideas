@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useIdeas } from "@/hooks/use-ideas";
 import { useAuth } from "@/hooks/use-auth";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,16 @@ export default function Dashboard() {
   const handleNewIdea = () => {
     setShowNewIdeaModal(true);
   };
+  
+  // Add event listener for opening the modal from sidebar
+  useEffect(() => {
+    const handleOpenModal = () => setShowNewIdeaModal(true);
+    window.addEventListener('open-new-idea-modal', handleOpenModal);
+    
+    return () => {
+      window.removeEventListener('open-new-idea-modal', handleOpenModal);
+    };
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden">

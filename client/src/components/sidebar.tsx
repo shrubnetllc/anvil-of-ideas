@@ -50,44 +50,36 @@ export function Sidebar() {
           </div>
           
           <nav className="flex-1 px-2 py-4 space-y-1">
-            <Link href="/">
-              <a className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group
+            <Link href="/" className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group
                 ${isActive('/') 
                   ? 'text-primary-500 bg-primary-50' 
                   : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800'}`}>
                 <Flame className="mr-3 h-5 w-5 text-amber-500" />
                 Ideas Forge
-              </a>
             </Link>
             
-            <Link href="/new">
-              <a className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group
-                ${isActive('/new') 
-                  ? 'text-primary-500 bg-primary-50' 
-                  : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800'}`}>
+            <button 
+              onClick={() => window.dispatchEvent(new CustomEvent('open-new-idea-modal'))}
+              className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group w-full text-left
+                text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800`}>
                 <Hammer className="mr-3 h-5 w-5 text-primary-500" />
                 Forge New Idea
-              </a>
-            </Link>
+            </button>
             
-            <Link href="/activity">
-              <a className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group
+            <Link href="/activity" className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group
                 ${isActive('/activity') 
                   ? 'text-primary-500 bg-primary-50' 
                   : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800'}`}>
                 <CalendarClock className="mr-3 h-5 w-5" />
                 Activity
-              </a>
             </Link>
             
-            <Link href="/settings">
-              <a className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group
+            <Link href="/settings" className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group
                 ${isActive('/settings') 
                   ? 'text-primary-500 bg-primary-50' 
                   : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800'}`}>
                 <Settings className="mr-3 h-5 w-5" />
                 Settings
-              </a>
             </Link>
           </nav>
 
