@@ -193,6 +193,46 @@ export class DatabaseStorage implements IStorage {
       .set({ updatedAt: new Date() })
       .where(eq(ideas.id, ideaId));
   }
+  
+  // App Settings operations
+  async getSetting(key: string): Promise<string | null> {
+    const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
+    return setting?.value ?? null;
+  }
+  
+  async setSetting(key: string, value: string): Promise<void> {
+    // Try to get the setting first
+    const existing = await this.getSetting(key);
+    
+    if (existing === null) {
+      // Create a new setting
+      await db.insert(appSettings).values({
+        key,
+        value
+      });
+    } else {
+      // Update the existing setting
+      await db.update(appSettings)
+        .set({
+          value,
+          updatedAt: new Date()
+        })
+        .where(eq(appSettings.key, key));
+    }
+  }
+  
+  async getAllSettings(): Promise<Record<string, string>> {
+    const settings = await db.select().from(appSettings);
+    const result: Record<string, string> = {};
+    
+    for (const setting of settings) {
+      if (setting.value !== null) {
+        result[setting.key] = setting.value;
+      }
+    }
+    
+    return result;
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -397,6 +437,25 @@ export class MemStorage implements IStorage {
         this.ideas.set(ideaId, idea);
       }
     }
+  }
+  
+  // App Settings operations
+  private settings: Map<string, string> = new Map();
+  
+  async getSetting(key: string): Promise<string | null> {
+    return this.settings.get(key) || null;
+  }
+  
+  async setSetting(key: string, value: string): Promise<void> {
+    this.settings.set(key, value);
+  }
+  
+  async getAllSettings(): Promise<Record<string, string>> {
+    const result: Record<string, string> = {};
+    this.settings.forEach((value, key) => {
+      result[key] = value;
+    });
+    return result;
   }
 }
 
