@@ -5,6 +5,7 @@ import { setupAuth } from "./auth";
 import { z } from "zod";
 import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema } from "@shared/schema";
 import { fetchLeanCanvasData, fetchUserIdeas } from "./supabase";
+import { emailService } from "./email";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
@@ -334,6 +335,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.createLeanCanvas({ ideaId, ...canvasData });
       }
       
+      // Get the idea information to send notification
+      try {
+        const idea = await storage.getIdeaById(ideaId);
+        if (idea && idea.founderEmail) {
+          // Send email notification that the canvas is generated
+          const title = idea.title || idea.idea.substring(0, 30) + '...';
+          await emailService.sendCanvasGeneratedEmail(idea.founderEmail, idea.founderName || 'User', title);
+          console.log(`Sent canvas generation notification email to ${idea.founderEmail}`);
+        }
+      } catch (emailError) {
+        console.error('Failed to send canvas generation notification:', emailError);
+        // Continue even if email sending fails
+      }
+      
       res.status(200).json({ message: "Canvas created successfully" });
     } catch (error) {
       console.error("Error processing webhook:", error);
@@ -454,6 +469,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
           source: "local",
           data: localIdeas
         });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Email service routes
+  app.post("/api/email/test", isAuthenticated, async (req, res, next) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email address is required" });
+      }
+      
+      const result = await emailService.sendTestEmail(email);
+      
+      if (result) {
+        res.json({ success: true, message: "Test email sent successfully" });
+      } else {
+        res.status(500).json({ success: false, message: "Failed to send test email" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Send welcome email route
+  app.post("/api/email/welcome", isAuthenticated, async (req, res, next) => {
+    try {
+      const { email, username } = req.body;
+      
+      if (!email || !username) {
+        return res.status(400).json({ message: "Email address and username are required" });
+      }
+      
+      const result = await emailService.sendWelcomeEmail(email, username);
+      
+      if (result) {
+        res.json({ success: true, message: "Welcome email sent successfully" });
+      } else {
+        res.status(500).json({ success: false, message: "Failed to send welcome email" });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
+  // Send canvas generated notification email
+  app.post("/api/email/canvas-generated", isAuthenticated, async (req, res, next) => {
+    try {
+      const { email, username, ideaTitle } = req.body;
+      
+      if (!email || !username || !ideaTitle) {
+        return res.status(400).json({ message: "Email address, username, and idea title are required" });
+      }
+      
+      const result = await emailService.sendCanvasGeneratedEmail(email, username, ideaTitle);
+      
+      if (result) {
+        res.json({ success: true, message: "Canvas generation notification email sent successfully" });
+      } else {
+        res.status(500).json({ success: false, message: "Failed to send canvas generation notification email" });
       }
     } catch (error) {
       next(error);
