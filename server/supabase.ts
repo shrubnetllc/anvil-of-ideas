@@ -14,10 +14,36 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 
 /**
  * Fetch lean canvas data from Supabase
+ * @param ideaId The ID of the idea to fetch canvas data for
+ * @param requestingUserId Optional user ID for security validation
  */
-export async function fetchLeanCanvasData(ideaId: number) {
+export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: number) {
   try {
-    console.log(`Fetching lean canvas data for idea ${ideaId} from Supabase`);
+    console.log(`[SECURITY] Fetching lean canvas data for idea ${ideaId} from Supabase`);
+    
+    // Security check: If requesting user ID is provided, verify ownership
+    if (requestingUserId !== undefined) {
+      try {
+        const { pool } = await import('./db');
+        const securityCheck = await pool.query('SELECT user_id FROM ideas WHERE id = $1', [ideaId]);
+        
+        if (securityCheck.rows.length === 0) {
+          console.log(`[SECURITY] Idea ${ideaId} not found in security check`);
+          return null;
+        }
+        
+        const ownerId = parseInt(securityCheck.rows[0].user_id);
+        if (ownerId !== requestingUserId) {
+          console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
+          return null;
+        }
+        
+        console.log(`[SECURITY] Authorized: User ${requestingUserId} owns idea ${ideaId}`);
+      } catch (securityError) {
+        console.error(`[SECURITY] Error during ownership verification:`, securityError);
+        return null;
+      }
+    }
     
     // Step 1: Get the project_id from our local database
     let projectId = null;

@@ -421,25 +421,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[SECURITY] User ${userId} attempting to access Supabase canvas for idea ${ideaId}`);
       
-      // First verify the user owns this idea
-      const idea = await storage.getIdeaById(ideaId);
+      // First verify the user owns this idea with enhanced security
+      const idea = await storage.getIdeaById(ideaId, userId);
       
       if (!idea) {
-        console.log(`[SECURITY] Idea ${ideaId} not found for Supabase canvas access`);
+        console.log(`[SECURITY] Idea ${ideaId} not found or unauthorized for Supabase canvas access`);
         return res.status(404).json({ message: "Idea not found" });
       }
       
-      if (idea.userId !== userId) {
-        console.log(`[SECURITY VIOLATION] Supabase canvas access denied: Idea ${ideaId} belongs to user ${idea.userId}, not current user ${userId}`);
-        return res.status(403).json({ message: "Forbidden: You cannot access ideas that don't belong to you" });
-      }
-      
-      // At this point, we've verified ownership
+      // At this point, we've verified ownership through the storage security check
       console.log(`[SECURITY] Authorization confirmed: User ${userId} owns idea ${ideaId} for Supabase canvas access`);
       
-      // Fetch data from Supabase
+      // Fetch data from Supabase with security context
       try {
-        const supabaseCanvas = await fetchLeanCanvasData(ideaId);
+        // Add userId as authorization check for fetchLeanCanvasData
+        const supabaseCanvas = await fetchLeanCanvasData(ideaId, userId);
         res.json({
           source: "supabase",
           data: supabaseCanvas
@@ -447,8 +443,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (supabaseError) {
         console.error(`[SECURITY] Error fetching from Supabase for idea ${ideaId} belonging to user ${userId}:`, supabaseError);
         
-        // Fallback to local storage if Supabase fails
-        const localCanvas = await storage.getLeanCanvasByIdeaId(ideaId, userId); // Pass userId for additional security check
+        // Fallback to local storage if Supabase fails, with security check
+        const localCanvas = await storage.getLeanCanvasByIdeaId(ideaId, userId);
         if (!localCanvas) {
           return res.status(404).json({ message: "Canvas not found" });
         }
