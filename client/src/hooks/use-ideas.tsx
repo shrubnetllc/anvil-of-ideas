@@ -2,6 +2,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Idea, InsertIdea, LeanCanvas } from "@shared/schema";
 import { useToast } from "./use-toast";
+import { useLocation } from "wouter";
+import { useEffect } from "react";
 
 // Extended type with lean canvas data
 type IdeaWithCanvas = InsertIdea & {
@@ -134,13 +136,51 @@ export function useIdeas() {
 }
 
 export function useIdea(id: number) {
-  const { data: idea, isLoading } = useQuery<Idea>({
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  
+  const { 
+    data: idea, 
+    isLoading,
+    error
+  } = useQuery<Idea>({
     queryKey: [`/api/ideas/${id}`],
     enabled: !!id,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 403/404 errors (forbidden/not found)
+      if (error?.status === 403 || error?.status === 404) {
+        return false;
+      }
+      return failureCount < 3;
+    },
+    throwOnError: false
   });
+  
+  // Handle unauthorized access or not found errors
+  useEffect(() => {
+    if (error) {
+      const status = (error as any)?.status;
+      if (status === 403) {
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to view this idea",
+          variant: "destructive"
+        });
+        navigate('/'); // Redirect to dashboard
+      } else if (status === 404) {
+        toast({
+          title: "Idea Not Found",
+          description: "The requested idea could not be found",
+          variant: "destructive"
+        });
+        navigate('/'); // Redirect to dashboard
+      }
+    }
+  }, [error, navigate, toast]);
 
   return {
     idea,
     isLoading,
+    error
   };
 }

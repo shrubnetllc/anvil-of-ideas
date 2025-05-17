@@ -2,15 +2,47 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { CanvasSection, LeanCanvas, UpdateLeanCanvas } from "@shared/schema";
 import { useToast } from "./use-toast";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
+import { useLocation } from "wouter";
 
 export function useLeanCanvas(ideaId: number) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
 
-  const { data: canvas, isLoading } = useQuery<LeanCanvas>({
+  const { data: canvas, isLoading, error } = useQuery<LeanCanvas>({
     queryKey: [`/api/ideas/${ideaId}/canvas`],
     enabled: !!ideaId,
+    retry: (failureCount, error: any) => {
+      // Don't retry on 403/404 errors (forbidden/not found)
+      if (error?.status === 403 || error?.status === 404) {
+        return false;
+      }
+      return failureCount < 3;
+    },
+    throwOnError: false
   });
+  
+  // Handle unauthorized access
+  useEffect(() => {
+    if (error) {
+      const status = (error as any)?.status;
+      if (status === 403) {
+        toast({
+          title: "Access Denied",
+          description: "You don't have permission to view this canvas",
+          variant: "destructive"
+        });
+        navigate('/'); // Redirect to dashboard
+      } else if (status === 404 && ideaId) {
+        // Only show error for 404 if we have an ideaId (avoid errors during initial load)
+        toast({
+          title: "Canvas Not Found",
+          description: "The requested canvas could not be found",
+          variant: "destructive"
+        });
+      }
+    }
+  }, [error, ideaId, navigate, toast]);
 
   const updateSectionMutation = useMutation({
     mutationFn: async ({
