@@ -125,10 +125,18 @@ function mapSupabaseData(data: any, ideaId: number, projectId: string) {
 
 /**
  * Fetch ideas for a specific user
+ * @param userId The user ID whose ideas we want to fetch
+ * @param requestingUserId Optional parameter to verify the requesting user has permission
  */
-export async function fetchUserIdeas(userId: number) {
+export async function fetchUserIdeas(userId: number, requestingUserId?: number) {
   try {
-    console.log(`Fetching ideas for user ${userId} from Supabase`);
+    // Security check: enforce user can only see their own ideas
+    if (requestingUserId !== undefined && userId !== requestingUserId) {
+      console.error(`Security violation: User ${requestingUserId} attempted to access ideas of user ${userId}`);
+      throw new Error('Forbidden: You can only access your own ideas');
+    }
+    
+    console.log(`Authorized: Fetching ideas for user ${userId} from Supabase`);
     
     // First check if the 'projects' table exists (more likely table name in Supabase)
     let response;

@@ -416,15 +416,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/supabase/canvas/:id", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      console.log(`User ${userId} attempting to access idea ${ideaId}`);
+      
+      // First verify the user owns this idea
       const idea = await storage.getIdeaById(ideaId);
       
       if (!idea) {
+        console.log(`Idea ${ideaId} not found`);
         return res.status(404).json({ message: "Idea not found" });
       }
       
-      if (idea.userId !== req.user!.id) {
+      if (idea.userId !== userId) {
+        console.log(`Access forbidden: Idea ${ideaId} belongs to user ${idea.userId}, not current user ${userId}`);
         return res.status(403).json({ message: "Forbidden" });
       }
+      
+      // At this point, we've verified ownership
+      console.log(`Authorization confirmed: User ${userId} owns idea ${ideaId}`);
       
       // Fetch data from Supabase
       try {
@@ -454,9 +464,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.get("/api/supabase/ideas", isAuthenticated, async (req, res, next) => {
     try {
-      // Fetch data from Supabase
+      // Extract authenticated user ID
+      const authenticatedUserId = req.user!.id;
+      
+      // Fetch data from Supabase with authorization check
       try {
-        const supabaseIdeas = await fetchUserIdeas(req.user!.id);
+        // Pass both the user ID and the authenticated user ID for permission check
+        const supabaseIdeas = await fetchUserIdeas(authenticatedUserId, authenticatedUserId);
         res.json({
           source: "supabase",
           data: supabaseIdeas
@@ -465,7 +479,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error("Error fetching ideas from Supabase:", supabaseError);
         
         // Fallback to local storage if Supabase fails
-        const localIdeas = await storage.getIdeasByUser(req.user!.id);
+        const localIdeas = await storage.getIdeasByUser(authenticatedUserId);
         res.json({
           source: "local",
           data: localIdeas
