@@ -22,9 +22,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Ideas routes
   app.get("/api/ideas", isAuthenticated, async (req, res, next) => {
     try {
-      const ideas = await storage.getIdeasByUser(req.user!.id);
-      res.json(ideas);
+      const userId = req.user!.id;
+      console.log(`[SECURITY] User ${userId} requesting all their ideas`);
+      
+      // Get the user's ideas with proper filtering
+      const ideas = await storage.getIdeasByUser(userId);
+      
+      // Add an extra layer of security - double-check each idea belongs to this user
+      const verifiedIdeas = ideas.filter(idea => {
+        if (idea.userId !== userId) {
+          console.log(`[CRITICAL SECURITY VIOLATION] Idea ${idea.id} with userId ${idea.userId} was about to be sent to user ${userId}`);
+          return false;
+        }
+        return true;
+      });
+      
+      console.log(`[SECURITY] Returning ${verifiedIdeas.length} verified ideas to user ${userId}`);
+      
+      // Return only the verified ideas
+      res.json(verifiedIdeas);
     } catch (error) {
+      console.error('[SECURITY ERROR] Error retrieving ideas:', error);
       next(error);
     }
   });

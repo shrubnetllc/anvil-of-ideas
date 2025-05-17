@@ -4,6 +4,7 @@ import { Idea, InsertIdea, LeanCanvas } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
+import { useAuth } from "./use-auth";
 
 // Extended type with lean canvas data
 type IdeaWithCanvas = InsertIdea & {
@@ -30,9 +31,14 @@ type IdeaWithCanvas = InsertIdea & {
 
 export function useIdeas() {
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const { data: ideas, isLoading } = useQuery<Idea[]>({
     queryKey: ["/api/ideas"],
+    // Only enable this query when a user is logged in and
+    // prevent stale data from showing across user sessions
+    enabled: !!user,
+    staleTime: 0, // Force a fresh fetch every time to prevent cross-user data leakage
   });
 
   const createIdeaMutation = useMutation({
