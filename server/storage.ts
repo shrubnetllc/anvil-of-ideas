@@ -77,29 +77,64 @@ export class DatabaseStorage implements IStorage {
 
   // Idea operations
   async getIdeasByUser(userId: number): Promise<Idea[]> {
-    return await db.select().from(ideas).where(eq(ideas.userId, userId));
+    console.log(`[SECURITY] Getting ideas for user ${userId} with strict filtering`);
+    
+    try {
+      // Apply stronger filtering by explicitly checking the user ID matches
+      const userIdeas = await db.select()
+        .from(ideas)
+        .where(eq(ideas.userId, userId));
+      
+      // Additional security check: filter the results again to ensure only the user's ideas are returned
+      const filteredIdeas = userIdeas.filter(idea => {
+        const isOwner = idea.userId === userId;
+        if (!isOwner) {
+          console.log(`[CRITICAL SECURITY VIOLATION] Idea ${idea.id} was retrieved but belongs to user ${idea.userId}, not requesting user ${userId}`);
+        }
+        return isOwner;
+      });
+      
+      console.log(`[SECURITY] Found ${filteredIdeas.length} ideas belonging to user ${userId}`);
+      return filteredIdeas;
+    } catch (error) {
+      console.error(`[SECURITY] Error retrieving ideas for user ${userId}:`, error);
+      // In case of any error, return an empty array for security
+      return [];
+    }
   }
 
   async getIdeaById(id: number, requestingUserId?: number): Promise<Idea | undefined> {
-    // First get the idea from the database
-    const [idea] = await db.select().from(ideas).where(eq(ideas.id, id));
-    
-    if (!idea) {
-      console.log(`[SECURITY] Idea with ID ${id} not found`);
-      return undefined;
-    }
-    
-    // Enhanced security check: if requesting user ID provided, verify ownership
-    if (requestingUserId !== undefined) {
-      if (idea.userId !== requestingUserId) {
-        console.log(`[SECURITY] Access violation: User ${requestingUserId} attempted to access idea ${id} owned by user ${idea.userId}`);
-        return undefined; // Return undefined for security, simulating "not found"
+    try {
+      console.log(`[SECURITY] Retrieving idea ${id}${requestingUserId ? ` for user ${requestingUserId}` : ''}`);
+      
+      // First get the idea from the database
+      const [idea] = await db.select().from(ideas).where(eq(ideas.id, id));
+      
+      if (!idea) {
+        console.log(`[SECURITY] Idea with ID ${id} not found`);
+        return undefined;
       }
       
-      console.log(`[SECURITY] Authorized: User ${requestingUserId} owns idea ${id}`);
+      // Enhanced security check: if requesting user ID provided, verify ownership
+      if (requestingUserId !== undefined) {
+        if (idea.userId !== requestingUserId) {
+          console.log(`[SECURITY] Access violation: User ${requestingUserId} attempted to access idea ${id} owned by user ${idea.userId}`);
+          // For additional security, log the stack trace to help identify where unauthorized access attempts originate
+          console.log(`[SECURITY] Access violation stack trace:`, new Error().stack);
+          return undefined; // Return undefined for security, simulating "not found"
+        }
+        
+        console.log(`[SECURITY] Authorized: User ${requestingUserId} owns idea ${id}`);
+      } else {
+        // Warning: This idea is being accessed without a user context, which is a potential security risk
+        console.log(`[SECURITY WARNING] Idea ${id} being accessed without user context. This should only happen in admin functions.`);
+      }
+      
+      return idea;
+    } catch (error) {
+      console.error(`[SECURITY ERROR] Error retrieving idea ${id}:`, error);
+      return undefined; // Return undefined on any error for security
     }
-    
-    return idea;
   }
 
   async createIdea(idea: InsertIdea & { userId: number }): Promise<Idea> {
