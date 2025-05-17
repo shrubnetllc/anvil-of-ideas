@@ -217,17 +217,32 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="mt-8 text-center py-12 bg-white rounded-lg border border-neutral-200">
-                <svg className="mx-auto h-12 w-12 text-neutral-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-                <h3 className="mt-2 text-sm font-medium text-neutral-900">No ideas yet</h3>
-                <p className="mt-1 text-sm text-neutral-500">
+                <div className="flex justify-center mb-4">
+                  <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
+                    <Hammer className="h-8 w-8 text-amber-600" />
+                  </div>
+                </div>
+                <h3 className="text-xl font-semibold text-neutral-900">No ideas found in your account</h3>
+                <p className="mt-3 text-neutral-600 max-w-lg mx-auto">
                   {searchQuery || statusFilter !== "All" 
-                    ? "No ideas match your filters. Try adjusting your search."
-                    : "Get started by creating a new business idea."}
+                    ? "No ideas match your current filters. Try adjusting your search or filter settings."
+                    : "Your ideas dashboard is currently empty. Create your first idea to start using the Anvil of Ideas platform."}
                 </p>
+                <div className="mt-6 max-w-md mx-auto p-4 bg-amber-50 rounded-lg border border-amber-100 text-left">
+                  <h4 className="font-medium text-amber-800 mb-2 flex items-center">
+                    <CheckCircle className="h-4 w-4 mr-2" /> 
+                    Enhanced Privacy
+                  </h4>
+                  <p className="text-sm text-amber-700">
+                    Our platform ensures that each user can only access their own ideas. 
+                    Your business data remains completely private and secure.
+                  </p>
+                </div>
                 <div className="mt-6">
-                  <Button onClick={handleNewIdea}>
+                  <Button 
+                    onClick={handleNewIdea} 
+                    className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
+                  >
                     <Hammer className="-ml-1 mr-2 h-5 w-5" />
                     Forge New Idea
                   </Button>
