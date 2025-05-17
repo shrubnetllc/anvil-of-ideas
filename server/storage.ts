@@ -80,8 +80,15 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(ideas).where(eq(ideas.userId, userId));
   }
 
-  async getIdeaById(id: number): Promise<Idea | undefined> {
+  async getIdeaById(id: number, requestingUserId?: number): Promise<Idea | undefined> {
     const [idea] = await db.select().from(ideas).where(eq(ideas.id, id));
+    
+    // Enhanced security check: verify the requesting user owns this idea
+    if (idea && requestingUserId !== undefined && idea.userId !== requestingUserId) {
+      console.log(`[SECURITY] Access violation: User ${requestingUserId} attempted to access idea ${id} owned by user ${idea.userId}`);
+      return undefined; // Return undefined for security, simulating "not found"
+    }
+    
     return idea;
   }
 
@@ -180,7 +187,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Lean Canvas operations
-  async getLeanCanvasByIdeaId(ideaId: number): Promise<LeanCanvas | undefined> {
+  async getLeanCanvasByIdeaId(ideaId: number, requestingUserId?: number): Promise<LeanCanvas | undefined> {
+    // First perform ownership check if requesting user ID is provided
+    if (requestingUserId !== undefined) {
+      // Check if this idea belongs to the requesting user
+      const idea = await this.getIdeaById(ideaId);
+      
+      if (!idea) {
+        console.log(`[SECURITY] Canvas access denied: Idea ${ideaId} not found`);
+        return undefined;
+      }
+      
+      if (idea.userId !== requestingUserId) {
+        console.log(`[SECURITY] Canvas access denied: User ${requestingUserId} attempted to access canvas for idea ${ideaId} owned by user ${idea.userId}`);
+        return undefined; // Return undefined for security, simulating "not found"
+      }
+    }
+    
+    // Proceed with retrieving the canvas
     const [canvas] = await db.select().from(leanCanvas).where(eq(leanCanvas.ideaId, ideaId));
     return canvas;
   }
