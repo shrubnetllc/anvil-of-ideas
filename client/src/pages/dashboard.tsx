@@ -19,6 +19,7 @@ import { useLocation } from "wouter";
 export default function Dashboard() {
   const { user } = useAuth();
   const { ideas, isLoading, generateCanvas } = useIdeas();
+  // We only use the local ideas hook - not the Supabase ideas - to avoid any cross-user data leakage
   const { toast } = useToast();
   const [location] = useLocation();
   const [showNewIdeaModal, setShowNewIdeaModal] = useState(false);
