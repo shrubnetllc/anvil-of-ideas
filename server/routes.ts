@@ -76,16 +76,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
     try {
-      const idea = await storage.getIdeaById(parseInt(req.params.id));
+      const ideaId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      console.log(`[SECURITY] User ${userId} attempting to access idea ${ideaId}`);
+      
+      const idea = await storage.getIdeaById(ideaId);
       
       if (!idea) {
+        console.log(`[SECURITY] Idea ${ideaId} not found`);
         return res.status(404).json({ message: "Idea not found" });
       }
       
-      if (idea.userId !== req.user!.id) {
-        return res.status(403).json({ message: "Forbidden" });
+      if (idea.userId !== userId) {
+        console.log(`[SECURITY VIOLATION] User ${userId} attempted to access idea ${ideaId} belonging to user ${idea.userId}`);
+        return res.status(403).json({ message: "Forbidden: You can only access your own ideas" });
       }
       
+      console.log(`[SECURITY] Authorized access: User ${userId} accessing their idea ${ideaId}`);
       res.json(idea);
     } catch (error) {
       next(error);
@@ -361,22 +369,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/ideas/:id/canvas", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      console.log(`[SECURITY] User ${userId} attempting to access canvas for idea ${ideaId}`);
+      
       const idea = await storage.getIdeaById(ideaId);
       
       if (!idea) {
+        console.log(`[SECURITY] Idea ${ideaId} not found for canvas access`);
         return res.status(404).json({ message: "Idea not found" });
       }
       
-      if (idea.userId !== req.user!.id) {
-        return res.status(403).json({ message: "Forbidden" });
+      if (idea.userId !== userId) {
+        console.log(`[SECURITY VIOLATION] User ${userId} attempted to access canvas for idea ${ideaId} belonging to user ${idea.userId}`);
+        return res.status(403).json({ message: "Forbidden: You can only access canvases for your own ideas" });
       }
       
       const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
       
       if (!canvas) {
+        console.log(`[SECURITY] Canvas for idea ${ideaId} not found`);
         return res.status(404).json({ message: "Canvas not found" });
       }
       
+      console.log(`[SECURITY] Authorized canvas access: User ${userId} accessing canvas for their idea ${ideaId}`);
       res.json(canvas);
     } catch (error) {
       next(error);
