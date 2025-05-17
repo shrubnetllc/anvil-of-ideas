@@ -81,7 +81,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`[SECURITY] User ${userId} attempting to access idea ${ideaId}`);
       
-      // Pass userId to getIdeaById for security check
+      // Pass userId to getIdeaById for security check - this ensures the user can only access their own ideas
       const idea = await storage.getIdeaById(ideaId, userId);
       
       if (!idea) {

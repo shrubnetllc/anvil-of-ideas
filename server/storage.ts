@@ -81,12 +81,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getIdeaById(id: number, requestingUserId?: number): Promise<Idea | undefined> {
+    // First get the idea from the database
     const [idea] = await db.select().from(ideas).where(eq(ideas.id, id));
     
-    // Enhanced security check: verify the requesting user owns this idea
-    if (idea && requestingUserId !== undefined && idea.userId !== requestingUserId) {
-      console.log(`[SECURITY] Access violation: User ${requestingUserId} attempted to access idea ${id} owned by user ${idea.userId}`);
-      return undefined; // Return undefined for security, simulating "not found"
+    if (!idea) {
+      console.log(`[SECURITY] Idea with ID ${id} not found`);
+      return undefined;
+    }
+    
+    // Enhanced security check: if requesting user ID provided, verify ownership
+    if (requestingUserId !== undefined) {
+      if (idea.userId !== requestingUserId) {
+        console.log(`[SECURITY] Access violation: User ${requestingUserId} attempted to access idea ${id} owned by user ${idea.userId}`);
+        return undefined; // Return undefined for security, simulating "not found"
+      }
+      
+      console.log(`[SECURITY] Authorized: User ${requestingUserId} owns idea ${id}`);
     }
     
     return idea;
@@ -190,17 +200,26 @@ export class DatabaseStorage implements IStorage {
   async getLeanCanvasByIdeaId(ideaId: number, requestingUserId?: number): Promise<LeanCanvas | undefined> {
     // First perform ownership check if requesting user ID is provided
     if (requestingUserId !== undefined) {
-      // Check if this idea belongs to the requesting user
-      const idea = await this.getIdeaById(ideaId);
-      
-      if (!idea) {
-        console.log(`[SECURITY] Canvas access denied: Idea ${ideaId} not found`);
-        return undefined;
-      }
-      
-      if (idea.userId !== requestingUserId) {
-        console.log(`[SECURITY] Canvas access denied: User ${requestingUserId} attempted to access canvas for idea ${ideaId} owned by user ${idea.userId}`);
-        return undefined; // Return undefined for security, simulating "not found"
+      try {
+        // First check if the idea belongs to the requesting user (direct DB query to avoid loops)
+        const [idea] = await db.select({ userId: ideas.userId })
+          .from(ideas)
+          .where(eq(ideas.id, ideaId));
+        
+        if (!idea) {
+          console.log(`[SECURITY] Canvas access denied: Idea ${ideaId} not found`);
+          return undefined;
+        }
+        
+        if (idea.userId !== requestingUserId) {
+          console.log(`[SECURITY] Canvas access denied: User ${requestingUserId} attempted to access canvas for idea ${ideaId} owned by user ${idea.userId}`);
+          return undefined; // Return undefined for security, simulating "not found"
+        }
+        
+        console.log(`[SECURITY] Canvas access authorized: User ${requestingUserId} owns idea ${ideaId}`);
+      } catch (securityError) {
+        console.error(`[SECURITY] Error during canvas ownership check:`, securityError);
+        return undefined; // Return undefined on any error for security
       }
     }
     
