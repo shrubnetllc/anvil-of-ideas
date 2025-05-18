@@ -228,16 +228,7 @@ export default function Dashboard() {
                     ? "No ideas match your current filters. Try adjusting your search or filter settings."
                     : "Your ideas dashboard is currently empty. Create your first idea to start using the Anvil of Ideas platform."}
                 </p>
-                <div className="mt-6 max-w-md mx-auto p-4 bg-amber-50 rounded-lg border border-amber-100 text-left">
-                  <h4 className="font-medium text-amber-800 mb-2 flex items-center">
-                    <CheckCircle className="h-4 w-4 mr-2" /> 
-                    Enhanced Privacy
-                  </h4>
-                  <p className="text-sm text-amber-700">
-                    Our platform ensures that each user can only access their own ideas. 
-                    Your business data remains completely private and secure.
-                  </p>
-                </div>
+
                 <div className="mt-6">
                   <Button 
                     onClick={handleNewIdea} 
