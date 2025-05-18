@@ -5,6 +5,21 @@ import { z } from "zod";
 export const projectStatuses = ["Draft", "Generating", "Completed"] as const;
 export type ProjectStatus = typeof projectStatuses[number];
 
+// Document types that can be created for each idea
+export const documentTypes = [
+  "LeanCanvas",
+  "ProjectRequirements",
+  "BusinessRequirements",
+  "FunctionalRequirements",
+  "Workflows",
+  "FrontEndSpecification",
+  "BackEndSpecification",
+  "MarketingCollateral",
+  "PitchDeck",
+  "Estimate"
+] as const;
+export type DocumentType = typeof documentTypes[number];
+
 export const canvasSections = [
   "Problem",
   "CustomerSegments",
@@ -59,6 +74,22 @@ export const leanCanvas = pgTable("lean_canvas", {
   keyMetrics: text("key_metrics"),
   unfairAdvantage: text("unfair_advantage"),
   html: text("html"),  // HTML formatted version of the canvas from Supabase
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+// Table for storing all types of project documents
+export const projectDocuments = pgTable("project_documents", {
+  id: serial("id").primaryKey(),
+  ideaId: integer("idea_id").notNull().references(() => ideas.id),
+  documentType: text("document_type").notNull(), // One of the DocumentType values
+  title: text("title").notNull(),
+  content: text("content"), // Markdown or structured content
+  html: text("html"), // Rendered HTML version 
+  status: text("status").$type<ProjectStatus>().notNull().default("Draft"),
+  generationStartedAt: timestamp("generation_started_at"),
+  externalId: text("external_id"), // For external system integration
+  version: integer("version").notNull().default(1), // Document version
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
