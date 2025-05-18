@@ -163,24 +163,106 @@ export default function IdeaDetail() {
                 {/* Tabs */}
                 <div className="border-b border-neutral-200">
                   <Tabs defaultValue="canvas">
-                    <TabsList className="w-auto">
+                    <TabsList className="w-auto flex flex-wrap">
+                      <TabsTrigger value="documents" className="text-sm">
+                        <div className="flex items-center">
+                          <Hammer className="h-4 w-4 mr-1" /> 
+                          Documents
+                        </div>
+                      </TabsTrigger>
                       <TabsTrigger value="canvas" className="text-sm">Lean Canvas</TabsTrigger>
+                      <TabsTrigger value="requirements" className="text-sm">Project Requirements</TabsTrigger>
+                      <TabsTrigger value="business" className="text-sm">Business Requirements</TabsTrigger>
+                      <TabsTrigger value="functional" className="text-sm">Functional Requirements</TabsTrigger>
+                      <TabsTrigger value="workflows" className="text-sm">Workflows</TabsTrigger>
+                      <TabsTrigger value="frontend" className="text-sm">Front End Spec</TabsTrigger>
+                      <TabsTrigger value="backend" className="text-sm">Back End Spec</TabsTrigger>
+                      <TabsTrigger value="marketing" className="text-sm">Marketing</TabsTrigger>
+                      <TabsTrigger value="pitchdeck" className="text-sm">Pitch Deck</TabsTrigger>
+                      <TabsTrigger value="estimate" className="text-sm">Estimate</TabsTrigger>
                       <TabsTrigger value="details" className="text-sm">
                         <div className="flex items-center">
                           <Info className="h-4 w-4 mr-1" /> 
                           Details
                         </div>
                       </TabsTrigger>
-                      <TabsTrigger value="supabase" className="text-sm">
-                        <div className="flex items-center">
-                          <Database className="h-4 w-4 mr-1" /> 
-                          Supabase Data
-                        </div>
-                      </TabsTrigger>
-                      <TabsTrigger value="history" className="text-sm">History</TabsTrigger>
-                      <TabsTrigger value="analytics" className="text-sm">Analytics</TabsTrigger>
                     </TabsList>
                   
+                    {/* Documents Overview */}
+                    <TabsContent value="documents" className="mt-6">
+                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-6">
+                        <h2 className="text-xl font-bold mb-4">Project Documents</h2>
+                        <p className="text-neutral-600 mb-6">
+                          Create and manage various documents for your business idea. Each document helps
+                          you develop different aspects of your project.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {/* Lean Canvas Card */}
+                          <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                              <h3 className="font-semibold">Lean Canvas</h3>
+                              <Badge variant={canvas ? "default" : "outline"}>
+                                {canvas ? "Created" : "Not Created"}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-neutral-600 mb-3">
+                              Business model overview using the Lean Canvas framework
+                            </p>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="w-full"
+                              onClick={() => document.querySelector('[data-value="canvas"]')?.click()}
+                            >
+                              {canvas ? "View Canvas" : "Create Canvas"}
+                            </Button>
+                          </div>
+                          
+                          {/* Project Requirements Card */}
+                          <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                              <h3 className="font-semibold">Project Requirements</h3>
+                              <Badge variant="outline">Not Created</Badge>
+                            </div>
+                            <p className="text-sm text-neutral-600 mb-3">
+                              High-level project goals and requirements document
+                            </p>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="w-full"
+                              onClick={() => document.querySelector('[data-value="requirements"]')?.click()}
+                            >
+                              Create Document
+                            </Button>
+                          </div>
+                          
+                          {/* Business Requirements Card */}
+                          <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                              <h3 className="font-semibold">Business Requirements</h3>
+                              <Badge variant="outline">Not Created</Badge>
+                            </div>
+                            <p className="text-sm text-neutral-600 mb-3">
+                              Detailed business requirements specification
+                            </p>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="w-full"
+                              onClick={() => document.querySelector('[data-value="business"]')?.click()}
+                            >
+                              Create Document
+                            </Button>
+                          </div>
+                          
+                          {/* Additional document cards would follow the same pattern */}
+                          {/* You can add more cards for each document type */}
+                        </div>
+                      </div>
+                    </TabsContent>
+                    
                     {/* Lean Canvas Content */}
                     <TabsContent value="canvas" className="mt-6">
                       {isLoadingCanvas ? (

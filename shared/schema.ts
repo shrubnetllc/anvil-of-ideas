@@ -137,6 +137,21 @@ export const updateLeanCanvasSchema = createInsertSchema(leanCanvas).pick({
   html: true,
 });
 
+// Define schemas for project documents
+export const insertProjectDocumentSchema = createInsertSchema(projectDocuments).omit({
+  id: true,
+  createdAt: true, 
+  updatedAt: true,
+  version: true
+});
+
+export const updateProjectDocumentSchema = createInsertSchema(projectDocuments).pick({
+  title: true,
+  content: true,
+  html: true,
+  status: true,
+});
+
 // Export types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -147,6 +162,10 @@ export type InsertIdea = z.infer<typeof insertIdeaSchema>;
 export type LeanCanvas = typeof leanCanvas.$inferSelect;
 export type InsertLeanCanvas = z.infer<typeof insertLeanCanvasSchema>;
 export type UpdateLeanCanvas = z.infer<typeof updateLeanCanvasSchema>;
+
+export type ProjectDocument = typeof projectDocuments.$inferSelect;
+export type InsertProjectDocument = z.infer<typeof insertProjectDocumentSchema>;
+export type UpdateProjectDocument = z.infer<typeof updateProjectDocumentSchema>;
 
 export const insertAppSettingSchema = createInsertSchema(appSettings).pick({
   key: true,
