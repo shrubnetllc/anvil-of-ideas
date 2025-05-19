@@ -305,13 +305,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Project ID is required" });
       }
       
-      // Use the stored webhook URL from environment variables
-      const webhookUrl = process.env.N8N_WEBHOOK_URL;
+      // Use the PRD-specific webhook URL from environment variables
+      const webhookUrl = process.env.N8N_PRD_WEBHOOK_URL;
       const username = process.env.N8N_AUTH_USERNAME;
       const password = process.env.N8N_AUTH_PASSWORD;
       
       if (!webhookUrl) {
-        return res.status(500).json({ message: "N8N webhook URL not configured" });
+        return res.status(500).json({ message: "N8N Project Requirements webhook URL not configured" });
       }
       
       if (!username || !password) {
