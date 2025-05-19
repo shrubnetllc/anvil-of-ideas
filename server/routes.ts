@@ -421,7 +421,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Created new document ${document.id} for requirements generation`);
       }
       
-      // Call the n8n webhook with the correct payload structure
+      // Get the leancanvas_id from our database
+      let leancanvasId = null;
+      try {
+        const { pool } = await import('./db');
+        const result = await pool.query('SELECT leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        
+        if (result.rows.length > 0 && result.rows[0].leancanvas_id) {
+          leancanvasId = result.rows[0].leancanvas_id;
+          console.log(`Found leancanvas_id ${leancanvasId} for idea ${ideaId} in local database`);
+        } else {
+          console.log(`No leancanvas_id found for idea ${ideaId} in local database`);
+        }
+      } catch (dbError) {
+        console.warn('Error querying local database for leancanvas_id:', dbError);
+      }
+      
+      // Call the n8n webhook with the updated payload structure
+      console.log(`Sending webhook with project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
@@ -429,8 +446,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Authorization": authHeader
         },
         body: JSON.stringify({
-          // The n8n workflow expects the Supabase UUID format project_id
+          // The n8n workflow expects the Supabase UUID format project_id from the Lean Canvas
           project_id: supabaseProjectId,
+          // Include the leancanvas_id as well
+          leancanvas_id: leancanvasId,
           // Send user's instructions from the UI form
           instructions: instructions || "Be brief and concise."
         })
