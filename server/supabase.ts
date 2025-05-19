@@ -13,6 +13,77 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // Helper functions for interacting with Supabase tables
 
 /**
+ * Fetch project requirements data from Supabase
+ * @param prdId The ID of the PRD document to fetch
+ * @param ideaId The ID of the related idea
+ * @param requestingUserId Optional user ID for security validation
+ */
+export async function fetchProjectRequirements(prdId: string, ideaId: number, requestingUserId?: number) {
+  try {
+    console.log(`[SECURITY] Fetching project requirements for PRD ID ${prdId} from Supabase`);
+    
+    // Security check: If requesting user ID is provided, verify ownership
+    if (requestingUserId !== undefined) {
+      try {
+        const { pool } = await import('./db');
+        const securityCheck = await pool.query('SELECT user_id FROM ideas WHERE id = $1', [ideaId]);
+        
+        if (securityCheck.rows.length === 0) {
+          console.log(`[SECURITY] Idea ${ideaId} not found in security check`);
+          return null;
+        }
+        
+        const ownerId = parseInt(securityCheck.rows[0].user_id);
+        if (ownerId !== requestingUserId) {
+          console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
+          return null;
+        }
+        
+        console.log(`[SECURITY] Authorized: User ${requestingUserId} owns idea ${ideaId}`);
+      } catch (securityError) {
+        console.error(`[SECURITY] Error during ownership verification:`, securityError);
+        return null;
+      }
+    }
+    
+    // Query the Supabase PRD table with the provided PRD ID
+    try {
+      console.log(`Querying Supabase for PRD ID ${prdId}`);
+      const { data, error } = await supabase
+        .from('prd')
+        .select('*')
+        .eq('id', prdId)
+        .single();
+      
+      if (error) {
+        console.warn(`Error querying Supabase PRD table with id=${prdId}:`, error);
+        return null;
+      }
+      
+      if (data) {
+        console.log(`Supabase returned data for PRD ID ${prdId}`);
+        // Map and return the PRD data with the HTML content
+        return {
+          id: data.id,
+          ideaId: ideaId,
+          projectReqHtml: data.project_req_html || '',
+          createdAt: data.created_at,
+          updatedAt: data.updated_at
+        };
+      }
+    } catch (supabaseError) {
+      console.warn(`Error with Supabase query for PRD ID ${prdId}:`, supabaseError);
+    }
+    
+    console.log(`No data found in Supabase for PRD ID ${prdId}`);
+    return null;
+  } catch (error) {
+    console.error('Error fetching project requirements from Supabase:', error);
+    throw error;
+  }
+}
+
+/**
  * Fetch lean canvas data from Supabase
  * @param ideaId The ID of the idea to fetch canvas data for
  * @param requestingUserId Optional user ID for security validation
