@@ -150,6 +150,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Document management routes
+  // Create or update a document
+  app.post("/api/ideas/:id/documents", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const { documentType, title, status, content, html, externalId } = req.body;
+      
+      // Validate required fields
+      if (!documentType || !title) {
+        return res.status(400).json({ message: "Missing required fields: documentType, title" });
+      }
+      
+      // Check if the user has permission to access this idea
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+      
+      // Check if document already exists for this idea and type
+      const existingDocument = await storage.getDocumentByType(ideaId, documentType);
+      
+      if (existingDocument) {
+        // Update the existing document
+        await storage.updateDocument(existingDocument.id, {
+          title,
+          status,
+          content: content || existingDocument.content,
+          html: html || existingDocument.html,
+          externalId: externalId || existingDocument.externalId
+        });
+        
+        const updatedDocument = await storage.getDocumentById(existingDocument.id);
+        return res.status(200).json(updatedDocument);
+      } else {
+        // Create a new document
+        const newDocument = await storage.createDocument({
+          ideaId,
+          documentType,
+          title,
+          status: status || "Draft",
+          content: content || null,
+          html: html || null,
+          externalId: externalId || null
+        });
+        
+        return res.status(200).json(newDocument);
+      }
+    } catch (error) {
+      console.error("Error creating/updating document:", error);
+      next(error);
+    }
+  });
+  
+  // Get a specific document by type
+  app.get("/api/ideas/:id/documents/:type", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const documentType = req.params.type;
+      
+      // Check if the user has permission to access this idea
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+      
+      const document = await storage.getDocumentByType(ideaId, documentType);
+      
+      if (!document) {
+        return res.status(404).json({ message: `No ${documentType} document found for idea ${ideaId}` });
+      }
+      
+      res.status(200).json(document);
+    } catch (error) {
+      console.error(`Error fetching ${req.params.type} document:`, error);
+      next(error);
+    }
+  });
+  
+  // Get all documents for an idea
+  app.get("/api/ideas/:id/documents", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      
+      // Check if the user has permission to access this idea
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+      
+      const documents = await storage.getDocumentsByIdeaId(ideaId);
+      
+      res.status(200).json(documents);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      next(error);
+    }
+  });
+  
+  // Update a specific document
+  app.patch("/api/ideas/:ideaId/documents/:documentId", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.ideaId);
+      const documentId = parseInt(req.params.documentId);
+      
+      // Check if the user has permission to access this idea
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+      
+      // Get the document and verify it belongs to this idea
+      const document = await storage.getDocumentById(documentId);
+      if (!document || document.ideaId !== ideaId) {
+        return res.status(404).json({ message: "Document not found or doesn't belong to this idea" });
+      }
+      
+      await storage.updateDocument(documentId, req.body);
+      const updatedDocument = await storage.getDocumentById(documentId);
+      
+      res.status(200).json(updatedDocument);
+    } catch (error) {
+      console.error("Error updating document:", error);
+      next(error);
+    }
+  });
+  
   app.delete("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
     try {
       const idea = await storage.getIdeaById(parseInt(req.params.id));
