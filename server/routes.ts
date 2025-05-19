@@ -179,7 +179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Project ID is required" });
       }
       
-      const webhookUrl = "https://hoyack.app.n8n.cloud/webhook/7654c8b6-4523-4468-b097-36d28ce8edbc";
+      const webhookUrl = "https://hoyack.app.n8n.cloud/webhook-test/7654c8b6-4523-4468-b097-36d28ce8edbc";
       const username = process.env.N8N_AUTH_USERNAME;
       const password = process.env.N8N_AUTH_PASSWORD;
       
@@ -212,12 +212,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error(`Failed to call requirements webhook: ${response.status} ${errorText}`);
       }
       
+      // Read the response which contains the prd_id we need to store
       const responseData = await response.text();
       console.log(`Requirements generation webhook response: ${responseData}`);
       
+      // The response should be a prd_id like "29c3941e-6c36-4557-8bc1-ab21a92738d3"
+      // This ID will be needed later to match with the completed document
+      
+      // Find the existing document or create a new one for this requirement
+      const ideaId = parseInt(projectId.toString());
+      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
+      
+      if (existingDocument) {
+        // Update existing document with the external ID
+        await storage.updateDocument(existingDocument.id, {
+          status: "Generating",
+          generationStartedAt: new Date(),
+          externalId: responseData.trim()
+        });
+        console.log(`Updated document ${existingDocument.id} with external ID ${responseData.trim()}`);
+      } else {
+        // Create a new document with the external ID
+        const newDocument = await storage.createDocument({
+          ideaId,
+          documentType: "ProjectRequirements",
+          title: "Project Requirements",
+          status: "Generating",
+          generationStartedAt: new Date(),
+          externalId: responseData.trim()
+        });
+        console.log(`Created new document ${newDocument.id} with external ID ${responseData.trim()}`);
+      }
+      
       res.status(200).json({ 
         message: "Requirements generation started",
-        data: responseData
+        data: responseData.trim()
       });
     } catch (error) {
       console.error("Error in requirements webhook proxy:", error);
@@ -392,21 +421,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Received requirements data from n8n:", JSON.stringify(req.body, null, 2));
       
       // Extract data from the webhook payload
-      const { ideaId, projectId, content, html } = req.body;
+      const { ideaId, prd_id, content, html } = req.body;
       
       if (!ideaId || !content) {
         return res.status(400).json({ message: "Missing required fields: ideaId, content" });
       }
       
-      // Find existing document or create new one
-      const existingDocument = await storage.getDocumentByType(parseInt(ideaId), "ProjectRequirements");
+      // Search for a document with this prd_id as externalId
+      // If not found, try to find by ideaId and documentType
+      let existingDocument = null;
+      
+      // First try to find by the external ID (prd_id) if it was provided
+      if (prd_id) {
+        // We could add a getDocumentByExternalId method to our storage interface
+        // For now, we'll get all documents for the idea and filter
+        const allDocs = await storage.getDocumentsByIdeaId(parseInt(ideaId));
+        existingDocument = allDocs.find(doc => 
+          doc.documentType === "ProjectRequirements" && doc.externalId === prd_id
+        );
+      }
+      
+      // If not found by external ID, try to find by type
+      if (!existingDocument) {
+        existingDocument = await storage.getDocumentByType(parseInt(ideaId), "ProjectRequirements");
+      }
       
       if (existingDocument) {
         // Update existing document
         await storage.updateDocument(existingDocument.id, {
           content,
           html: html || null,
-          status: "Completed"
+          status: "Completed",
+          externalId: prd_id || existingDocument.externalId // Preserve the external ID if it exists
         });
         console.log(`Updated existing document for idea ${ideaId} with project requirements`);
       } else {
@@ -417,7 +463,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           title: "Project Requirements",
           content,
           html: html || null,
-          status: "Completed"
+          status: "Completed",
+          externalId: prd_id || null
         });
         console.log(`Created new document for idea ${ideaId} with project requirements`);
       }
