@@ -218,7 +218,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const document = await storage.getDocumentByType(ideaId, documentType);
       
       if (!document) {
-        return res.status(404).json({ message: `No ${documentType} document found for idea ${ideaId}` });
+        return res.status(200).json(null); // Return null instead of 404 to handle case where document doesn't exist yet
+      }
+      
+      // Special handling for Project Requirements if they're in Generating state with an externalId
+      if (documentType === "ProjectRequirements" && document.status === "Generating" && document.externalId) {
+        try {
+          // Check if we should fetch from Supabase
+          if (document.generationStartedAt) {
+            const generationStartTime = new Date(document.generationStartedAt).getTime();
+            const now = Date.now();
+            const secondsElapsed = (now - generationStartTime) / 1000;
+            
+            // Only check Supabase if enough time has passed since generation started
+            if (secondsElapsed >= 10) {
+              console.log(`Checking Supabase for Project Requirements ${document.externalId} (${secondsElapsed.toFixed(1)}s elapsed)`);
+              
+              // Import and fetch the PRD data from Supabase
+              const { fetchProjectRequirements } = await import('./supabase');
+              const prdData = await fetchProjectRequirements(document.externalId, ideaId, req.user!.id);
+              
+              if (prdData && prdData.projectReqHtml) {
+                console.log(`Found HTML content for PRD ID ${document.externalId}`);
+                
+                // Update the document with the HTML from Supabase
+                await storage.updateDocument(document.id, {
+                  html: prdData.projectReqHtml,
+                  status: "Completed",
+                  updatedAt: new Date()
+                });
+                
+                // Return the updated document with the HTML content
+                const updatedDocument = await storage.getDocumentById(document.id);
+                return res.status(200).json(updatedDocument);
+              }
+            }
+          }
+        } catch (supabaseError) {
+          console.error(`Error fetching Project Requirements from Supabase:`, supabaseError);
+          // Continue to return the document as is
+        }
+        
+        // Check if generation has timed out (2 minutes)
+        if (document.generationStartedAt) {
+          const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+          if (new Date(document.generationStartedAt) < twoMinutesAgo) {
+            console.log(`Project Requirements generation timed out for document ${document.id}`);
+            // Still return the document as is - client will display retry button
+          }
+        }
       }
       
       res.status(200).json(document);
