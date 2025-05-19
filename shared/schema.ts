@@ -64,6 +64,7 @@ export const leanCanvas = pgTable("lean_canvas", {
   id: serial("id").primaryKey(),
   ideaId: integer("idea_id").notNull().references(() => ideas.id),
   projectId: text("project_id"),  // Store the project_id returned from n8n
+  leancanvasId: text("leancanvas_id"),  // Store the leancanvas_id returned from n8n (new format)
   problem: text("problem"),
   customerSegments: text("customer_segments"),
   uniqueValueProposition: text("unique_value_proposition"),
@@ -125,6 +126,7 @@ export const insertLeanCanvasSchema = createInsertSchema(leanCanvas).omit({
 
 export const updateLeanCanvasSchema = createInsertSchema(leanCanvas).pick({
   projectId: true,
+  leancanvasId: true,
   problem: true,
   customerSegments: true,
   uniqueValueProposition: true,
