@@ -351,7 +351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Created new document ${document.id} for requirements generation`);
       }
       
-      // Call the n8n webhook - similar to lean canvas generation
+      // Call the n8n webhook with the correct payload structure
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
@@ -359,10 +359,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Authorization": authHeader
         },
         body: JSON.stringify({
+          // The n8n workflow expects just the project_id that matches the Supabase ID
           project_id: projectId,
-          idea_id: ideaId,
-          document_id: document.id,
-          instructions: instructions || "Be Brief as possible"
+          // Send user's instructions from the UI form
+          instructions: instructions || "Be brief and concise."
         })
       });
       
