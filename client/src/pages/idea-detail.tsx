@@ -359,7 +359,17 @@ export default function IdeaDetail() {
                           <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-2">
                               <h3 className="font-semibold">Project Requirements</h3>
-                              <Badge variant="outline">Not Created</Badge>
+                              {projectRequirements ? (
+                                <Badge 
+                                  variant={projectRequirements.status === 'Completed' ? 'default' : 'outline'}
+                                  className={projectRequirements.status === 'Completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 
+                                            projectRequirements.status === 'Generating' ? 'bg-amber-100 text-amber-800 hover:bg-amber-100' : ''}
+                                >
+                                  {projectRequirements.status}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">Not Created</Badge>
+                              )}
                             </div>
                             <p className="text-sm text-neutral-600 mb-3">
                               High-level project goals and requirements document
@@ -370,7 +380,7 @@ export default function IdeaDetail() {
                               className="w-full"
                               onClick={() => document.querySelector('[data-value="requirements"]')?.click()}
                             >
-                              Create Document
+                              {projectRequirements ? 'View Document' : 'Create Document'}
                             </Button>
                           </div>
                           
