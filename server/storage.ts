@@ -366,18 +366,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLeanCanvas(canvas: InsertLeanCanvas): Promise<LeanCanvas> {
+    console.log(`Creating lean canvas with data:`, JSON.stringify(canvas));
     const [newCanvas] = await db.insert(leanCanvas).values(canvas).returning();
+    console.log(`Created new canvas:`, JSON.stringify(newCanvas));
     return newCanvas;
   }
 
   async updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void> {
+    console.log(`Updating lean canvas for idea ${ideaId} with:`, JSON.stringify(updates));
+    
     // Update the canvas
-    await db.update(leanCanvas)
+    const updateResult = await db.update(leanCanvas)
       .set({
         ...updates,
         updatedAt: new Date()
       })
-      .where(eq(leanCanvas.ideaId, ideaId));
+      .where(eq(leanCanvas.ideaId, ideaId))
+      .returning({ updated: leanCanvas.leancanvasId });
+    
+    console.log(`Update result:`, JSON.stringify(updateResult));
     
     // Update the related idea's updatedAt timestamp
     await db.update(ideas)
