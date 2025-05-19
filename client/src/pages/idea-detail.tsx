@@ -4,18 +4,19 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X } from "lucide-react";
+import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, jsonToCSV, downloadCSV } from "@/lib/utils";
-import { CanvasSection, canvasSections, Idea } from "@shared/schema";
+import { CanvasSection, canvasSections, Idea, DocumentType, ProjectDocument } from "@shared/schema";
 import { CanvasSectionComponent } from "@/components/canvas-section";
 import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();
@@ -25,11 +26,126 @@ export default function IdeaDetail() {
   const { canvas, isLoading: isLoadingCanvas, regenerateCanvas, isRegenerating } = useLeanCanvas(ideaId);
   const { data: supabaseData, isLoading: isLoadingSupabase } = useSupabaseCanvas(ideaId);
   
+  // State for project requirements
+  const [projectRequirements, setProjectRequirements] = useState<ProjectDocument | null>(null);
+  const [isLoadingRequirements, setIsLoadingRequirements] = useState(false);
+  const [isGeneratingRequirements, setIsGeneratingRequirements] = useState(false);
+  const [projectRequirementsGenerating, setProjectRequirementsGenerating] = useState(false);
+  const [requirementsNotes, setRequirementsNotes] = useState('');
+  const { toast } = useToast();
+  
   // State for editing mode and form
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Idea>>({});
   const { updateIdea, isUpdating } = useIdeas();
   
+  // Fetch project requirements when component mounts
+  useEffect(() => {
+    if (ideaId) {
+      fetchProjectRequirements();
+    }
+  }, [ideaId]);
+
+  // Fetch the project requirements document
+  const fetchProjectRequirements = async () => {
+    try {
+      setIsLoadingRequirements(true);
+      const response = await fetch(`/api/ideas/${ideaId}/documents/ProjectRequirements`);
+      if (response.ok) {
+        const data = await response.json();
+        setProjectRequirements(data);
+        
+        // Check if requirements are currently generating
+        if (data && data.status === 'Generating') {
+          setProjectRequirementsGenerating(true);
+        } else {
+          setProjectRequirementsGenerating(false);
+        }
+      } else {
+        // No requirements exist yet
+        setProjectRequirements(null);
+      }
+    } catch (error) {
+      console.error('Error fetching project requirements:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load project requirements",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingRequirements(false);
+    }
+  };
+
+  // Handle generating project requirements
+  const handleGenerateRequirementsClick = async () => {
+    try {
+      setIsGeneratingRequirements(true);
+      
+      // Get project_id from canvas if it exists
+      const projectId = canvas?.projectId || `idea-${ideaId}`;
+      
+      // Call to n8n webhook
+      const response = await apiRequest("POST", "https://hoyack.app.n8n.cloud/webhook/7654c8b6-4523-4468-b097-36d28ce8edbc", {
+        project_id: projectId,
+        instructions: requirementsNotes || "Be Brief as possible"
+      }, {
+        'Authorization': `Basic ${btoa(`${process.env.N8N_AUTH_USERNAME}:${process.env.N8N_AUTH_PASSWORD}`)}`
+      });
+      
+      if (response.ok) {
+        // Create a document record in our database
+        const docResponse = await apiRequest("POST", `/api/ideas/${ideaId}/documents`, {
+          documentType: "ProjectRequirements",
+          title: "Project Requirements",
+          status: "Generating"
+        });
+        
+        if (docResponse.ok) {
+          const docData = await docResponse.json();
+          setProjectRequirements(docData);
+          setProjectRequirementsGenerating(true);
+          
+          // Set up polling to check document status
+          const pollTimer = setInterval(async () => {
+            const checkResponse = await fetch(`/api/ideas/${ideaId}/documents/ProjectRequirements`);
+            if (checkResponse.ok) {
+              const updatedDoc = await checkResponse.json();
+              
+              if (updatedDoc.status !== 'Generating') {
+                clearInterval(pollTimer);
+                setProjectRequirements(updatedDoc);
+                setProjectRequirementsGenerating(false);
+              }
+            }
+          }, 10000); // Poll every 10 seconds
+          
+          // Clear polling after 2 minutes maximum
+          setTimeout(() => {
+            clearInterval(pollTimer);
+            fetchProjectRequirements(); // Fetch final state
+          }, 120000);
+          
+          toast({
+            title: "Success",
+            description: "Started generating project requirements",
+          });
+        }
+      } else {
+        throw new Error("Failed to start requirements generation");
+      }
+    } catch (error) {
+      console.error('Error generating project requirements:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate project requirements",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingRequirements(false);
+    }
+  };
+
   // Note: Auto-completion is handled server-side, no timer needed here
   // This refreshes data automatically every 10 seconds while generating
   useEffect(() => {
