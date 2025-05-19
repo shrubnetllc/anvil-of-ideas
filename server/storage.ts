@@ -472,21 +472,25 @@ export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private ideas: Map<number, Idea>;
   private canvases: Map<number, LeanCanvas>;
+  private documents: Map<number, ProjectDocument>;
   public sessionStore: any;
   private nextUserId: number;
   private nextIdeaId: number;
   private nextCanvasId: number;
+  private nextDocumentId: number;
 
   constructor() {
     this.users = new Map();
     this.ideas = new Map();
     this.canvases = new Map();
+    this.documents = new Map();
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
     });
     this.nextUserId = 1;
     this.nextIdeaId = 1;
     this.nextCanvasId = 1;
+    this.nextDocumentId = 1;
   }
 
   // User operations
@@ -732,6 +736,72 @@ export class MemStorage implements IStorage {
   async isEmailVerified(userId: number): Promise<boolean> {
     const user = this.users.get(userId);
     return user?.emailVerified === "true";
+  }
+
+  // Project Document operations
+  async getDocumentsByIdeaId(ideaId: number): Promise<ProjectDocument[]> {
+    const documents: ProjectDocument[] = [];
+    for (const doc of this.documents.values()) {
+      if (doc.ideaId === ideaId) {
+        documents.push(doc);
+      }
+    }
+    return documents;
+  }
+  
+  async getDocumentById(id: number): Promise<ProjectDocument | undefined> {
+    return this.documents.get(id);
+  }
+  
+  async getDocumentByType(ideaId: number, documentType: DocumentType): Promise<ProjectDocument | undefined> {
+    for (const doc of this.documents.values()) {
+      if (doc.ideaId === ideaId && doc.documentType === documentType) {
+        return doc;
+      }
+    }
+    return undefined;
+  }
+  
+  async createDocument(document: InsertProjectDocument): Promise<ProjectDocument> {
+    const id = this.nextDocumentId++;
+    const now = new Date();
+    
+    const newDocument: ProjectDocument = {
+      id,
+      ideaId: document.ideaId,
+      documentType: document.documentType,
+      title: document.title,
+      content: document.content || null,
+      html: document.html || null,
+      status: document.status || "Draft",
+      generationStartedAt: document.generationStartedAt || null,
+      externalId: document.externalId || null,
+      version: document.version || 1,
+      createdAt: now,
+      updatedAt: now
+    };
+    
+    this.documents.set(id, newDocument);
+    return newDocument;
+  }
+  
+  async updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void> {
+    const document = this.documents.get(id);
+    if (!document) {
+      throw new Error(`Document with ID ${id} not found`);
+    }
+    
+    const updatedDocument = {
+      ...document,
+      ...updates,
+      updatedAt: new Date()
+    };
+    
+    this.documents.set(id, updatedDocument);
+  }
+  
+  async deleteDocument(id: number): Promise<void> {
+    this.documents.delete(id);
   }
 }
 

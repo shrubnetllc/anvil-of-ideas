@@ -170,6 +170,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Canvas generation route
+  // Webhook proxy for Project Requirements
+  app.post("/api/webhook/requirements", isAuthenticated, async (req, res, next) => {
+    try {
+      const { projectId, instructions } = req.body;
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "Project ID is required" });
+      }
+      
+      const webhookUrl = "https://hoyack.app.n8n.cloud/webhook/7654c8b6-4523-4468-b097-36d28ce8edbc";
+      const username = process.env.N8N_AUTH_USERNAME;
+      const password = process.env.N8N_AUTH_PASSWORD;
+      
+      if (!username || !password) {
+        return res.status(500).json({ message: "N8N authentication credentials not configured" });
+      }
+      
+      // Create basic auth header
+      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+      
+      console.log(`Sending project requirements request to n8n for project ${projectId}`);
+      console.log(`With instructions: ${instructions || "No specific instructions"}`);
+      
+      // Call the n8n webhook
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader
+        },
+        body: JSON.stringify({
+          project_id: projectId,
+          instructions: instructions || "Be Brief as possible"
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to call requirements webhook: ${response.status} ${errorText}`);
+        throw new Error(`Failed to call requirements webhook: ${response.status} ${errorText}`);
+      }
+      
+      const responseData = await response.text();
+      console.log(`Requirements generation webhook response: ${responseData}`);
+      
+      res.status(200).json({ 
+        message: "Requirements generation started",
+        data: responseData
+      });
+    } catch (error) {
+      console.error("Error in requirements webhook proxy:", error);
+      next(error);
+    }
+  });
+  
+  // Canvas generation route
   app.post("/api/ideas/:id/generate", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
@@ -313,6 +369,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Webhook endpoint for n8n to send back the generated requirements
+  app.post("/api/webhook/requirements-result", async (req, res, next) => {
+    // Verify n8n credentials if they are configured
+    if (process.env.N8N_AUTH_USERNAME && process.env.N8N_AUTH_PASSWORD) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Basic ')) {
+        return res.status(401).json({ message: "Unauthorized - Missing credentials" });
+      }
+      
+      // Decode and verify the credentials
+      const base64Credentials = authHeader.split(' ')[1];
+      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+      const [username, password] = credentials.split(':');
+      
+      if (username !== process.env.N8N_AUTH_USERNAME || password !== process.env.N8N_AUTH_PASSWORD) {
+        return res.status(401).json({ message: "Unauthorized - Invalid credentials" });
+      }
+    }
+    
+    try {
+      console.log("Received requirements data from n8n:", JSON.stringify(req.body, null, 2));
+      
+      // Extract data from the webhook payload
+      const { ideaId, projectId, content, html } = req.body;
+      
+      if (!ideaId || !content) {
+        return res.status(400).json({ message: "Missing required fields: ideaId, content" });
+      }
+      
+      // Find existing document or create new one
+      const existingDocument = await storage.getDocumentByType(parseInt(ideaId), "ProjectRequirements");
+      
+      if (existingDocument) {
+        // Update existing document
+        await storage.updateDocument(existingDocument.id, {
+          content,
+          html: html || null,
+          status: "Completed"
+        });
+        console.log(`Updated existing document for idea ${ideaId} with project requirements`);
+      } else {
+        // Create new document
+        await storage.createDocument({
+          ideaId: parseInt(ideaId),
+          documentType: "ProjectRequirements",
+          title: "Project Requirements",
+          content,
+          html: html || null,
+          status: "Completed"
+        });
+        console.log(`Created new document for idea ${ideaId} with project requirements`);
+      }
+      
+      // Get the idea information to send notification
+      try {
+        const idea = await storage.getIdeaById(parseInt(ideaId));
+        if (idea && idea.founderEmail) {
+          // Send email notification that the requirements are generated
+          const title = idea.title || idea.idea.substring(0, 30) + '...';
+          await emailService.sendCanvasGeneratedEmail(idea.founderEmail, idea.founderName || 'User', title);
+          console.log(`Sent requirements generation notification email to ${idea.founderEmail}`);
+        }
+      } catch (emailError) {
+        console.error('Failed to send requirements generation notification:', emailError);
+        // Continue even if email sending fails
+      }
+      
+      res.status(200).json({ message: "Requirements document processed successfully" });
+    } catch (error) {
+      console.error("Error processing requirements webhook:", error);
+      next(error);
+    }
+  });
+  
   // Webhook endpoint for n8n to send back the generated canvas
   app.post("/api/webhook/canvas", async (req, res, next) => {
     // Verify n8n credentials if they are configured
