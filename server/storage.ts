@@ -1,4 +1,12 @@
-import { users, type User, type InsertUser, ideas, leanCanvas, appSettings, type Idea, type LeanCanvas, type InsertIdea, type InsertLeanCanvas, type UpdateLeanCanvas, ProjectStatus, type AppSetting, type InsertAppSetting } from "@shared/schema";
+import { 
+  users, ideas, leanCanvas, appSettings, projectDocuments,
+  type User, type InsertUser, 
+  type Idea, type InsertIdea,
+  type LeanCanvas, type InsertLeanCanvas, type UpdateLeanCanvas,
+  ProjectStatus, DocumentType,
+  type AppSetting, type InsertAppSetting,
+  type ProjectDocument, type InsertProjectDocument, type UpdateProjectDocument
+} from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import connectPg from "connect-pg-simple";
@@ -53,6 +61,92 @@ export interface IStorage {
 
 export class DatabaseStorage implements IStorage {
   public sessionStore: any;
+  
+  // Project Document operations
+  async getDocumentsByIdeaId(ideaId: number): Promise<ProjectDocument[]> {
+    try {
+      const documents = await db
+        .select()
+        .from(projectDocuments)
+        .where(eq(projectDocuments.ideaId, ideaId));
+      return documents;
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+      return [];
+    }
+  }
+  
+  async getDocumentById(id: number): Promise<ProjectDocument | undefined> {
+    try {
+      const [document] = await db
+        .select()
+        .from(projectDocuments)
+        .where(eq(projectDocuments.id, id));
+      return document;
+    } catch (error) {
+      console.error("Error fetching document by ID:", error);
+      return undefined;
+    }
+  }
+  
+  async getDocumentByType(ideaId: number, documentType: DocumentType): Promise<ProjectDocument | undefined> {
+    try {
+      const [document] = await db
+        .select()
+        .from(projectDocuments)
+        .where(and(
+          eq(projectDocuments.ideaId, ideaId),
+          eq(projectDocuments.documentType, documentType)
+        ));
+      return document;
+    } catch (error) {
+      console.error(`Error fetching document by type (${documentType}):`, error);
+      return undefined;
+    }
+  }
+  
+  async createDocument(document: InsertProjectDocument): Promise<ProjectDocument> {
+    try {
+      const [createdDocument] = await db
+        .insert(projectDocuments)
+        .values({
+          ...document,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        })
+        .returning();
+      return createdDocument;
+    } catch (error) {
+      console.error("Error creating document:", error);
+      throw error;
+    }
+  }
+  
+  async updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void> {
+    try {
+      await db
+        .update(projectDocuments)
+        .set({
+          ...updates,
+          updatedAt: new Date()
+        })
+        .where(eq(projectDocuments.id, id));
+    } catch (error) {
+      console.error("Error updating document:", error);
+      throw error;
+    }
+  }
+  
+  async deleteDocument(id: number): Promise<void> {
+    try {
+      await db
+        .delete(projectDocuments)
+        .where(eq(projectDocuments.id, id));
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      throw error;
+    }
+  }
 
   constructor() {
     this.sessionStore = new PostgresSessionStore({
