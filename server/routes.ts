@@ -305,9 +305,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Project ID is required" });
       }
       
-      const webhookUrl = "https://hoyack.app.n8n.cloud/webhook-test/7654c8b6-4523-4468-b097-36d28ce8edbc";
+      // Use the stored webhook URL from environment variables
+      const webhookUrl = process.env.N8N_WEBHOOK_URL;
       const username = process.env.N8N_AUTH_USERNAME;
       const password = process.env.N8N_AUTH_PASSWORD;
+      
+      if (!webhookUrl) {
+        return res.status(500).json({ message: "N8N webhook URL not configured" });
+      }
       
       if (!username || !password) {
         return res.status(500).json({ message: "N8N authentication credentials not configured" });
@@ -317,9 +322,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
       
       console.log(`Sending project requirements request to n8n for project ${projectId}`);
+      console.log(`Using webhook URL: ${webhookUrl}`);
       console.log(`With instructions: ${instructions || "No specific instructions"}`);
       
-      // Call the n8n webhook
+      // Create a document record before calling N8N to ensure we have a record
+      // to update later even if the webhook call to n8n fails
+      let document;
+      const ideaId = parseInt(projectId.toString());
+      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
+      
+      if (existingDocument) {
+        // Update existing document
+        await storage.updateDocument(existingDocument.id, {
+          status: "Generating",
+          generationStartedAt: new Date()
+        });
+        document = await storage.getDocumentById(existingDocument.id);
+        console.log(`Updated existing document ${existingDocument.id} for requirements generation`);
+      } else {
+        // Create a new document
+        document = await storage.createDocument({
+          ideaId,
+          documentType: "ProjectRequirements",
+          title: "Project Requirements",
+          status: "Generating",
+          generationStartedAt: new Date()
+        });
+        console.log(`Created new document ${document.id} for requirements generation`);
+      }
+      
+      // Call the n8n webhook - similar to lean canvas generation
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
@@ -328,6 +360,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
         body: JSON.stringify({
           project_id: projectId,
+          idea_id: ideaId,
+          document_id: document.id,
           instructions: instructions || "Be Brief as possible"
         })
       });
@@ -335,43 +369,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!response.ok) {
         const errorText = await response.text();
         console.error(`Failed to call requirements webhook: ${response.status} ${errorText}`);
-        throw new Error(`Failed to call requirements webhook: ${response.status} ${errorText}`);
+        
+        // Even if the webhook fails, we'll return a 200 with the document
+        // This allows the UI to show the "generating" state and poll for updates
+        // We'll set the document to a "Failed" state after some time if no n8n response arrives
+        
+        res.status(200).json({ 
+          message: "Requirements document created, but webhook failed. Document will remain in Generating state until timeout.",
+          document,
+          webhookError: errorText
+        });
+        return;
       }
       
-      // Read the response which contains the prd_id we need to store
+      // Read the response which contains the prd_id
       const responseData = await response.text();
       console.log(`Requirements generation webhook response: ${responseData}`);
       
       // The response should be a prd_id like "29c3941e-6c36-4557-8bc1-ab21a92738d3"
       // This ID will be needed later to match with the completed document
       
-      // Find the existing document or create a new one for this requirement
-      const ideaId = parseInt(projectId.toString());
-      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
+      // Update the document with the external ID
+      await storage.updateDocument(document.id, {
+        externalId: responseData.trim()
+      });
+      console.log(`Updated document ${document.id} with external ID ${responseData.trim()}`);
       
-      if (existingDocument) {
-        // Update existing document with the external ID
-        await storage.updateDocument(existingDocument.id, {
-          status: "Generating",
-          generationStartedAt: new Date(),
-          externalId: responseData.trim()
-        });
-        console.log(`Updated document ${existingDocument.id} with external ID ${responseData.trim()}`);
-      } else {
-        // Create a new document with the external ID
-        const newDocument = await storage.createDocument({
-          ideaId,
-          documentType: "ProjectRequirements",
-          title: "Project Requirements",
-          status: "Generating",
-          generationStartedAt: new Date(),
-          externalId: responseData.trim()
-        });
-        console.log(`Created new document ${newDocument.id} with external ID ${responseData.trim()}`);
-      }
+      // Get the updated document to return
+      const updatedDocument = await storage.getDocumentById(document.id);
       
       res.status(200).json({ 
         message: "Requirements generation started",
+        document: updatedDocument,
         data: responseData.trim()
       });
     } catch (error) {
