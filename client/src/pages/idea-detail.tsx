@@ -4,7 +4,7 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2 } from "lucide-react";
+import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, jsonToCSV, downloadCSV } from "@/lib/utils";
@@ -442,10 +442,18 @@ export default function IdeaDetail() {
                             <p className="text-neutral-600 mb-2">
                               Please wait while we hammer out the project requirements for your idea...
                             </p>
-                            <div className="flex items-center justify-center mt-4">
+                            <div className="flex items-center justify-center mt-4 space-x-3">
                               <Badge variant="outline" className="px-3 py-1">
                                 <span className="text-xs">Auto-completes after 2 minutes</span>
                               </Badge>
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={handleGenerateRequirementsClick}
+                                className="flex items-center text-xs h-7"
+                              >
+                                <RefreshCw className="h-3 w-3 mr-1" /> Retry
+                              </Button>
                             </div>
                           </div>
                         ) : projectRequirements ? (
