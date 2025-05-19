@@ -178,7 +178,9 @@ export const webhookResponseSchema = z.object({
   // ID fields
   ideaId: z.number().optional(), // Might be part of unique-user-id
   "unique-user-id": z.string().optional(), // Format: user-{userId}-idea-{ideaId}
-  projectId: z.string().optional(), // Project ID from n8n response
+  project_id: z.string().optional(), // Project ID from n8n response
+  leancanvas_id: z.string().optional(), // New! Lean Canvas ID from n8n response
+  projectId: z.string().optional(), // Legacy project ID from n8n response
   
   // Canvas fields - using our internal property names
   problem: z.string().optional(),
@@ -213,6 +215,11 @@ export const webhookResponseSchema = z.object({
     }
   }
   
+  // Handle the new response format where project_id and leancanvas_id are provided
+  if (data.project_id && !data.projectId) {
+    data.projectId = data.project_id;
+  }
+  
   // Map n8n's response format to our format if lean_canvas is present
   if (data.lean_canvas) {
     if (data.lean_canvas.problem) data.problem = data.lean_canvas.problem;
@@ -226,6 +233,11 @@ export const webhookResponseSchema = z.object({
     if (data.lean_canvas.unfair_advantage) data.unfairAdvantage = data.lean_canvas.unfair_advantage;
   }
   
+  // If leancanvas_id is provided, store it for reference
+  if (data.leancanvas_id) {
+    console.log(`Received leancanvas_id: ${data.leancanvas_id}`);
+  }
+
   // Filter out the lean_canvas and unique-user-id properties to avoid DB issues
   // Ensure ideaId is a number and exists (this is a required field for our database)
   if (!data.ideaId) {
@@ -234,7 +246,8 @@ export const webhookResponseSchema = z.object({
   
   return {
     ideaId: data.ideaId,
-    projectId: data.projectId, // Include project_id from response
+    projectId: data.project_id || data.projectId, // Use project_id from new format if available
+    leancanvasId: data.leancanvas_id, // Include new leancanvas_id if available
     problem: data.problem,
     customerSegments: data.customerSegments,
     uniqueValueProposition: data.uniqueValueProposition,
