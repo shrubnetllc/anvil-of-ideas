@@ -572,25 +572,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
           throw new Error(`Failed to call n8n webhook: ${responseStatus} ${responseText}`);
         }
         
-        // Extract the project_id from the response text
-        const projectId = responseText.trim();
-        console.log(`Extracted project_id from response: ${projectId}`);
+        // Parse the response JSON to extract project_id and leancanvas_id
+        let projectId = '';
+        let leancanvasId = '';
         
-        // Store the project_id in the database
+        try {
+          // Parse the JSON response
+          const responseData = JSON.parse(responseText);
+          
+          // Extract the individual fields
+          projectId = responseData.project_id || '';
+          leancanvasId = responseData.leancanvas_id || '';
+          
+          console.log(`Extracted from response: project_id=${projectId}, leancanvas_id=${leancanvasId}`);
+        } catch (jsonError) {
+          // Fallback to using the entire response as projectId for backward compatibility
+          console.error('Failed to parse webhook response as JSON:', jsonError);
+          projectId = responseText.trim();
+          console.log(`Using entire response as project_id: ${projectId}`);
+        }
+        
+        // Store the project_id and leancanvas_id in the database
         if (projectId) {
           try {
             // Check if lean canvas already exists for this idea
             const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
             
             if (existingCanvas) {
-              // Update the existing canvas with the project_id
-              await storage.updateLeanCanvas(ideaId, { projectId });
-              console.log(`Updated existing canvas with project_id: ${projectId}`);
+              // Update the existing canvas with the project_id and leancanvas_id
+              await storage.updateLeanCanvas(ideaId, { 
+                projectId,
+                leancanvasId
+              });
+              console.log(`Updated existing canvas with project_id: ${projectId} and leancanvas_id: ${leancanvasId}`);
             } else {
-              // Create a new canvas with the project_id
+              // Create a new canvas with the project_id and leancanvas_id
               await storage.createLeanCanvas({ 
                 ideaId,
                 projectId,
+                leancanvasId,
                 problem: null,
                 customerSegments: null,
                 uniqueValueProposition: null,
@@ -601,7 +621,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 keyMetrics: null,
                 unfairAdvantage: null
               });
-              console.log(`Created new canvas with project_id: ${projectId}`);
+              console.log(`Created new canvas with project_id: ${projectId} and leancanvas_id: ${leancanvasId}`);
             }
           } catch (dbError) {
             console.error('Failed to store project_id in database:', dbError);
