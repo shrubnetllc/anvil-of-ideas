@@ -82,61 +82,83 @@ export default function IdeaDetail() {
     try {
       setIsGeneratingRequirements(true);
       
-      // Get project_id from canvas if it exists
-      const projectId = canvas?.projectId || `idea-${ideaId}`;
+      // Get project_id from canvas if it exists, or use the idea ID
+      const projectId = ideaId.toString();
+      
+      console.log(`Starting requirements generation for project ID: ${projectId}`);
       
       // Call to n8n webhook via our backend proxy to handle authentication
-      const response = await apiRequest("POST", `/api/webhook/requirements`, {
-        projectId: projectId,
-        instructions: requirementsNotes || "Be Brief as possible"
+      const response = await fetch(`/api/webhook/requirements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          projectId: projectId,
+          instructions: requirementsNotes || "Be Brief as possible"
+        })
       });
       
-      if (response.ok) {
-        // Create a document record in our database
-        const docResponse = await apiRequest("POST", `/api/ideas/${ideaId}/documents`, {
-          documentType: "ProjectRequirements",
-          title: "Project Requirements",
-          status: "Generating"
-        });
-        
-        if (docResponse.ok) {
-          const docData = await docResponse.json();
-          setProjectRequirements(docData);
-          setProjectRequirementsGenerating(true);
-          
-          // Set up polling to check document status
-          const pollTimer = setInterval(async () => {
-            const checkResponse = await fetch(`/api/ideas/${ideaId}/documents/ProjectRequirements`);
-            if (checkResponse.ok) {
-              const updatedDoc = await checkResponse.json();
-              
-              if (updatedDoc.status !== 'Generating') {
-                clearInterval(pollTimer);
-                setProjectRequirements(updatedDoc);
-                setProjectRequirementsGenerating(false);
-              }
-            }
-          }, 10000); // Poll every 10 seconds
-          
-          // Clear polling after 2 minutes maximum
-          setTimeout(() => {
-            clearInterval(pollTimer);
-            fetchProjectRequirements(); // Fetch final state
-          }, 120000);
-          
-          toast({
-            title: "Success",
-            description: "Started generating project requirements",
-          });
-        }
-      } else {
-        throw new Error("Failed to start requirements generation");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to start requirements generation: ${errorText}`);
       }
+      
+      // The document should be created in the webhook endpoint
+      const result = await response.json();
+      console.log("Requirements generation response:", result);
+      
+      // Now update the UI to show the generating state
+      setProjectRequirementsGenerating(true);
+      
+      // Fetch the document to get the current state
+      const docResponse = await fetch(`/api/ideas/${ideaId}/documents/ProjectRequirements`);
+      if (docResponse.ok) {
+        const docData = await docResponse.json();
+        setProjectRequirements(docData);
+      }
+      
+      // Set up polling to check document status
+      const pollTimer = setInterval(async () => {
+        try {
+          const checkResponse = await fetch(`/api/ideas/${ideaId}/documents/ProjectRequirements`);
+          if (checkResponse.ok) {
+            const updatedDoc = await checkResponse.json();
+            setProjectRequirements(updatedDoc);
+            
+            if (updatedDoc.status !== 'Generating') {
+              clearInterval(pollTimer);
+              setProjectRequirementsGenerating(false);
+              console.log("Requirements generation completed:", updatedDoc);
+              
+              toast({
+                title: "Success",
+                description: "Project requirements have been forged!",
+                variant: "default",
+              });
+            }
+          }
+        } catch (pollError) {
+          console.error('Error polling document status:', pollError);
+        }
+      }, 10000); // Poll every 10 seconds
+      
+      // Clear polling after 2 minutes maximum
+      setTimeout(() => {
+        clearInterval(pollTimer);
+        fetchProjectRequirements(); // Fetch final state
+      }, 120000);
+      
+      toast({
+        title: "Success",
+        description: "Started forging project requirements. This may take a few minutes.",
+        variant: "default",
+      });
     } catch (error) {
       console.error('Error generating project requirements:', error);
       toast({
         title: "Error",
-        description: "Failed to generate project requirements",
+        description: "Failed to generate project requirements. Please try again.",
         variant: "destructive",
       });
     } finally {
