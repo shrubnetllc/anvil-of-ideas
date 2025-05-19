@@ -585,6 +585,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           leancanvasId = responseData.leancanvas_id || '';
           
           console.log(`Extracted from response: project_id=${projectId}, leancanvas_id=${leancanvasId}`);
+          console.log(`Full response data:`, JSON.stringify(responseData));
         } catch (jsonError) {
           // Fallback to using the entire response as projectId for backward compatibility
           console.error('Failed to parse webhook response as JSON:', jsonError);
