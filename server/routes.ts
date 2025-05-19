@@ -321,14 +321,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create basic auth header
       const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
       
-      console.log(`Sending project requirements request to n8n for project ${projectId}`);
+      // First, we need to get the Supabase project ID (UUID format)
+      const ideaId = parseInt(projectId.toString());
+      
+      // Get the Supabase project ID from lean_canvas table
+      let supabaseProjectId;
+      try {
+        // First try to get it from our lean_canvas table which should have stored the project_id
+        const { pool } = await import('./db');
+        const result = await pool.query('SELECT project_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        
+        if (result.rows.length > 0 && result.rows[0].project_id) {
+          supabaseProjectId = result.rows[0].project_id;
+          console.log(`Using Supabase project ID: ${supabaseProjectId} from lean_canvas table`);
+        } else {
+          // If not found, use the ideaId as a default (but this likely won't work with Supabase)
+          supabaseProjectId = projectId;
+          console.log(`No Supabase project ID found in database, defaulting to ${projectId}`);
+        }
+      } catch (error) {
+        console.error('Error getting Supabase project ID:', error);
+        supabaseProjectId = projectId; // Default fallback
+      }
+      
+      console.log(`Sending project requirements request to n8n for Supabase project ${supabaseProjectId}`);
       console.log(`Using webhook URL: ${webhookUrl}`);
       console.log(`With instructions: ${instructions || "No specific instructions"}`);
       
       // Create a document record before calling N8N to ensure we have a record
       // to update later even if the webhook call to n8n fails
       let document;
-      const ideaId = parseInt(projectId.toString());
       const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
       
       if (existingDocument) {
@@ -359,8 +381,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Authorization": authHeader
         },
         body: JSON.stringify({
-          // The n8n workflow expects just the project_id that matches the Supabase ID
-          project_id: projectId,
+          // The n8n workflow expects the Supabase UUID format project_id
+          project_id: supabaseProjectId,
           // Send user's instructions from the UI form
           instructions: instructions || "Be brief and concise."
         })
