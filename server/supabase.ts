@@ -116,55 +116,83 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
       }
     }
     
-    // Step 1: Get the project_id from our local database
+    // Step 1: Get the project_id and leancanvas_id from our local database
     let projectId = null;
+    let leancanvasId = null;
     try {
-      // Use raw SQL query to get the project_id since we're seeing issues with Drizzle ORM imports
+      // Use raw SQL query to get both IDs since we're seeing issues with Drizzle ORM imports
       const { pool } = await import('./db');
-      const result = await pool.query('SELECT project_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+      const result = await pool.query('SELECT project_id, leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
       
-      if (result.rows.length > 0 && result.rows[0].project_id) {
+      if (result.rows.length > 0) {
         projectId = result.rows[0].project_id;
-        console.log(`Found project_id ${projectId} for idea ${ideaId} in local database`);
+        leancanvasId = result.rows[0].leancanvas_id;
+        console.log(`Found project_id ${projectId} and leancanvas_id ${leancanvasId} for idea ${ideaId} in local database`);
       } else {
-        console.log(`No project_id found for idea ${ideaId} in local database`);
+        console.log(`No IDs found for idea ${ideaId} in local database`);
       }
     } catch (dbError) {
-      console.warn('Error querying local database for project_id:', dbError);
+      console.warn('Error querying local database for IDs:', dbError);
     }
     
-    // Step 2: If we have a project_id, use it to query Supabase
-    if (projectId) {
+    // Step 2: If we have leancanvas_id (preferred) or project_id, use it to query Supabase
+    if (leancanvasId || projectId) {
       try {
-        // Try to query using the project_id
-        const { data, error } = await supabase
-          .from('lean_canvas')
-          .select('*')
-          .eq('id', projectId)
-          .single();
+        let data, error;
         
-        if (error) {
-          console.warn(`Error querying Supabase with id=${projectId}:`, error);
-          
-          // Try using 'project_id' column instead
+        // Try to query using the leancanvas_id first (preferred method)
+        if (leancanvasId) {
+          console.log(`Querying Supabase with leancanvas_id=${leancanvasId}`);
           const response = await supabase
             .from('lean_canvas')
             .select('*')
-            .eq('project_id', projectId)
+            .eq('id', leancanvasId)
             .single();
             
-          if (response.error) {
-            console.warn(`Error querying Supabase with project_id=${projectId}:`, response.error);
-          } else if (response.data) {
-            console.log(`Supabase returned data for project_id ${projectId}:`, response.data);
-            return mapSupabaseData(response.data, ideaId, projectId);
+          data = response.data;
+          error = response.error;
+          
+          if (error) {
+            console.warn(`Error querying Supabase with id (leancanvas_id)=${leancanvasId}:`, error);
+          } else if (data) {
+            console.log(`Supabase returned data for leancanvas_id ${leancanvasId}`);
+            return mapSupabaseData(data, ideaId, projectId);
           }
-        } else if (data) {
-          console.log(`Supabase returned data for id ${projectId}:`, data);
-          return mapSupabaseData(data, ideaId, projectId);
+        }
+        
+        // If leancanvas_id query failed or wasn't available, fall back to project_id
+        if ((!data || error) && projectId) {
+          console.log(`Falling back to project_id query with ${projectId}`);
+          // Try to query using the project_id as id
+          const idResponse = await supabase
+            .from('lean_canvas')
+            .select('*')
+            .eq('id', projectId)
+            .single();
+          
+          if (idResponse.error) {
+            console.warn(`Error querying Supabase with id=${projectId}:`, idResponse.error);
+            
+            // Try using 'project_id' column instead
+            const projectResponse = await supabase
+              .from('lean_canvas')
+              .select('*')
+              .eq('project_id', projectId)
+              .single();
+              
+            if (projectResponse.error) {
+              console.warn(`Error querying Supabase with project_id=${projectId}:`, projectResponse.error);
+            } else if (projectResponse.data) {
+              console.log(`Supabase returned data for project_id ${projectId}`);
+              return mapSupabaseData(projectResponse.data, ideaId, projectId);
+            }
+          } else if (idResponse.data) {
+            console.log(`Supabase returned data for id ${projectId}`);
+            return mapSupabaseData(idResponse.data, ideaId, projectId);
+          }
         }
       } catch (supabaseError) {
-        console.warn(`Error with Supabase query for project_id ${projectId}:`, supabaseError);
+        console.warn(`Error with Supabase query:`, supabaseError);
       }
     }
     
