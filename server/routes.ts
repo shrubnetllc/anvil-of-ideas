@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
-import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema } from "@shared/schema";
+import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema, insertProjectDocumentSchema, updateProjectDocumentSchema, DocumentType } from "@shared/schema";
 import { fetchLeanCanvasData, fetchUserIdeas } from "./supabase";
 import { emailService } from "./email";
 import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";

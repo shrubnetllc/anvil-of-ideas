@@ -85,12 +85,10 @@ export default function IdeaDetail() {
       // Get project_id from canvas if it exists
       const projectId = canvas?.projectId || `idea-${ideaId}`;
       
-      // Call to n8n webhook
-      const response = await apiRequest("POST", "https://hoyack.app.n8n.cloud/webhook/7654c8b6-4523-4468-b097-36d28ce8edbc", {
-        project_id: projectId,
+      // Call to n8n webhook via our backend proxy to handle authentication
+      const response = await apiRequest("POST", `/api/webhook/requirements`, {
+        projectId: projectId,
         instructions: requirementsNotes || "Be Brief as possible"
-      }, {
-        'Authorization': `Basic ${btoa(`${process.env.N8N_AUTH_USERNAME}:${process.env.N8N_AUTH_PASSWORD}`)}`
       });
       
       if (response.ok) {
@@ -376,6 +374,112 @@ export default function IdeaDetail() {
                           {/* Additional document cards would follow the same pattern */}
                           {/* You can add more cards for each document type */}
                         </div>
+                      </div>
+                    </TabsContent>
+                    
+                    {/* Project Requirements Content */}
+                    <TabsContent value="requirements" className="mt-6">
+                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-bold text-neutral-900">Project Requirements</h3>
+                          {projectRequirements ? (
+                            <Badge variant="outline" className="text-xs">
+                              {projectRequirements.status}
+                            </Badge>
+                          ) : (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={handleGenerateRequirementsClick}
+                              disabled={isGeneratingRequirements}
+                            >
+                              <Hammer className="mr-2 h-4 w-4" />
+                              Generate Requirements
+                            </Button>
+                          )}
+                        </div>
+                        
+                        {isLoadingRequirements ? (
+                          <div className="text-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+                            <p>Loading project requirements...</p>
+                          </div>
+                        ) : projectRequirementsGenerating ? (
+                          <div className="text-center py-8">
+                            <div className="mb-4 mx-auto relative w-16 h-16">
+                              <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                                <Flame className="h-14 w-14 text-amber-400" />
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                                <Hammer className="h-10 w-10 text-primary" />
+                              </div>
+                            </div>
+                            <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
+                              Forging Your Requirements
+                            </h4>
+                            <p className="text-neutral-600 mb-2">
+                              Please wait while we hammer out the project requirements for your idea...
+                            </p>
+                            <div className="flex items-center justify-center mt-4">
+                              <Badge variant="outline" className="px-3 py-1">
+                                <span className="text-xs">Auto-completes after 2 minutes</span>
+                              </Badge>
+                            </div>
+                          </div>
+                        ) : projectRequirements ? (
+                          <div className="prose prose-sm max-w-none overflow-auto">
+                            {projectRequirements.html ? (
+                              <div dangerouslySetInnerHTML={{ __html: projectRequirements.html }} />
+                            ) : (
+                              <div className="whitespace-pre-line">{projectRequirements.content}</div>
+                            )}
+                          </div>
+                        ) : !isGeneratingRequirements ? (
+                          <div>
+                            <div className="text-center py-8">
+                              <div className="mx-auto w-16 h-16 mb-4 bg-amber-50 rounded-full flex items-center justify-center">
+                                <Hammer className="h-8 w-8 text-amber-600" />
+                              </div>
+                              <h4 className="text-lg font-medium mb-2">No Project Requirements Yet</h4>
+                              <p className="text-neutral-600 max-w-lg mx-auto mb-4">
+                                Generate project requirements to define the high-level goals, scope, and constraints of your project.
+                              </p>
+                            </div>
+                            
+                            {/* Notes to include for consideration */}
+                            <div className="mt-8 border-t border-neutral-200 pt-6">
+                              <h4 className="font-medium mb-2">Notes to include for consideration</h4>
+                              <p className="text-sm text-neutral-600 mb-4">
+                                Add any specific notes or requirements you'd like us to consider when generating the project requirements document.
+                              </p>
+                              <div className="space-y-4">
+                                <Textarea 
+                                  placeholder="Example: Include mobile responsive design requirements, focus on security features, etc."
+                                  className="h-24"
+                                  value={requirementsNotes}
+                                  onChange={(e) => setRequirementsNotes(e.target.value)}
+                                />
+                                <Button 
+                                  onClick={handleGenerateRequirementsClick}
+                                  disabled={isGeneratingRequirements}
+                                  className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
+                                >
+                                  <Hammer className="mr-2 h-4 w-4" /> Forge Requirements
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <div className="mx-auto w-16 h-16 mb-4 bg-amber-50 rounded-full flex items-center justify-center">
+                              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                            </div>
+                            <h4 className="text-lg font-medium mb-2">Preparing to Generate Requirements</h4>
+                            <p className="text-neutral-600 max-w-lg mx-auto">
+                              Setting up the forge to generate your project requirements...
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </TabsContent>
                     

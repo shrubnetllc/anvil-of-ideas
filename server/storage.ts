@@ -16,7 +16,7 @@ export interface IStorage {
   
   // Idea operations
   getIdeasByUser(userId: number): Promise<Idea[]>;
-  getIdeaById(id: number): Promise<Idea | undefined>;
+  getIdeaById(id: number, requestingUserId?: number): Promise<Idea | undefined>;
   createIdea(idea: InsertIdea & { userId: number }): Promise<Idea>;
   updateIdea(id: number, updates: Partial<Idea>): Promise<void>;
   updateIdeaStatus(id: number, status: ProjectStatus): Promise<void>;
@@ -25,9 +25,17 @@ export interface IStorage {
   deleteIdea(id: number): Promise<void>;
   
   // Lean Canvas operations
-  getLeanCanvasByIdeaId(ideaId: number): Promise<LeanCanvas | undefined>;
+  getLeanCanvasByIdeaId(ideaId: number, requestingUserId?: number): Promise<LeanCanvas | undefined>;
   createLeanCanvas(canvas: InsertLeanCanvas): Promise<LeanCanvas>;
   updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void>;
+  
+  // Project Document operations
+  getDocumentsByIdeaId(ideaId: number): Promise<ProjectDocument[]>;
+  getDocumentById(id: number): Promise<ProjectDocument | undefined>;
+  getDocumentByType(ideaId: number, documentType: DocumentType): Promise<ProjectDocument | undefined>;
+  createDocument(document: InsertProjectDocument): Promise<ProjectDocument>;
+  updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void>;
+  deleteDocument(id: number): Promise<void>;
   
   // App Settings operations
   getSetting(key: string): Promise<string | null>;
