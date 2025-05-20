@@ -1425,21 +1425,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const ideaId = parseInt(req.params.id);
       const userId = req.user!.id;
       
-      console.log(`Fetching Business Requirements from Supabase for idea ${ideaId}`);
+      console.log(`==== BUSINESS REQUIREMENTS API ACCESS ====`);
+      console.log(`User ${userId} is requesting BRD data for idea ${ideaId}`);
       
       // First get the document from our database to get the external ID
       const document = await storage.getDocumentByType(ideaId, "BusinessRequirements");
       
       if (!document) {
-        console.log(`No Business Requirements Document found for idea ${ideaId}`);
+        console.log(`⚠️ ERROR: No Business Requirements Document found for idea ${ideaId}`);
         return res.status(404).json({ message: "Business Requirements Document not found" });
       }
       
-      console.log(`Document found with ID ${document.id}, status ${document.status}, externalId: ${document.externalId || 'none'}`);
+      console.log(`✓ Document found with ID ${document.id}, status ${document.status}, externalId: ${document.externalId || 'none'}`);
       
       // If document is still generating, return early
       if (document.status === 'Generating') {
-        console.log(`Document is still in generating state, returning as-is`);
+        console.log(`⏳ Document is still in generating state, returning as-is`);
         return res.json({
           source: "local",
           data: document,
@@ -1449,7 +1450,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Check for external ID which is needed for Supabase lookup
       if (!document.externalId) {
-        console.log(`Document does not have external ID, cannot fetch from Supabase`);
+        console.log(`⚠️ ERROR: Document does not have external ID, cannot fetch from Supabase`);
         return res.status(400).json({ 
           message: "Business Requirements Document does not have an external ID", 
           document
@@ -1457,41 +1458,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Log that we're using this external ID to fetch from Supabase
-      console.log(`Using external ID ${document.externalId} to fetch BRD from Supabase`);
+      console.log(`🔍 Using external ID ${document.externalId} to fetch BRD from Supabase`);
       
       try {
         const { fetchBusinessRequirements } = await import('./supabase');
+        console.log(`Calling fetchBusinessRequirements with ID: ${document.externalId}, ideaId: ${ideaId}, userId: ${userId}`);
         const brdData = await fetchBusinessRequirements(document.externalId, ideaId, userId);
         
         if (!brdData) {
-          console.log(`No BRD data found in Supabase for external ID ${document.externalId}`);
+          console.log(`⚠️ ERROR: No BRD data found in Supabase for external ID ${document.externalId}`);
           return res.status(404).json({ 
             message: "Business Requirements not found in Supabase",
             document
           });
         }
         
-        console.log(`Successfully retrieved BRD data from Supabase with keys: ${Object.keys(brdData.data).join(', ')}`);
+        console.log(`✓ Successfully retrieved BRD data from Supabase with keys: ${Object.keys(brdData.data).join(', ')}`);
         
         // Check if the BRD data actually has HTML content
         if (brdData.data.html) {
-          console.log(`BRD data contains HTML content (${brdData.data.html.length} characters)`);
+          console.log(`✓ BRD data contains HTML content (${brdData.data.html.length} characters)`);
+          console.log(`HTML preview: ${brdData.data.html.substring(0, 100)}...`);
           
           // Update our local document with the HTML content from Supabase if it doesn't already have it
           if (!document.html) {
-            console.log(`Updating local document with HTML content from Supabase`);
-            await storage.updateDocument(document.id, {
-              html: brdData.data.html
-            });
+            console.log(`Updating local document ${document.id} with HTML content from Supabase`);
+            try {
+              await storage.updateDocument(document.id, {
+                html: brdData.data.html,
+                status: "Completed" // Ensure status is completed since we have the content
+              });
+              console.log(`✓ Successfully updated local document with HTML content`);
+            } catch (updateError) {
+              console.error(`⚠️ ERROR: Failed to update local document with HTML:`, updateError);
+            }
           }
         } else {
-          console.log(`No HTML content found in Supabase BRD data`);
+          console.log(`⚠️ WARNING: No HTML content found in Supabase BRD data`);
+          
+          // Check all data fields to debug
+          for (const [key, value] of Object.entries(brdData.data)) {
+            if (typeof value === 'string' && value.includes('<')) {
+              console.log(`Found potential HTML in field '${key}':`, value.substring(0, 100));
+            }
+          }
         }
         
         // Return the combined data
         res.json(brdData);
       } catch (supabaseError) {
-        console.error(`Error fetching Business Requirements from Supabase:`, supabaseError);
+        console.error(`⚠️ ERROR: Error fetching Business Requirements from Supabase:`, supabaseError);
         // Continue to return the document as is
         res.json({
           source: "local",
@@ -1500,7 +1516,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
     } catch (error) {
-      console.error(`Unexpected error in /api/supabase/business-requirements/:id endpoint:`, error);
+      console.error(`⚠️ CRITICAL ERROR in /api/supabase/business-requirements/:id endpoint:`, error);
       next(error);
     }
   });

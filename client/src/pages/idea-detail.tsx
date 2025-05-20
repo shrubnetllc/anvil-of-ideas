@@ -144,49 +144,94 @@ export default function IdeaDetail() {
                 const supabaseData = await supabaseResponse.json();
                 console.log('Retrieved business requirements from Supabase:', supabaseData);
                 
-                // Check for HTML content in various potential fields from Supabase
-                const htmlContent = 
-                  (supabaseData.data && supabaseData.data.brd_html) || 
-                  (supabaseData.data && supabaseData.data.html) || 
-                  null;
+                console.log('Supabase response data:', supabaseData);
+              
+              // The updated response format should have HTML content directly in the data.html field
+              let htmlContent = null;
+              
+              // Check for HTML content in the most likely places based on our format
+              if (supabaseData.data && supabaseData.data.html) {
+                // This is the standard format our server should return now
+                htmlContent = supabaseData.data.html;
+                console.log('Found HTML in standard html field:', htmlContent.substring(0, 100) + '...');
+              } else if (supabaseData.data && supabaseData.data.brd_html) {
+                // This is a fallback for direct database format
+                htmlContent = supabaseData.data.brd_html;
+                console.log('Found HTML in brd_html field:', htmlContent.substring(0, 100) + '...');
+              } else if (supabaseData.data) {
+                // Check ALL fields for potential HTML content as a last resort
+                console.log('Looking for HTML content in all fields of Supabase response...');
                 
-                console.log('Looking for HTML content in Supabase response...');
-                
-                if (htmlContent) {
-                  console.log('Found HTML content in Supabase response');
-                  
-                  // First update the local document with HTML content if it was empty
-                  if (!data.html) {
-                    try {
-                      await fetch(`/api/ideas/${ideaId}/documents/${data.id}`, {
-                        method: 'PATCH',
-                        headers: {
-                          'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                          html: htmlContent
-                        })
-                      });
-                      console.log('Updated local document with HTML content from Supabase');
-                    } catch (updateError) {
-                      console.error('Error updating local document with Supabase HTML:', updateError);
-                    }
+                for (const [key, value] of Object.entries(supabaseData.data)) {
+                  if (typeof value === 'string' && 
+                      (value.includes('<html') || 
+                       value.includes('<!DOCTYPE') || 
+                       value.includes('<div') || 
+                       value.includes('<p>'))) {
+                    console.log(`Found potential HTML in field '${key}'`);
+                    htmlContent = value;
+                    break;
                   }
-                  
-                  // Update the business requirements with the HTML content
-                  setBusinessRequirementsHtml(htmlContent);
-                  
-                  // Update the document in state to include the HTML
-                  setBusinessRequirements({
-                    ...data,
-                    html: htmlContent
-                  });
-                  
-                  // Also log the content for debugging
-                  console.log('HTML content preview:', htmlContent.substring(0, 200) + '...');
-                } else {
-                  console.log('No HTML content found in Supabase response');
                 }
+              }
+              
+              if (htmlContent) {
+                console.log(`Found HTML content in Supabase response (${htmlContent.length} characters)`);
+                
+                // First update the local document with HTML content if it was empty
+                if (!data.html) {
+                  try {
+                    console.log(`Updating document ${data.id} with HTML content of length ${htmlContent.length}`);
+                    const updateResponse = await fetch(`/api/ideas/${ideaId}/documents/${data.id}`, {
+                      method: 'PATCH',
+                      headers: {
+                        'Content-Type': 'application/json'
+                      },
+                      body: JSON.stringify({
+                        html: htmlContent,
+                        status: "Completed" // Also make sure to set status to completed
+                      })
+                    });
+                    
+                    if (updateResponse.ok) {
+                      console.log('Successfully updated local document with HTML content from Supabase');
+                    } else {
+                      console.error('Failed to update document:', await updateResponse.text());
+                    }
+                  } catch (updateError) {
+                    console.error('Error updating local document with Supabase HTML:', updateError);
+                  }
+                }
+                
+                // Update the business requirements with the HTML content
+                setBusinessRequirementsHtml(htmlContent);
+                
+                // Update the document in state to include the HTML
+                setBusinessRequirements({
+                  ...data,
+                  html: htmlContent,
+                  status: "Completed" // Ensure status is completed since we have content
+                });
+                
+                // Also log the content for debugging
+                console.log('HTML content preview:', htmlContent.substring(0, 200) + '...');
+                
+                // Show success message
+                toast({
+                  title: "Content Retrieved",
+                  description: "Business requirements document loaded from Supabase",
+                  variant: "default",
+                });
+              } else {
+                console.log('No HTML content found in any field of Supabase response');
+                
+                // Show warning to user
+                toast({
+                  title: "Limited Content",
+                  description: "Could not find HTML content in the Supabase response",
+                  variant: "warning",
+                });
+              }
                 
                 // If we have markdown/content from Supabase, use it
                 if (supabaseData.data && (supabaseData.data.markdown || supabaseData.data.content)) {
