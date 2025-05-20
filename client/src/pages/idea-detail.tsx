@@ -661,6 +661,131 @@ export default function IdeaDetail() {
                       </div>
                     </TabsContent>
                     
+                    {/* Business Requirements Content */}
+                    <TabsContent value="business" className="mt-6">
+                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-bold text-neutral-900">Business Requirements Document</h3>
+                          {businessRequirements ? (
+                            <Badge variant="outline" className="text-xs">
+                              {businessRequirements.status}
+                            </Badge>
+                          ) : (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={handleGenerateBusinessRequirementsClick}
+                              disabled={isGeneratingBusinessRequirements}
+                            >
+                              <Flame className="mr-2 h-4 w-4" />
+                              Generate Business Requirements
+                            </Button>
+                          )}
+                        </div>
+                        
+                        {isLoadingBusinessRequirements ? (
+                          <div className="text-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+                            <p>Loading business requirements document...</p>
+                          </div>
+                        ) : businessRequirementsGenerating ? (
+                          <div className="text-center py-8">
+                            <div className="mb-4 mx-auto relative w-16 h-16">
+                              <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                                <Flame className="h-14 w-14 text-amber-400" />
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                                <Hammer className="h-10 w-10 text-primary" />
+                              </div>
+                            </div>
+                            <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
+                              Forging Your Business Requirements
+                            </h4>
+                            <p className="text-neutral-600 mb-2">
+                              Please wait while we hammer out the business requirements for your idea...
+                            </p>
+                            <p className="text-neutral-500 text-sm italic">
+                              This process usually takes 1-2 minutes.
+                            </p>
+                          </div>
+                        ) : businessRequirements ? (
+                          <div>
+                            {businessRequirements.status === 'Completed' ? (
+                              <div>
+                                <div className="mb-6 flex justify-between items-center">
+                                  <div>
+                                    <p className="text-sm text-neutral-500">
+                                      Last updated: {formatDate(businessRequirements.updatedAt || businessRequirements.createdAt)}
+                                    </p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => {
+                                        const csvData = jsonToCSV([businessRequirements]);
+                                        downloadCSV(csvData, `business-requirements-${ideaId}.csv`);
+                                      }}
+                                    >
+                                      <Download className="mr-2 h-4 w-4" />
+                                      Export CSV
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={handleGenerateBusinessRequirementsClick}
+                                      disabled={isGeneratingBusinessRequirements}
+                                    >
+                                      <RefreshCw className="mr-2 h-4 w-4" />
+                                      Regenerate
+                                    </Button>
+                                  </div>
+                                </div>
+                                
+                                {/* Display the business requirements content */}
+                                {businessRequirements.html ? (
+                                  <div 
+                                    className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700"
+                                    dangerouslySetInnerHTML={{ __html: businessRequirements.html }}
+                                  />
+                                ) : (
+                                  <div className="whitespace-pre-wrap font-mono text-sm bg-neutral-50 p-4 rounded-md">
+                                    {businessRequirements.content}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-center py-8">
+                                <p>Business requirements document is in {businessRequirements.status.toLowerCase()} state.</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="py-8">
+                            <div className="mb-6">
+                              <p className="mb-2">Provide optional instructions for generating your business requirements document:</p>
+                              <Textarea
+                                value={businessRequirementsNotes}
+                                onChange={(e) => setBusinessRequirementsNotes(e.target.value)}
+                                placeholder="e.g., Focus on market differentiation, highlight revenue streams, include stakeholder analysis..."
+                                className="h-24"
+                              />
+                            </div>
+                            <div className="flex justify-center">
+                              <Button 
+                                onClick={handleGenerateBusinessRequirementsClick}
+                                disabled={isGeneratingBusinessRequirements}
+                                className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
+                              >
+                                <Flame className="mr-2 h-4 w-4" />
+                                {isGeneratingBusinessRequirements ? 'Generating...' : 'Generate Business Requirements'}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </TabsContent>
+                    
                     {/* Lean Canvas Content */}
                     <TabsContent value="canvas" className="mt-6">
                       {isLoadingCanvas ? (
