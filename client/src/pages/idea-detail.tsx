@@ -43,6 +43,13 @@ export default function IdeaDetail() {
   const [businessRequirementsHtml, setBusinessRequirementsHtml] = useState("");
   const [businessRequirementsContent, setBusinessRequirementsContent] = useState("");
   const [businessRequirementsNotes, setBusinessRequirementsNotes] = useState('');
+  
+  // State for lean canvas
+  const [canvasNotes, setCanvasNotes] = useState('');
+  const [isCanvasGenerated, setIsCanvasGenerated] = useState(false);
+  const [canvasGenerating, setCanvasGenerating] = useState(false);
+  const [isGeneratingCanvas, setIsGeneratingCanvas] = useState(false);
+  
   const { toast } = useToast();
   
   // State for editing mode and form
@@ -569,8 +576,9 @@ export default function IdeaDetail() {
     navigate("/");
   };
 
+  // Handle regenerating canvas
   const handleRegenerateCanvasClick = () => {
-    regenerateCanvas();
+    handleRegenerateLeanCanvasClick();
   };
   
   // Handle toggling edit mode and initializing form data
@@ -695,6 +703,23 @@ export default function IdeaDetail() {
     } else {
       handleGenerateBusinessRequirementsClick();
     }
+  };
+  
+  // Lean Canvas regeneration
+  const handleGenerateCanvasClick = () => {
+    regenerateCanvas();
+  };
+  
+  // Handle regenerating Lean Canvas - using React Query mutation from the hook
+  const handleRegenerateLeanCanvasClick = () => {
+    // Use the regeneration function from the hook
+    regenerateCanvas();
+    
+    toast({
+      title: "Canvas regeneration started",
+      description: "Your Lean Canvas is now being regenerated. This may take a few moments.",
+      variant: "default",
+    });
   };
 
   if (isLoadingIdea) {
