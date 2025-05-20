@@ -228,6 +228,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create basic auth header
       const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
       
+      // Log the payload we're about to send
+      const webhookPayload = {
+        ideaId,
+        project_id: projectId,
+        leancanvas_id: leancanvasId,
+        prd_id: prdId,
+        instructions: instructions || "Be comprehensive and detailed."
+      };
+      console.log(`Sending BRD webhook payload:`, JSON.stringify(webhookPayload, null, 2));
+      console.log(`To webhook URL: ${webhookUrl}`);
+      
       // Call the webhook asynchronously
       fetch(webhookUrl, {
         method: "POST",
@@ -235,13 +246,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Content-Type": "application/json",
           "Authorization": authHeader
         },
-        body: JSON.stringify({
-          ideaId,
-          project_id: projectId,
-          leancanvas_id: leancanvasId,
-          prd_id: prdId,
-          instructions: instructions || "Be comprehensive and detailed."
-        })
+        body: JSON.stringify(webhookPayload)
       }).then(async (response) => {
         if (!response.ok) {
           const errorText = await response.text();

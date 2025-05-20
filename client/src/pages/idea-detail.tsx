@@ -223,42 +223,61 @@ export default function IdeaDetail() {
       console.log(`Starting business requirements generation for idea: ${ideaId}, project ID: ${projectId || 'not available'}, using PRD ID: ${prdId || 'not available'}`);
       
       // Build request payload - always include numeric ideaId
-      const payload = {
+      const payload: {
+        ideaId: number;
+        projectId?: string;
+        instructions: string;
+      } = {
         ideaId: ideaId, // Always include numeric ID as primary identifier
         instructions: businessRequirementsNotes || "Provide detailed business requirements aligned with the lean canvas and project requirements."
       };
       
       // Add projectId only if it exists
       if (projectId) {
-        payload['projectId'] = projectId;
+        payload.projectId = projectId;
       }
       
       // Call to n8n webhook via our backend proxy to handle authentication
-      const response = await fetch(`/api/ideas/${ideaId}/generate-business-requirements`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to start business requirements generation: ${errorText}`);
+      let result;
+      try {
+        const response = await fetch(`/api/ideas/${ideaId}/generate-business-requirements`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to start business requirements generation: ${errorText}`);
+        }
+        
+        result = await response.json();
+        console.log('Business requirements generation started:', result);
+      } catch (error) {
+        console.error('Error generating business requirements:', error);
+        setIsGeneratingBusinessRequirements(false);
+        toast({
+          title: "Error",
+          description: "Failed to start business requirements generation. Please try again.",
+          variant: "destructive"
+        });
+        return; // Exit early
       }
-      
-      // The document should be created in the webhook endpoint
-      const result = await response.json();
-      console.log("Business requirements generation response:", result);
-      
       // Now update the UI to show the generating state
       setBusinessRequirementsGenerating(true);
       
-      // Fetch the document to get the current state
-      const docResponse = await fetch(`/api/ideas/${ideaId}/documents/BusinessRequirements`);
-      if (docResponse.ok) {
-        const docData = await docResponse.json();
-        setBusinessRequirements(docData);
+      // Get the document from the response
+      if (result && result.document) {
+        setBusinessRequirements(result.document);
+      } else {
+        // If document wasn't returned, fetch it
+        const docResponse = await fetch(`/api/ideas/${ideaId}/documents/BusinessRequirements`);
+        if (docResponse.ok) {
+          const docData = await docResponse.json();
+          setBusinessRequirements(docData);
+        }
       }
       
       // Set up polling to check document status
