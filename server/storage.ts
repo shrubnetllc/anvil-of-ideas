@@ -326,17 +326,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteIdea(id: number): Promise<void> {
-    // First delete all project documents associated with this idea
-    await db.delete(projectDocuments).where(eq(projectDocuments.ideaId, id));
-    console.log(`Deleted project documents for idea ${id}`);
-    
-    // Then delete any associated canvas
-    await db.delete(leanCanvas).where(eq(leanCanvas.ideaId, id));
-    console.log(`Deleted lean canvas for idea ${id}`);
-    
-    // Finally delete the idea itself
-    await db.delete(ideas).where(eq(ideas.id, id));
-    console.log(`Successfully deleted idea ${id}`);
+    try {
+      // First execute a raw query to delete all documents associated with this idea
+      // This ensures we bypass any potential issues with the ORM
+      await db.execute(`DELETE FROM project_documents WHERE idea_id = $1`, [id]);
+      console.log(`Deleted project documents for idea ${id} using raw SQL`);
+      
+      // Delete the lean canvas using raw SQL as well
+      await db.execute(`DELETE FROM lean_canvas WHERE idea_id = $1`, [id]);
+      console.log(`Deleted lean canvas for idea ${id} using raw SQL`);
+      
+      // Finally delete the idea itself
+      await db.execute(`DELETE FROM ideas WHERE id = $1`, [id]);
+      console.log(`Successfully deleted idea ${id} using raw SQL`);
+    } catch (error) {
+      console.error(`Error in raw SQL deletion of idea ${id}:`, error);
+      throw error;
+    }
   }
 
   // Lean Canvas operations
