@@ -540,6 +540,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Delete a specific document (for regeneration)
+  app.delete("/api/ideas/:ideaId/documents/:documentId", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.ideaId);
+      const documentId = parseInt(req.params.documentId);
+      
+      // Check if the user has permission to access this idea
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+      
+      // Get the document and verify it belongs to this idea
+      const document = await storage.getDocumentById(documentId);
+      if (!document || document.ideaId !== ideaId) {
+        return res.status(404).json({ message: "Document not found or doesn't belong to this idea" });
+      }
+      
+      await storage.deleteDocument(documentId);
+      
+      res.status(200).json({ message: "Document deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      next(error);
+    }
+  });
+  
   app.delete("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
