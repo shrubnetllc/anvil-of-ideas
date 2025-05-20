@@ -224,6 +224,76 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
   }
 }
 
+/**
+ * Fetch Business Requirements Document data from Supabase
+ * @param brdId The external ID of the BRD document in Supabase
+ * @param ideaId The ID of the idea
+ * @param requestingUserId Optional user ID for security validation
+ */
+export async function fetchBusinessRequirements(brdId: string, ideaId: number, requestingUserId?: number) {
+  try {
+    console.log(`[SECURITY] Fetching business requirements for BRD ID ${brdId} from Supabase`);
+    
+    // Security check: Verify the requesting user owns the idea
+    if (requestingUserId !== undefined) {
+      try {
+        const { pool } = await import('./db');
+        const securityCheck = await pool.query('SELECT user_id FROM ideas WHERE id = $1', [ideaId]);
+        
+        if (securityCheck.rows.length === 0) {
+          console.log(`[SECURITY] Idea ${ideaId} not found in security check`);
+          return null;
+        }
+        
+        const ownerId = parseInt(securityCheck.rows[0].user_id);
+        if (ownerId !== requestingUserId) {
+          console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
+          return null;
+        }
+        
+        console.log(`[SECURITY] Authorized: User ${requestingUserId} accessing BRD for idea ${ideaId}`);
+      } catch (securityError) {
+        console.error(`[SECURITY] Error during ownership verification:`, securityError);
+        return null;
+      }
+    }
+    
+    // Query the Supabase BRD table with the provided external ID
+    console.log(`Querying Supabase BRD table with ID: ${brdId}`);
+    
+    try {
+      const { data, error } = await supabase
+        .from('brd')
+        .select('*')
+        .eq('id', brdId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching BRD from Supabase:', error);
+        return null;
+      }
+      
+      if (!data) {
+        console.log(`No BRD found in Supabase with ID ${brdId}`);
+        return null;
+      }
+      
+      console.log(`Successfully retrieved BRD from Supabase with ID ${brdId}`);
+      
+      return {
+        source: 'supabase',
+        data
+      };
+    } catch (error) {
+      console.error('Error querying Supabase for BRD:', error);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error in fetchBusinessRequirements:', error);
+    return null;
+  }
+}
+
 // Helper function to map Supabase data to our app's format
 function mapSupabaseData(data: any, ideaId: number, projectId: string) {
   return {

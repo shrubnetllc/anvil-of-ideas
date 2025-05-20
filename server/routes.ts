@@ -1344,6 +1344,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Supabase integration routes
+  // Get Business Requirements Document from Supabase
+  app.get("/api/supabase/business-requirements/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      
+      console.log(`Fetching Business Requirements from Supabase for idea ${ideaId}`);
+      
+      // First get the document from our database to get the external ID
+      const document = await storage.getDocumentByType(ideaId, "BusinessRequirements");
+      
+      if (!document) {
+        return res.status(404).json({ message: "Business Requirements Document not found" });
+      }
+      
+      if (!document.externalId) {
+        return res.status(400).json({ 
+          message: "Business Requirements Document does not have an external ID", 
+          document
+        });
+      }
+      
+      try {
+        const { fetchBusinessRequirements } = await import('./supabase');
+        const brdData = await fetchBusinessRequirements(document.externalId, ideaId, userId);
+        
+        if (!brdData) {
+          return res.status(404).json({ 
+            message: "Business Requirements not found in Supabase",
+            document
+          });
+        }
+        
+        // Return the combined data
+        res.json(brdData);
+      } catch (supabaseError) {
+        console.error(`Error fetching Business Requirements from Supabase:`, supabaseError);
+        // Continue to return the document as is
+        res.json({
+          source: "local",
+          data: document,
+          error: "Failed to fetch from Supabase"
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+  
   app.get("/api/supabase/canvas/:id", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
