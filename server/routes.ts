@@ -484,7 +484,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.delete("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
     try {
-      const idea = await storage.getIdeaById(parseInt(req.params.id));
+      const ideaId = parseInt(req.params.id);
+      
+      // Get the idea and verify ownership
+      const idea = await storage.getIdeaById(ideaId);
       
       if (!idea) {
         return res.status(404).json({ message: "Idea not found" });
@@ -494,9 +497,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden" });
       }
       
-      await storage.deleteIdea(parseInt(req.params.id));
-      res.status(200).json({ message: "Idea deleted successfully" });
+      console.log(`Attempting to delete idea ${ideaId} requested by user ${req.user!.id}`);
+      
+      try {
+        // First manually delete all related project documents for this idea
+        const documents = await storage.getDocumentsByIdeaId(ideaId);
+        console.log(`Found ${documents.length} documents to delete for idea ${ideaId}`);
+        
+        for (const doc of documents) {
+          try {
+            console.log(`Deleting document ${doc.id} of type ${doc.documentType} for idea ${ideaId}`);
+            await storage.deleteDocument(doc.id);
+          } catch (docError) {
+            console.error(`Error deleting document ${doc.id}:`, docError);
+            // Continue with other documents even if one fails
+          }
+        }
+        
+        // Now try to delete the idea itself
+        await storage.deleteIdea(ideaId);
+        return res.status(200).json({ message: "Idea deleted successfully" });
+      } catch (deleteError) {
+        console.error(`Error during deletion process for idea ${ideaId}:`, deleteError);
+        return res.status(500).json({ 
+          message: "Failed to delete idea", 
+          error: deleteError.message || "Unknown error"
+        });
+      }
     } catch (error) {
+      console.error("Error in delete idea route:", error);
       next(error);
     }
   });
