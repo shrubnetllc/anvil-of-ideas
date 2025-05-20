@@ -855,12 +855,55 @@ export default function IdeaDetail() {
                             </div>
                           </div>
                         ) : projectRequirements ? (
-                          <div className="prose prose-sm max-w-none overflow-auto">
-                            {projectRequirements.html ? (
-                              <div dangerouslySetInnerHTML={{ __html: projectRequirements.html }} />
-                            ) : (
-                              <div className="whitespace-pre-line">{projectRequirements.content}</div>
-                            )}
+                          <div>
+                            <div className="flex items-center justify-between mb-4">
+                              <p className="text-sm text-neutral-500">
+                                Last updated: {formatDate(projectRequirements.updatedAt || projectRequirements.createdAt)}
+                              </p>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={async () => {
+                                    const success = await copyHtmlToClipboard("project-requirements-content");
+                                    if (success) {
+                                      toast({
+                                        title: "Content copied to clipboard",
+                                        description: "Project requirements copied as formatted text",
+                                        duration: 3000
+                                      });
+                                    } else {
+                                      toast({
+                                        title: "Failed to copy content",
+                                        description: "Please try again or select and copy manually",
+                                        variant: "destructive",
+                                        duration: 3000
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <Copy className="mr-2 h-4 w-4" />
+                                  Copy Content
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleGenerateRequirementsClick}
+                                  disabled={isGeneratingRequirements}
+                                >
+                                  <RefreshCw className="mr-2 h-4 w-4" />
+                                  Regenerate
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            <div id="project-requirements-content" className="prose prose-sm max-w-none overflow-auto">
+                              {projectRequirements.html ? (
+                                <div dangerouslySetInnerHTML={{ __html: projectRequirements.html }} />
+                              ) : (
+                                <div className="whitespace-pre-line">{projectRequirements.content}</div>
+                              )}
+                            </div>
                           </div>
                         ) : !isGeneratingRequirements ? (
                           <div>
@@ -1162,9 +1205,32 @@ export default function IdeaDetail() {
                                     </div>
                                     <h3 className="font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Forged Lean Canvas</h3>
                                   </div>
-
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={async () => {
+                                      const success = await copyHtmlToClipboard("lean-canvas-content");
+                                      if (success) {
+                                        toast({
+                                          title: "Content copied to clipboard",
+                                          description: "Lean Canvas copied as formatted text",
+                                          duration: 3000
+                                        });
+                                      } else {
+                                        toast({
+                                          title: "Failed to copy content",
+                                          description: "Please try again or select and copy manually",
+                                          variant: "destructive",
+                                          duration: 3000
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <Copy className="mr-2 h-4 w-4" />
+                                    Copy Content
+                                  </Button>
                                 </div>
-                                <div className="prose prose-sm max-w-none overflow-auto mb-8">
+                                <div id="lean-canvas-content" className="prose prose-sm max-w-none overflow-auto mb-8">
                                   <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
                                 </div>
                               </div>
