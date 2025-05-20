@@ -32,6 +32,13 @@ export default function IdeaDetail() {
   const [isGeneratingRequirements, setIsGeneratingRequirements] = useState(false);
   const [projectRequirementsGenerating, setProjectRequirementsGenerating] = useState(false);
   const [requirementsNotes, setRequirementsNotes] = useState('');
+  
+  // State for business requirements
+  const [businessRequirements, setBusinessRequirements] = useState<ProjectDocument | null>(null);
+  const [isLoadingBusinessRequirements, setIsLoadingBusinessRequirements] = useState(false);
+  const [isGeneratingBusinessRequirements, setIsGeneratingBusinessRequirements] = useState(false);
+  const [businessRequirementsGenerating, setBusinessRequirementsGenerating] = useState(false);
+  const [businessRequirementsNotes, setBusinessRequirementsNotes] = useState('');
   const { toast } = useToast();
   
   // State for editing mode and form
@@ -43,6 +50,7 @@ export default function IdeaDetail() {
   useEffect(() => {
     if (ideaId) {
       fetchProjectRequirements();
+      fetchBusinessRequirements();
     }
   }, [ideaId]);
 
@@ -74,6 +82,37 @@ export default function IdeaDetail() {
       });
     } finally {
       setIsLoadingRequirements(false);
+    }
+  };
+  
+  // Fetch the business requirements document
+  const fetchBusinessRequirements = async () => {
+    try {
+      setIsLoadingBusinessRequirements(true);
+      const response = await fetch(`/api/ideas/${ideaId}/documents/BusinessRequirements`);
+      if (response.ok) {
+        const data = await response.json();
+        setBusinessRequirements(data);
+        
+        // Check if business requirements are currently generating
+        if (data && data.status === 'Generating') {
+          setBusinessRequirementsGenerating(true);
+        } else {
+          setBusinessRequirementsGenerating(false);
+        }
+      } else {
+        // No business requirements exist yet
+        setBusinessRequirements(null);
+      }
+    } catch (error) {
+      console.error('Error fetching business requirements:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load business requirements",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingBusinessRequirements(false);
     }
   };
 
@@ -163,6 +202,95 @@ export default function IdeaDetail() {
       });
     } finally {
       setIsGeneratingRequirements(false);
+    }
+  };
+  
+  // Handle generating business requirements
+  const handleGenerateBusinessRequirementsClick = async () => {
+    try {
+      setIsGeneratingBusinessRequirements(true);
+      
+      // Get project_id from canvas if it exists, or use the idea ID
+      const projectId = ideaId.toString();
+      
+      console.log(`Starting business requirements generation for project ID: ${projectId}`);
+      
+      // Call to n8n webhook via our backend proxy to handle authentication
+      const response = await fetch(`/api/webhook/business-requirements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          projectId: projectId,
+          instructions: businessRequirementsNotes || "Provide detailed business requirements aligned with the lean canvas."
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to start business requirements generation: ${errorText}`);
+      }
+      
+      // The document should be created in the webhook endpoint
+      const result = await response.json();
+      console.log("Business requirements generation response:", result);
+      
+      // Now update the UI to show the generating state
+      setBusinessRequirementsGenerating(true);
+      
+      // Fetch the document to get the current state
+      const docResponse = await fetch(`/api/ideas/${ideaId}/documents/BusinessRequirements`);
+      if (docResponse.ok) {
+        const docData = await docResponse.json();
+        setBusinessRequirements(docData);
+      }
+      
+      // Set up polling to check document status
+      const pollTimer = setInterval(async () => {
+        try {
+          const checkResponse = await fetch(`/api/ideas/${ideaId}/documents/BusinessRequirements`);
+          if (checkResponse.ok) {
+            const updatedDoc = await checkResponse.json();
+            setBusinessRequirements(updatedDoc);
+            
+            if (updatedDoc.status !== 'Generating') {
+              clearInterval(pollTimer);
+              setBusinessRequirementsGenerating(false);
+              console.log("Business requirements generation completed:", updatedDoc);
+              
+              toast({
+                title: "Success",
+                description: "Business requirements document has been forged!",
+                variant: "default",
+              });
+            }
+          }
+        } catch (pollError) {
+          console.error('Error polling business requirements document status:', pollError);
+        }
+      }, 10000); // Poll every 10 seconds
+      
+      // Clear polling after 2 minutes maximum
+      setTimeout(() => {
+        clearInterval(pollTimer);
+        fetchBusinessRequirements(); // Fetch final state
+      }, 120000);
+      
+      toast({
+        title: "Success",
+        description: "Started forging business requirements document. This may take a few minutes.",
+        variant: "default",
+      });
+    } catch (error) {
+      console.error('Error generating business requirements:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate business requirements document. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingBusinessRequirements(false);
     }
   };
 
