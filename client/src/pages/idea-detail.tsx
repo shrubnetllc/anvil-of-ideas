@@ -358,7 +358,12 @@ export default function IdeaDetail() {
         }
         
         result = await response.json();
-        console.log('Business requirements generation started:', result);
+        console.log('Business requirements generation started:', JSON.stringify(result, null, 2));
+        
+        // Log the document and especially the external ID if present
+        if (result && result.document) {
+          console.log(`Received document with ID: ${result.document.id}, status: ${result.document.status}, externalId: ${result.document.externalId || 'none'}`);
+        }
       } catch (error) {
         console.error('Error generating business requirements:', error);
         setIsGeneratingBusinessRequirements(false);
