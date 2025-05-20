@@ -169,21 +169,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const existingDocument = await storage.getDocumentByType(ideaId, "BusinessRequirements");
       
       if (existingDocument) {
-        // Update existing document to generating state
+        // Update existing document to generating state with timestamp
+        const generationStartedAt = new Date();
         await storage.updateDocument(existingDocument.id, {
           status: "Generating",
+          generationStartedAt: generationStartedAt
         });
         document = await storage.getDocumentById(existingDocument.id);
-        console.log(`Updated existing business requirements document ${existingDocument.id} to Generating state`);
+        console.log(`Updated existing business requirements document ${existingDocument.id} to Generating state at ${generationStartedAt.toISOString()}`);
       } else {
-        // Create a new document in generating state
+        // Create a new document in generating state with timestamp
+        const generationStartedAt = new Date();
         document = await storage.createDocument({
           ideaId,
           documentType: "BusinessRequirements",
           title: "Business Requirements Document",
           status: "Generating",
+          generationStartedAt: generationStartedAt
         });
-        console.log(`Created new business requirements document ${document.id} in Generating state`);
+        console.log(`Created new business requirements document ${document.id} in Generating state at ${generationStartedAt.toISOString()}`);
       }
       
       // Get data from lean canvas
@@ -239,25 +243,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Sending BRD webhook payload:`, JSON.stringify(webhookPayload, null, 2));
       console.log(`To webhook URL: ${webhookUrl}`);
       
-      // Call the webhook asynchronously
-      fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": authHeader
-        },
-        body: JSON.stringify(webhookPayload)
-      }).then(async (response) => {
+      // Call the webhook and store the response with potential BRD ID
+      try {
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": authHeader
+          },
+          body: JSON.stringify(webhookPayload)
+        });
+        
         if (!response.ok) {
           const errorText = await response.text();
           console.error(`Failed to call business requirements webhook: ${response.status} ${errorText}`);
-          return;
+        } else {
+          console.log(`Successful response from business requirements webhook for idea ${ideaId}`);
+          
+          // Try to get the BRD ID from the response
+          try {
+            const responseText = await response.text();
+            console.log(`N8N BRD webhook raw response: ${responseText}`);
+            
+            let brdId = null;
+            
+            // First try as JSON
+            try {
+              const responseData = JSON.parse(responseText);
+              if (responseData.brd_id || responseData.id) {
+                brdId = responseData.brd_id || responseData.id;
+                console.log(`Found BRD ID in JSON response: ${brdId}`);
+              }
+            } catch (jsonError) {
+              // If not JSON, treat as plain text (which might be just the ID)
+              if (responseText && responseText.trim()) {
+                brdId = responseText.trim();
+                console.log(`Using raw text as BRD ID: ${brdId}`);
+              }
+            }
+            
+            // If we got a BRD ID, store it in the document
+            if (brdId && document) {
+              console.log(`Storing BRD ID ${brdId} in document ${document.id}`);
+              await storage.updateDocument(document.id, {
+                externalId: brdId
+              });
+            }
+          } catch (responseError) {
+            console.error(`Error processing webhook response: ${responseError.message}`);
+          }
         }
-        
-        console.log(`Successfully called business requirements webhook for idea ${ideaId}`);
-      }).catch(error => {
+      } catch (error) {
         console.error(`Error calling business requirements webhook: ${error.message}`);
-      });
+      }
       
       // Return immediate success with the document
       return res.status(200).json({ 

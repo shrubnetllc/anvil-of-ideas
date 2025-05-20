@@ -38,6 +38,10 @@ export default function IdeaDetail() {
   const [isLoadingBusinessRequirements, setIsLoadingBusinessRequirements] = useState(false);
   const [isGeneratingBusinessRequirements, setIsGeneratingBusinessRequirements] = useState(false);
   const [businessRequirementsGenerating, setBusinessRequirementsGenerating] = useState(false);
+  const [businessRequirementsTimedOut, setBusinessRequirementsTimedOut] = useState(false);
+  const [businessRequirementsGenerated, setBusinessRequirementsGenerated] = useState(false);
+  const [businessRequirementsHtml, setBusinessRequirementsHtml] = useState("");
+  const [businessRequirementsContent, setBusinessRequirementsContent] = useState("");
   const [businessRequirementsNotes, setBusinessRequirementsNotes] = useState('');
   const { toast } = useToast();
   
@@ -99,11 +103,39 @@ export default function IdeaDetail() {
         // Check if business requirements are currently generating
         if (data && data.status === 'Generating') {
           setBusinessRequirementsGenerating(true);
-        } else {
+          setBusinessRequirementsGenerated(false);
+          
+          // Check if generation has timed out (2 minutes or more since started)
+          if (data.generationStartedAt) {
+            const startedAt = new Date(data.generationStartedAt);
+            const now = new Date();
+            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
+            
+            if (diffMinutes >= 2) {
+              console.log(`Business requirements generation timed out (started ${diffMinutes.toFixed(1)} minutes ago)`);
+              setBusinessRequirementsTimedOut(true);
+            } else {
+              setBusinessRequirementsTimedOut(false);
+              console.log(`Business requirements generation in progress (started ${diffMinutes.toFixed(1)} minutes ago)`);
+            }
+          }
+        } else if (data && data.status === 'Completed') {
           setBusinessRequirementsGenerating(false);
+          setBusinessRequirementsGenerated(true);
+          setBusinessRequirementsTimedOut(false);
+          
+          // If document has content, use it
+          if (data.content) {
+            setBusinessRequirementsContent(data.content);
+          }
+          
+          // If document has HTML, use it
+          if (data.html) {
+            setBusinessRequirementsHtml(data.html);
+          }
           
           // If document is completed and has externalId, try to get enriched content from Supabase
-          if (data && data.status === 'Completed' && data.externalId) {
+          if (data.externalId) {
             try {
               console.log(`Fetching BRD data from Supabase with document ID: ${data.externalId}`);
               const supabaseResponse = await fetch(`/api/supabase/business-requirements/${ideaId}`);
@@ -164,10 +196,17 @@ export default function IdeaDetail() {
               console.error('Error fetching business requirements from Supabase:', supabaseError);
             }
           }
+        } else {
+          // If not generating or completed, reset states
+          setBusinessRequirementsGenerating(false);
+          setBusinessRequirementsTimedOut(false);
         }
       } else {
         // No business requirements exist yet
         setBusinessRequirements(null);
+        setBusinessRequirementsGenerating(false);
+        setBusinessRequirementsGenerated(false);
+        setBusinessRequirementsTimedOut(false);
       }
     } catch (error) {
       console.error('Error fetching business requirements:', error);
