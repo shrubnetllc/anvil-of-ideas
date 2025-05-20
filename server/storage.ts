@@ -326,11 +326,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteIdea(id: number): Promise<void> {
-    // First delete any associated canvas
-    await db.delete(leanCanvas).where(eq(leanCanvas.ideaId, id));
+    // First delete all project documents associated with this idea
+    await db.delete(projectDocuments).where(eq(projectDocuments.ideaId, id));
+    console.log(`Deleted project documents for idea ${id}`);
     
-    // Then delete the idea
+    // Then delete any associated canvas
+    await db.delete(leanCanvas).where(eq(leanCanvas.ideaId, id));
+    console.log(`Deleted lean canvas for idea ${id}`);
+    
+    // Finally delete the idea itself
     await db.delete(ideas).where(eq(ideas.id, id));
+    console.log(`Successfully deleted idea ${id}`);
   }
 
   // Lean Canvas operations
