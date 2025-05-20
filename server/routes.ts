@@ -150,6 +150,121 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Generate Business Requirements Document for an idea
+  app.post("/api/ideas/:id/generate-business-requirements", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const { instructions } = req.body;
+      
+      // Check if the user has permission to access this idea
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+      
+      console.log(`Starting business requirements generation for idea ID: ${ideaId}`);
+      
+      // Check for an existing document first
+      let document;
+      const existingDocument = await storage.getDocumentByType(ideaId, "BusinessRequirements");
+      
+      if (existingDocument) {
+        // Update existing document to generating state
+        await storage.updateDocument(existingDocument.id, {
+          status: "Generating",
+        });
+        document = await storage.getDocumentById(existingDocument.id);
+        console.log(`Updated existing business requirements document ${existingDocument.id} to Generating state`);
+      } else {
+        // Create a new document in generating state
+        document = await storage.createDocument({
+          ideaId,
+          documentType: "BusinessRequirements",
+          title: "Business Requirements Document",
+          status: "Generating",
+        });
+        console.log(`Created new business requirements document ${document.id} in Generating state`);
+      }
+      
+      // Get data from lean canvas
+      let projectId;
+      let leancanvasId;
+      try {
+        const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
+        if (canvas) {
+          projectId = canvas.projectId;
+          leancanvasId = canvas.leancanvasId;
+          console.log(`Found projectId ${projectId} and leancanvasId ${leancanvasId} for idea ${ideaId}`);
+        }
+      } catch (error) {
+        console.error('Error getting canvas data:', error);
+      }
+      
+      // Get PRD document for its externalId
+      let prdId;
+      try {
+        const prdDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
+        if (prdDocument) {
+          prdId = prdDocument.externalId;
+          console.log(`Found PRD with externalId ${prdId} for idea ${ideaId}`);
+        }
+      } catch (error) {
+        console.error('Error getting PRD document:', error);
+      }
+      
+      // Call the business requirements webhook in the background
+      const webhookUrl = process.env.N8N_BRD_WEBHOOK_URL;
+      const username = process.env.N8N_AUTH_USERNAME;
+      const password = process.env.N8N_AUTH_PASSWORD;
+      
+      if (!webhookUrl) {
+        throw new Error("N8N_BRD_WEBHOOK_URL environment variable is not set");
+      }
+      
+      if (!username || !password) {
+        throw new Error("N8N authentication credentials are not set");
+      }
+      
+      // Create basic auth header
+      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+      
+      // Call the webhook asynchronously
+      fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader
+        },
+        body: JSON.stringify({
+          ideaId,
+          project_id: projectId,
+          leancanvas_id: leancanvasId,
+          prd_id: prdId,
+          instructions: instructions || "Be comprehensive and detailed."
+        })
+      }).then(async (response) => {
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`Failed to call business requirements webhook: ${response.status} ${errorText}`);
+          return;
+        }
+        
+        console.log(`Successfully called business requirements webhook for idea ${ideaId}`);
+      }).catch(error => {
+        console.error(`Error calling business requirements webhook: ${error.message}`);
+      });
+      
+      // Return immediate success with the document
+      return res.status(200).json({ 
+        message: "Business requirements document generation started",
+        document 
+      });
+    } catch (error) {
+      console.error("Error starting business requirements generation:", error);
+      next(error);
+    }
+  });
+  
   // Document management routes
   // Create or update a document
   app.post("/api/ideas/:id/documents", isAuthenticated, async (req, res, next) => {
