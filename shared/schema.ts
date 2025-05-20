@@ -154,6 +154,8 @@ export const updateProjectDocumentSchema = createInsertSchema(projectDocuments).
   status: true,
   externalId: true,
   generationStartedAt: true,
+  version: true,
+  updatedAt: true,
 });
 
 // Export types
