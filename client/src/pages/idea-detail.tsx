@@ -89,6 +89,8 @@ export default function IdeaDetail() {
   const fetchBusinessRequirements = async () => {
     try {
       setIsLoadingBusinessRequirements(true);
+      
+      // First get the local document to check its status and get the externalId
       const response = await fetch(`/api/ideas/${ideaId}/documents/BusinessRequirements`);
       if (response.ok) {
         const data = await response.json();
@@ -99,6 +101,69 @@ export default function IdeaDetail() {
           setBusinessRequirementsGenerating(true);
         } else {
           setBusinessRequirementsGenerating(false);
+          
+          // If document is completed and has externalId, try to get enriched content from Supabase
+          if (data && data.status === 'Completed' && data.externalId) {
+            try {
+              console.log(`Fetching BRD data from Supabase with document ID: ${data.externalId}`);
+              const supabaseResponse = await fetch(`/api/supabase/business-requirements/${ideaId}`);
+              
+              if (supabaseResponse.ok) {
+                const supabaseData = await supabaseResponse.json();
+                console.log('Retrieved business requirements from Supabase:', supabaseData);
+                
+                // If we have HTML content from Supabase, use it
+                if (supabaseData.data && supabaseData.data.html) {
+                  // First update the local document with HTML content if it was empty
+                  if (!data.html) {
+                    try {
+                      await fetch(`/api/ideas/${ideaId}/documents/${data.id}`, {
+                        method: 'PATCH',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          html: supabaseData.data.html
+                        })
+                      });
+                    } catch (updateError) {
+                      console.error('Error updating local document with Supabase HTML:', updateError);
+                    }
+                  }
+                  
+                  // Update the display immediately
+                  setBusinessRequirementsHtml(supabaseData.data.html);
+                }
+                
+                // If we have markdown/content from Supabase, use it
+                if (supabaseData.data && (supabaseData.data.markdown || supabaseData.data.content)) {
+                  const content = supabaseData.data.markdown || supabaseData.data.content;
+                  
+                  // First update the local document with content if it was empty
+                  if (!data.content) {
+                    try {
+                      await fetch(`/api/ideas/${ideaId}/documents/${data.id}`, {
+                        method: 'PATCH',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          content: content
+                        })
+                      });
+                    } catch (updateError) {
+                      console.error('Error updating local document with Supabase content:', updateError);
+                    }
+                  }
+                  
+                  // Update the display immediately
+                  setBusinessRequirementsContent(content);
+                }
+              }
+            } catch (supabaseError) {
+              console.error('Error fetching business requirements from Supabase:', supabaseError);
+            }
+          }
         }
       } else {
         // No business requirements exist yet
