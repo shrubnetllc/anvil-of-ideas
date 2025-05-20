@@ -258,6 +258,32 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
       }
     }
     
+    // Check if brdId is valid
+    if (!brdId || brdId === 'null' || brdId === 'undefined') {
+      console.warn(`Invalid BRD ID provided: ${brdId}`);
+      
+      // Try to fetch the BRD ID from the document in our database
+      try {
+        const { pool } = await import('./db');
+        const docQuery = await pool.query(
+          'SELECT external_id FROM project_documents WHERE idea_id = $1 AND document_type = $2',
+          [ideaId, 'BusinessRequirements']
+        );
+        
+        if (docQuery.rows.length > 0 && docQuery.rows[0].external_id) {
+          const storedBrdId = docQuery.rows[0].external_id;
+          console.log(`Found stored BRD ID in database: ${storedBrdId}`);
+          brdId = storedBrdId;
+        } else {
+          console.warn(`No stored BRD ID found for idea ${ideaId}`);
+          return null;
+        }
+      } catch (dbError) {
+        console.error(`Error fetching stored BRD ID from database:`, dbError);
+        return null;
+      }
+    }
+    
     // Query the Supabase BRD table with the provided external ID
     console.log(`Querying Supabase BRD table with ID: ${brdId}`);
     
@@ -270,7 +296,24 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
       
       if (error) {
         console.error('Error fetching BRD from Supabase:', error);
-        return null;
+        
+        // Try alternative query approach - some BRD IDs might be stored in 'uuid' column
+        const altQuery = await supabase
+          .from('brd')
+          .select('*')
+          .eq('uuid', brdId)
+          .single();
+          
+        if (altQuery.error || !altQuery.data) {
+          console.warn(`Alternative query also failed for BRD ID ${brdId}`);
+          return null;
+        }
+        
+        console.log(`Successfully retrieved BRD from Supabase using uuid column with ID ${brdId}`);
+        return {
+          source: 'supabase',
+          data: altQuery.data
+        };
       }
       
       if (!data) {

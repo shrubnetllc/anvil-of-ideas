@@ -714,6 +714,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.updateDocument(document.id, {
             externalId: brdId
           });
+          
+          // Get the updated document to include in the response
+          const updatedDocument = await storage.getDocumentById(document.id);
+          document = updatedDocument;
+          
+          console.log(`Successfully updated document ${document.id} with external ID ${brdId}`);
+        } else {
+          console.warn(`WARNING: No BRD ID received from n8n webhook response. This may prevent accessing the document in Supabase later.`);
         }
       } catch (e) {
         console.error(`Error processing N8N response: ${e.message}`);
