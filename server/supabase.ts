@@ -287,8 +287,26 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
     // Query the Supabase BRD table with the provided external ID
     console.log(`Querying Supabase BRD table with ID: ${brdId}`);
     
+    // We'll try multiple approaches to find the BRD document in Supabase
+    // First attempt to query by 'id' column
+    let brdData = null;
+    let brdHtml = null;
+    
+    // DEBUG: Log all tables in Supabase
     try {
-      // First attempt to query by 'id' column
+      const { data: tables } = await supabase
+        .from('pg_catalog.pg_tables')
+        .select('tablename')
+        .eq('schemaname', 'public');
+      
+      console.log(`Available Supabase tables: ${tables ? tables.map(t => t.tablename).join(', ') : 'none'}`);
+    } catch (tableError) {
+      console.log('Could not retrieve table list from Supabase');
+    }
+    
+    // Approach 1: Try direct lookup by ID in the 'brd' table
+    try {
+      console.log(`Attempting to query 'brd' table with ID=${brdId}`);
       const { data, error } = await supabase
         .from('brd')
         .select('*')
@@ -296,79 +314,153 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
         .single();
       
       if (error) {
-        console.log('Error fetching BRD from Supabase by id, trying other approaches:', error);
+        console.log(`Error with direct brd table lookup: ${error.message}`);
+      } else if (data) {
+        console.log(`Found BRD in Supabase 'brd' table with ID ${brdId}`);
+        console.log(`Data keys: ${Object.keys(data).join(', ')}`);
         
-        // Try alternative query approach - some BRD IDs might be stored in 'uuid' column
-        const altQuery = await supabase
+        // Check if the record has brd_html field
+        if (data.brd_html) {
+          brdHtml = data.brd_html;
+          console.log(`Found 'brd_html' field with ${brdHtml.length} characters`);
+          
+          // Return the result with the HTML content
+          return {
+            source: 'supabase',
+            data: {
+              ...data,
+              html: brdHtml
+            }
+          };
+        } else {
+          console.log('No brd_html field found in data');
+        }
+        
+        brdData = data;
+      } else {
+        console.log(`No data found in 'brd' table with ID ${brdId}`);
+      }
+    } catch (directError) {
+      console.error(`Exception during 'brd' table lookup: ${directError}`);
+    }
+    
+    // Approach 2: Try using 'reference_id' field
+    if (!brdHtml) {
+      try {
+        console.log(`Attempting to query 'brd' table with reference_id=${brdId}`);
+        const refIdQuery = await supabase
+          .from('brd')
+          .select('*')
+          .eq('reference_id', brdId)
+          .single();
+        
+        if (refIdQuery.error) {
+          console.log(`Error with reference_id lookup: ${refIdQuery.error.message}`);
+        } else if (refIdQuery.data) {
+          console.log(`Found BRD by reference_id=${brdId}`);
+          console.log(`Data keys: ${Object.keys(refIdQuery.data).join(', ')}`);
+          
+          // Check for brd_html field
+          if (refIdQuery.data.brd_html) {
+            brdHtml = refIdQuery.data.brd_html;
+            console.log(`Found 'brd_html' field in reference_id lookup with ${brdHtml.length} characters`);
+            
+            // Return the result with HTML content
+            return {
+              source: 'supabase',
+              data: {
+                ...refIdQuery.data,
+                html: brdHtml
+              }
+            };
+          } else {
+            console.log('No brd_html field found in reference_id lookup');
+          }
+          
+          brdData = refIdQuery.data;
+        }
+      } catch (refIdError) {
+        console.error(`Exception during reference_id lookup: ${refIdError}`);
+      }
+    }
+    
+    // Approach 3: Try using 'uuid' field
+    if (!brdHtml) {
+      try {
+        console.log(`Attempting to query 'brd' table with uuid=${brdId}`);
+        const uuidQuery = await supabase
           .from('brd')
           .select('*')
           .eq('uuid', brdId)
           .single();
+        
+        if (uuidQuery.error) {
+          console.log(`Error with uuid lookup: ${uuidQuery.error.message}`);
+        } else if (uuidQuery.data) {
+          console.log(`Found BRD by uuid=${brdId}`);
+          console.log(`Data keys: ${Object.keys(uuidQuery.data).join(', ')}`);
           
-        if (altQuery.error || !altQuery.data) {
-          console.log(`Alternative query by uuid also failed for BRD ID ${brdId}, trying reference_id column`);
-          
-          // Try one more approach - some IDs might be in reference_id column
-          const refIdQuery = await supabase
-            .from('brd')
-            .select('*')
-            .eq('reference_id', brdId)
-            .single();
+          // Check for brd_html field
+          if (uuidQuery.data.brd_html) {
+            brdHtml = uuidQuery.data.brd_html;
+            console.log(`Found 'brd_html' field in uuid lookup with ${brdHtml.length} characters`);
             
-          if (refIdQuery.error || !refIdQuery.data) {
-            console.warn(`All query approaches failed for BRD ID ${brdId}`);
-            return null;
+            // Return the result with HTML content
+            return {
+              source: 'supabase',
+              data: {
+                ...uuidQuery.data,
+                html: brdHtml
+              }
+            };
+          } else {
+            console.log('No brd_html field found in uuid lookup');
           }
           
-          console.log(`Successfully retrieved BRD from Supabase using reference_id column with ID ${brdId}`);
-          
-          // Map the data to ensure proper HTML content access
-          const mappedData = {
-            ...refIdQuery.data,
-            html: refIdQuery.data.brd_html || refIdQuery.data.html || refIdQuery.data.content || ''
-          };
-          
-          return {
-            source: 'supabase',
-            data: mappedData
-          };
+          brdData = uuidQuery.data;
         }
-        
-        console.log(`Successfully retrieved BRD from Supabase using uuid column with ID ${brdId}`);
-        
-        // Map the data to ensure proper HTML content access
-        const mappedAltData = {
-          ...altQuery.data,
-          html: altQuery.data.brd_html || altQuery.data.html || altQuery.data.content || ''
-        };
+      } catch (uuidError) {
+        console.error(`Exception during uuid lookup: ${uuidError}`);
+      }
+    }
+    
+    // If we found data but no brd_html field, check for other HTML fields
+    if (brdData) {
+      console.log('Checking alternative HTML fields in found data');
+      
+      // Try all possible HTML field names
+      brdHtml = brdData.brd_html || brdData.html || brdData.content || '';
+      
+      if (brdHtml) {
+        console.log(`Found HTML content in alternative field, length: ${brdHtml.length} characters`);
         
         return {
           source: 'supabase',
-          data: mappedAltData
+          data: {
+            ...brdData,
+            html: brdHtml
+          }
         };
+      } else {
+        console.log('No HTML content found in any field');
       }
-      
-      if (!data) {
-        console.log(`No BRD found in Supabase with ID ${brdId}`);
-        return null;
-      }
-      
-      console.log(`Successfully retrieved BRD from Supabase with ID ${brdId}`);
-      
-      // Map the data to ensure proper HTML content access
-      const mappedData = {
-        ...data,
-        html: data.brd_html || data.html || data.content || ''
-      };
-      
+    }
+    
+    // If we got here, we didn't find any HTML content but did find some data
+    if (brdData) {
+      console.log(`Returning BRD data without HTML content`);
       return {
         source: 'supabase',
-        data: mappedData
+        data: {
+          ...brdData,
+          html: ''
+        }
       };
-    } catch (error) {
-      console.error('Error querying Supabase for BRD:', error);
-      return null;
     }
+    
+    // If we got here, we didn't find anything useful
+    console.warn(`No BRD data found in Supabase for ID: ${brdId}`);
+    return null;
   } catch (error) {
     console.error('Error in fetchBusinessRequirements:', error);
     return null;
