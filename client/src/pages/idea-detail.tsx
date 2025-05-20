@@ -236,12 +236,7 @@ export default function IdeaDetail() {
                 // Also log the content for debugging
                 console.log('HTML content preview:', htmlContent.substring(0, 200) + '...');
                 
-                // Show success message
-                toast({
-                  title: "Content Retrieved",
-                  description: "Business requirements document loaded from Supabase",
-                  variant: "default",
-                });
+                // No success toast needed - let's keep behavior consistent with other document types
               } else {
                 console.log('No HTML content found in any field of Supabase response');
                 

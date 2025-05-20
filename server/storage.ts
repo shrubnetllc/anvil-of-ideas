@@ -330,24 +330,24 @@ export class DatabaseStorage implements IStorage {
       console.log(`Deleting idea ${id} and related data...`);
       
       // Delete related documents using Drizzle delete operation
-      const { count: deletedDocuments } = await db.delete(projectDocuments)
+      const deletedDocuments = await db.delete(projectDocuments)
         .where(eq(projectDocuments.ideaId, id))
         .returning();
-      console.log(`Deleted ${deletedDocuments} project documents for idea ${id}`);
+      console.log(`Deleted ${deletedDocuments.length} project documents for idea ${id}`);
       
       // Delete related lean canvas using Drizzle
-      const { count: deletedCanvas } = await db.delete(leanCanvas)
+      const deletedCanvas = await db.delete(leanCanvas)
         .where(eq(leanCanvas.ideaId, id))
         .returning();
-      console.log(`Deleted ${deletedCanvas} lean canvas records for idea ${id}`);
+      console.log(`Deleted ${deletedCanvas.length} lean canvas records for idea ${id}`);
       
       // Finally delete the idea itself
-      const { count: deletedIdeas } = await db.delete(ideas)
+      const deletedIdeas = await db.delete(ideas)
         .where(eq(ideas.id, id))
         .returning();
-      console.log(`Deleted ${deletedIdeas} idea records with id ${id}`);
+      console.log(`Deleted ${deletedIdeas.length} idea records with id ${id}`);
       
-      if (deletedIdeas === 0) {
+      if (deletedIdeas.length === 0) {
         throw new Error(`No idea found with id ${id} to delete`);
       }
     } catch (error) {
