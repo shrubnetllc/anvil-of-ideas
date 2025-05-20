@@ -4,7 +4,8 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2, RefreshCw, Copy } from "lucide-react";
+import { AlertTriangle, ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2, RefreshCw, Copy, FileText } from "lucide-react";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, jsonToCSV, downloadCSV, copyHtmlToClipboard } from "@/lib/utils";
@@ -1330,56 +1331,82 @@ export default function IdeaDetail() {
                                     </div>
                                     <h3 className="font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Forged Lean Canvas</h3>
                                   </div>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={async () => {
-                                      const success = await copyHtmlToClipboard("lean-canvas-content");
-                                      if (success) {
-                                        toast({
-                                          title: "Content copied to clipboard",
-                                          description: "Lean Canvas copied as formatted text",
-                                          duration: 3000
-                                        });
-                                      } else {
-                                        toast({
-                                          title: "Failed to copy content",
-                                          description: "Please try again or select and copy manually",
-                                          variant: "destructive",
-                                          duration: 3000
-                                        });
-                                      }
-                                    }}
-                                  >
-                                    <Copy className="mr-2 h-4 w-4" />
-                                    Copy Content
-                                  </Button>
+                                  <div className="flex space-x-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={handleRegenerateCanvasClick}
+                                      disabled={isRegenerating}
+                                    >
+                                      <RotateCcw className="mr-2 h-4 w-4" />
+                                      {isRegenerating ? "Regenerating..." : "Regenerate"}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={async () => {
+                                        const success = await copyHtmlToClipboard("lean-canvas-content");
+                                        if (success) {
+                                          toast({
+                                            title: "Content copied to clipboard",
+                                            description: "Lean Canvas copied as formatted text",
+                                            duration: 3000
+                                          });
+                                        } else {
+                                          toast({
+                                            title: "Failed to copy content",
+                                            description: "Please try again or select and copy manually",
+                                            variant: "destructive",
+                                            duration: 3000
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Copy className="mr-2 h-4 w-4" />
+                                      Copy Content
+                                    </Button>
+                                  </div>
                                 </div>
                                 <div id="lean-canvas-content" className="prose prose-sm max-w-none overflow-auto mb-8">
                                   <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
                                 </div>
                                 
-                                {/* Standardized Regenerate UI matching other document types */}
-                                <div className="mt-6 border-t border-neutral-200 pt-6">
-                                  <h4 className="text-sm font-medium text-neutral-800 mb-3">Regenerate Lean Canvas</h4>
-                                  <div className="bg-neutral-50 border border-neutral-200 rounded-md p-4 mb-4">
-                                    <Label htmlFor="canvasNotes" className="text-sm font-medium text-neutral-700 mb-2 block">Additional Instructions (Optional)</Label>
-                                    <Textarea 
-                                      id="canvasNotes"
-                                      value={canvasNotes}
-                                      onChange={(e) => setCanvasNotes(e.target.value)}
-                                      placeholder="Add any specific instructions for regenerating this Lean Canvas..."
-                                      className="mb-4 min-h-[80px]"
-                                    />
-                                    <Button 
-                                      onClick={handleRegenerateCanvasClick} 
-                                      disabled={isRegenerating}
-                                      className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
-                                    >
-                                      <RotateCcw className="mr-2 h-4 w-4" />
-                                      {isRegenerating ? "Regenerating..." : "Regenerate Canvas"}
-                                    </Button>
-                                  </div>
+                                {/* Additional notes panel for regeneration - now using a drawer instead */}
+                                <div className="mt-6 flex">
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-sm text-neutral-500 inline-flex items-center"
+                                      >
+                                        <FileText className="mr-1 h-4 w-4" />
+                                        Add regeneration instructions
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[550px]">
+                                      <DialogHeader>
+                                        <DialogTitle>Add Regeneration Instructions</DialogTitle>
+                                        <DialogDescription>
+                                          Add specific instructions for regenerating your Lean Canvas. These instructions will be used when you click the Regenerate button.
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <div className="py-4">
+                                        <Textarea 
+                                          id="canvasNotes"
+                                          value={canvasNotes}
+                                          onChange={(e) => setCanvasNotes(e.target.value)}
+                                          placeholder="E.g., Focus more on the mobile app market, emphasize the subscription revenue model..."
+                                          className="min-h-[150px]"
+                                        />
+                                      </div>
+                                      <DialogFooter>
+                                        <DialogClose asChild>
+                                          <Button type="button">Save Instructions</Button>
+                                        </DialogClose>
+                                      </DialogFooter>
+                                    </DialogContent>
+                                  </Dialog>
                                 </div>
                               </div>
                             ) : (
