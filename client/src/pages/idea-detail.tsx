@@ -608,6 +608,94 @@ export default function IdeaDetail() {
     });
     setIsEditing(false);
   };
+  
+  // Delete a document to allow regeneration
+  const deleteDocument = async (documentId: number): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/ideas/${ideaId}/documents/${documentId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        return true;
+      } else {
+        console.error('Failed to delete document:', await response.text());
+        return false;
+      }
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      return false;
+    }
+  };
+  
+  // Regenerate project requirements - first delete current document, then reset to form state
+  const handleRegenerateProjectRequirementsClick = async () => {
+    if (projectRequirements && projectRequirements.id) {
+      setIsGeneratingRequirements(true);
+      
+      const deleted = await deleteDocument(projectRequirements.id);
+      if (deleted) {
+        // Reset state to show the empty form
+        setProjectRequirements(null);
+        setProjectRequirementsGenerating(false);
+        setRequirementsNotes(''); // Reset notes field
+        
+        toast({
+          title: "Ready for regeneration",
+          description: "You can now generate a new Project Requirements document",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to reset document. Please try again.",
+          variant: "destructive",
+        });
+      }
+      
+      setIsGeneratingRequirements(false);
+    } else {
+      handleGenerateRequirementsClick();
+    }
+  };
+  
+  // Regenerate business requirements - first delete current document, then reset to form state
+  const handleRegenerateBusinessRequirementsClick = async () => {
+    if (businessRequirements && businessRequirements.id) {
+      setIsGeneratingBusinessRequirements(true);
+      
+      const deleted = await deleteDocument(businessRequirements.id);
+      if (deleted) {
+        // Reset state to show the empty form
+        setBusinessRequirements(null);
+        setBusinessRequirementsGenerating(false);
+        setBusinessRequirementsTimedOut(false);
+        setBusinessRequirementsGenerated(false);
+        setBusinessRequirementsHtml("");
+        setBusinessRequirementsContent("");
+        setBusinessRequirementsNotes(''); // Reset notes field
+        
+        toast({
+          title: "Ready for regeneration",
+          description: "You can now generate a new Business Requirements document",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to reset document. Please try again.",
+          variant: "destructive",
+        });
+      }
+      
+      setIsGeneratingBusinessRequirements(false);
+    } else {
+      handleGenerateBusinessRequirementsClick();
+    }
+  };
 
   if (isLoadingIdea) {
     return (
@@ -897,7 +985,7 @@ export default function IdeaDetail() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={handleGenerateRequirementsClick}
+                                  onClick={handleRegenerateProjectRequirementsClick}
                                   disabled={isGeneratingRequirements}
                                 >
                                   <RefreshCw className="mr-2 h-4 w-4" />
