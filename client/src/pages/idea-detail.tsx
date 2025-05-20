@@ -1355,6 +1355,18 @@ export default function IdeaDetail() {
                                 <div id="lean-canvas-content" className="prose prose-sm max-w-none overflow-auto mb-8">
                                   <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
                                 </div>
+                                
+                                {/* Added Regenerate button to the Lean Canvas tab */}
+                                <div className="mt-6 flex justify-end">
+                                  <Button 
+                                    onClick={handleRegenerateCanvasClick} 
+                                    disabled={isRegenerating}
+                                    className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
+                                  >
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    {isRegenerating ? "Regenerating..." : "Regenerate Lean Canvas"}
+                                  </Button>
+                                </div>
                               </div>
                             ) : (
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
