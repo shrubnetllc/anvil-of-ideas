@@ -369,8 +369,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create basic auth header
       const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
       
-      // Get the numeric idea ID
-      const ideaId = parseInt(projectId.toString());
+      // Get the numeric idea ID - ensure we're working with a valid integer
+      let ideaId;
+      try {
+        // First check if projectId is a uuid format from Supabase
+        if (typeof projectId === 'string' && (projectId.includes('-') || !Number.isInteger(Number(projectId)))) {
+          // If it's a uuid format, we need to look up the corresponding idea
+          const { pool } = await import('./db');
+          const result = await pool.query('SELECT idea_id FROM lean_canvas WHERE project_id = $1', [projectId]);
+          
+          if (result.rows.length > 0) {
+            ideaId = result.rows[0].idea_id;
+            console.log(`Found idea_id ${ideaId} for project_id ${projectId}`);
+          } else {
+            // Fallback to the request parameters - the :id in the URL
+            ideaId = parseInt(req.body.ideaId?.toString() || '0');
+            console.log(`Using fallback ideaId ${ideaId} from request body`);
+          }
+        } else {
+          // If it's a plain number, use it directly
+          ideaId = parseInt(projectId.toString());
+        }
+        
+        // Validate that we have a legitimate ideaId
+        if (!ideaId || ideaId <= 0 || isNaN(ideaId)) {
+          return res.status(400).json({ message: "Invalid Idea ID. Could not determine the correct idea for this document." });
+        }
+        
+        console.log(`Resolved ideaId: ${ideaId} from projectId: ${projectId}`);
+      } catch (error) {
+        console.error('Error resolving idea ID:', error);
+        return res.status(400).json({ message: "Failed to resolve idea ID from project ID" });
+      }
       
       // Get the project_id and leancanvas_id from lean_canvas table
       let supabaseProjectId;
@@ -511,8 +541,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create basic auth header
       const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
       
-      // First, we need to get the Supabase project ID (UUID format)
-      const ideaId = parseInt(projectId.toString());
+      // Get the numeric idea ID - ensure we're working with a valid integer
+      let ideaId;
+      try {
+        // First check if projectId is a uuid format from Supabase
+        if (typeof projectId === 'string' && (projectId.includes('-') || !Number.isInteger(Number(projectId)))) {
+          // If it's a uuid format, we need to look up the corresponding idea
+          const { pool } = await import('./db');
+          const result = await pool.query('SELECT idea_id FROM lean_canvas WHERE project_id = $1', [projectId]);
+          
+          if (result.rows.length > 0) {
+            ideaId = result.rows[0].idea_id;
+            console.log(`Found idea_id ${ideaId} for project_id ${projectId}`);
+          } else {
+            // Fallback to the request parameters - the :id in the URL
+            ideaId = parseInt(req.body.ideaId?.toString() || '0');
+            console.log(`Using fallback ideaId ${ideaId} from request body`);
+          }
+        } else {
+          // If it's a plain number, use it directly
+          ideaId = parseInt(projectId.toString());
+        }
+        
+        // Validate that we have a legitimate ideaId
+        if (!ideaId || ideaId <= 0 || isNaN(ideaId)) {
+          return res.status(400).json({ message: "Invalid Idea ID. Could not determine the correct idea for this document." });
+        }
+        
+        console.log(`Resolved ideaId: ${ideaId} from projectId: ${projectId}`);
+      } catch (error) {
+        console.error('Error resolving idea ID:', error);
+        return res.status(400).json({ message: "Failed to resolve idea ID from project ID" });
+      }
       
       // Get the Supabase project ID from lean_canvas table
       let supabaseProjectId;

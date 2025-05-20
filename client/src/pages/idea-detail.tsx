@@ -230,6 +230,7 @@ export default function IdeaDetail() {
         },
         body: JSON.stringify({
           projectId: projectId,
+          ideaId: ideaId, // Explicitly include the ideaId
           instructions: businessRequirementsNotes || "Provide detailed business requirements aligned with the lean canvas and project requirements."
         })
       });
