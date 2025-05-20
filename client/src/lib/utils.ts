@@ -65,3 +65,62 @@ export function downloadCSV(csvContent: string, filename: string): void {
   link.click();
   document.body.removeChild(link);
 }
+
+/**
+ * Copy HTML content to clipboard
+ * @param elementId ID of the HTML element whose content should be copied
+ * @returns Promise resolving to boolean indicating success
+ */
+export async function copyHtmlToClipboard(elementId: string): Promise<boolean> {
+  try {
+    const element = document.getElementById(elementId);
+    if (!element) {
+      console.error(`Element with ID '${elementId}' not found`);
+      return false;
+    }
+
+    // Try to use the modern clipboard API with HTML
+    const htmlContent = element.innerHTML;
+    const textContent = element.textContent || '';
+
+    if (navigator.clipboard && window.ClipboardItem) {
+      // Modern approach - better HTML formatting for supported browsers
+      try {
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const textBlob = new Blob([textContent], { type: 'text/plain' });
+        
+        const data = [
+          new ClipboardItem({
+            'text/html': blob,
+            'text/plain': textBlob
+          })
+        ];
+        
+        await navigator.clipboard.write(data);
+        return true;
+      } catch (e) {
+        console.warn('HTML clipboard write failed, falling back to text', e);
+        // Fall back to text-only if the HTML approach fails
+        await navigator.clipboard.writeText(textContent);
+        return true;
+      }
+    } else if (navigator.clipboard) {
+      // Fallback to text-only clipboard API
+      await navigator.clipboard.writeText(textContent);
+      return true;
+    } else {
+      // Last resort: selection-based copying
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      const result = document.execCommand('copy');
+      selection?.removeAllRanges();
+      return result;
+    }
+  } catch (error) {
+    console.error('Failed to copy content to clipboard', error);
+    return false;
+  }
+}
