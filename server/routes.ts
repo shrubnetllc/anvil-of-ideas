@@ -427,6 +427,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Special handling for Business Requirements document with an externalId
+      if (documentType === "BusinessRequirements" && document.externalId) {
+        try {
+          console.log(`BRD Handler: Checking Business Requirements document with externalId ${document.externalId}`);
+          
+          // If the document should be completed but is missing HTML, try to fetch it
+          // Also fetch if still generating but some time has passed
+          const shouldFetchContent = 
+            (document.status === "Completed" && (!document.html || document.html.length === 0)) || 
+            (document.status === "Generating" && document.generationStartedAt && 
+             ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10));
+          
+          if (shouldFetchContent) {
+            console.log(`BRD Handler: Attempting direct Supabase lookup for BRD ID ${document.externalId}`);
+            
+            // Direct lookup using our known working method
+            const { supabase } = await import('./supabase');
+            const { data, error } = await supabase
+              .from('brd')
+              .select('*')
+              .eq('id', document.externalId)
+              .single();
+            
+            if (!error && data && data.brd_html) {
+              console.log(`BRD Handler: Found HTML content (${data.brd_html.length} chars)`);
+              
+              // Update document with the retrieved HTML
+              await storage.updateDocument(document.id, {
+                html: data.brd_html,
+                status: "Completed",
+                updatedAt: new Date()
+              });
+              
+              // Return the updated document
+              const updatedDocument = await storage.getDocumentById(document.id);
+              console.log(`BRD Handler: Returning updated document with HTML content`);
+              return res.status(200).json(updatedDocument);
+            } else {
+              console.log(error ? 
+                `BRD Handler: Supabase error: ${error.message}` : 
+                `BRD Handler: No HTML content found in Supabase data`);
+            }
+          }
+        } catch (brdError) {
+          console.error(`Error fetching Business Requirements from Supabase:`, brdError);
+          // Continue to return the document as is
+        }
+        
+        // Check if generation has timed out (2 minutes)
+        if (document.status === "Generating" && document.generationStartedAt) {
+          const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+          if (new Date(document.generationStartedAt) < twoMinutesAgo) {
+            console.log(`Business Requirements generation timed out for document ${document.id}`);
+            // Still return the document as is - client will display retry button
+          }
+        }
+      }
+      
       res.status(200).json(document);
     } catch (error) {
       console.error(`Error fetching ${req.params.type} document:`, error);
