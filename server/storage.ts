@@ -327,20 +327,31 @@ export class DatabaseStorage implements IStorage {
 
   async deleteIdea(id: number): Promise<void> {
     try {
-      // First execute a raw query to delete all documents associated with this idea
-      // This ensures we bypass any potential issues with the ORM
-      await db.execute(`DELETE FROM project_documents WHERE idea_id = $1`, [id]);
-      console.log(`Deleted project documents for idea ${id} using raw SQL`);
+      console.log(`Deleting idea ${id} and related data...`);
       
-      // Delete the lean canvas using raw SQL as well
-      await db.execute(`DELETE FROM lean_canvas WHERE idea_id = $1`, [id]);
-      console.log(`Deleted lean canvas for idea ${id} using raw SQL`);
+      // Delete related documents using Drizzle delete operation
+      const { count: deletedDocuments } = await db.delete(projectDocuments)
+        .where(eq(projectDocuments.ideaId, id))
+        .returning();
+      console.log(`Deleted ${deletedDocuments} project documents for idea ${id}`);
+      
+      // Delete related lean canvas using Drizzle
+      const { count: deletedCanvas } = await db.delete(leanCanvas)
+        .where(eq(leanCanvas.ideaId, id))
+        .returning();
+      console.log(`Deleted ${deletedCanvas} lean canvas records for idea ${id}`);
       
       // Finally delete the idea itself
-      await db.execute(`DELETE FROM ideas WHERE id = $1`, [id]);
-      console.log(`Successfully deleted idea ${id} using raw SQL`);
+      const { count: deletedIdeas } = await db.delete(ideas)
+        .where(eq(ideas.id, id))
+        .returning();
+      console.log(`Deleted ${deletedIdeas} idea records with id ${id}`);
+      
+      if (deletedIdeas === 0) {
+        throw new Error(`No idea found with id ${id} to delete`);
+      }
     } catch (error) {
-      console.error(`Error in raw SQL deletion of idea ${id}:`, error);
+      console.error(`Error deleting idea ${id}:`, error);
       throw error;
     }
   }
