@@ -621,16 +621,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`N8N BRD webhook response: ${responseText}`);
       
       try {
-        // Try to parse response as JSON
-        const responseData = JSON.parse(responseText);
-        if (responseData.external_id) {
-          // If response has external_id, store it with the document
+        // Try to parse response as JSON if possible
+        let brdId = null;
+        
+        try {
+          // First attempt as JSON
+          const responseData = JSON.parse(responseText);
+          if (responseData.external_id || responseData.brd_id) {
+            brdId = responseData.external_id || responseData.brd_id;
+            console.log(`Parsed BRD ID from JSON response: ${brdId}`);
+          }
+        } catch (jsonError) {
+          // If not JSON, try to extract ID from plain text
+          console.log(`N8N response is not valid JSON, treating as plain text: ${responseText}`);
+          // Assume response might be just the ID string
+          if (responseText && responseText.trim()) {
+            brdId = responseText.trim();
+            console.log(`Using plain text response as BRD ID: ${brdId}`);
+          }
+        }
+        
+        // If we have an ID, store it with the document
+        if (brdId) {
+          console.log(`Storing BRD ID with document: ${brdId}`);
           await storage.updateDocument(document.id, {
-            externalId: responseData.external_id
+            externalId: brdId
           });
         }
       } catch (e) {
-        console.log(`N8N response is not valid JSON: ${responseText}`);
+        console.error(`Error processing N8N response: ${e.message}`);
       }
       
       // Return success
@@ -1019,9 +1038,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { ideaId, brd_id, content, html, project_id, leancanvas_id, prd_id } = req.body;
       
       console.log(`Received business requirements with: ideaId=${ideaId}, brd_id=${brd_id}, project_id=${project_id}, leancanvas_id=${leancanvas_id}, prd_id=${prd_id}`);
+      console.log(`Content length: ${content ? content.length : 'missing'}, HTML length: ${html ? html.length : 'missing'}`);
       
-      if (!ideaId || !content) {
-        return res.status(400).json({ message: "Missing required fields: ideaId, content" });
+      if (!ideaId) {
+        return res.status(400).json({ message: "Missing required field: ideaId" });
+      }
+      
+      if (!content) {
+        console.warn("Warning: Received webhook without content");
       }
       
       // Search for a document with this brd_id as externalId
@@ -1041,26 +1065,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (existingDocument) {
         // Update existing document with the content from n8n
-        await storage.updateDocument(existingDocument.id, {
-          content,
-          html: html || null,
-          status: "Completed",
-          updatedAt: new Date(),
-          externalId: brd_id || existingDocument.externalId // Preserve the external ID if it exists
-        });
-        console.log(`Updated existing document for idea ${ideaId} with business requirements`);
+        // Use a properly typed object to avoid TypeScript errors
+        const updates: {
+          content?: string;
+          html?: string | null;
+          status: string;
+          externalId?: string;
+        } = {
+          status: "Completed"
+        };
+        
+        // Only add fields if they are provided
+        if (content) updates.content = content;
+        if (html !== undefined) updates.html = html;
+        if (brd_id) updates.externalId = brd_id;
+        
+        await storage.updateDocument(existingDocument.id, updates);
+        console.log(`Updated existing document ID ${existingDocument.id} for idea ${ideaId} with business requirements`);
+        
+        // Log the updated document for debugging
+        const updatedDoc = await storage.getDocumentById(existingDocument.id);
+        console.log(`Updated document details: ${JSON.stringify(updatedDoc)}`);
       } else {
         // Create new document
-        await storage.createDocument({
+        const newDoc: {
+          ideaId: number;
+          documentType: "BusinessRequirements";
+          title: string;
+          content?: string;
+          html?: string | null;
+          status: string;
+          externalId?: string;
+        } = {
           ideaId: parseInt(ideaId),
           documentType: "BusinessRequirements",
           title: "Business Requirements Document",
-          content,
-          html: html || null,
-          status: "Completed",
-          externalId: brd_id || null
-        });
-        console.log(`Created new document for idea ${ideaId} with business requirements`);
+          status: "Completed"
+        };
+        
+        // Only add fields if they are provided
+        if (content) newDoc.content = content;
+        if (html !== undefined) newDoc.html = html;
+        if (brd_id) newDoc.externalId = brd_id;
+        
+        const document = await storage.createDocument(newDoc);
+        console.log(`Created new document ID ${document.id} for idea ${ideaId} with business requirements`);
       }
       
       // Get the idea information to send notification
