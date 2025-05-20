@@ -1418,6 +1418,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Direct BRD viewer endpoint with HTML embedded for visualization
+  app.get("/api/debug/brd-viewer/:external_id", isAuthenticated, async (req, res) => {
+    try {
+      const externalId = req.params.external_id;
+      const { supabase } = await import('./supabase');
+      
+      console.log(`🔬 BRD VIEWER: Direct access for ID ${externalId}`);
+      
+      // Attempt direct lookup by ID, which we know works from our test
+      const { data, error } = await supabase
+        .from('brd')
+        .select('*')
+        .eq('id', externalId)
+        .single();
+      
+      if (error) {
+        console.log(`🔬 BRD VIEWER: Error fetching BRD - ${error.message}`);
+        return res.send(`
+          <html>
+            <head><title>BRD Viewer - Error</title></head>
+            <body>
+              <h1>Error Retrieving BRD</h1>
+              <p>Failed to retrieve BRD with ID: ${externalId}</p>
+              <p>Error: ${error.message}</p>
+            </body>
+          </html>
+        `);
+      }
+      
+      // Extract HTML content
+      const htmlContent = data.brd_html || data.html || '';
+      const contentLength = htmlContent.length;
+      
+      console.log(`🔬 BRD VIEWER: Found BRD content with ${contentLength} characters`);
+      
+      if (contentLength === 0) {
+        // If no HTML content found, show diagnostic info
+        return res.send(`
+          <html>
+            <head><title>BRD Viewer - No Content</title></head>
+            <body>
+              <h1>No HTML Content Found</h1>
+              <p>BRD record exists but has no HTML content.</p>
+              <h2>Available Fields:</h2>
+              <pre>${JSON.stringify(Object.keys(data), null, 2)}</pre>
+              <h2>Data Preview:</h2>
+              <pre>${JSON.stringify(data, null, 2)}</pre>
+            </body>
+          </html>
+        `);
+      }
+      
+      // Return the actual HTML content
+      console.log(`🔬 BRD VIEWER: Sending ${contentLength} characters of HTML content`);
+      return res.send(htmlContent);
+      
+    } catch (error) {
+      console.error('🔬 BRD VIEWER: Unhandled error', error);
+      return res.status(500).send(`
+        <html>
+          <head><title>BRD Viewer - Error</title></head>
+          <body>
+            <h1>Unhandled Error</h1>
+            <p>An unexpected error occurred while fetching the BRD.</p>
+            <pre>${error.message}\n${error.stack}</pre>
+          </body>
+        </html>
+      `);
+    }
+  });
+  
   // Direct debug endpoint for Supabase BRD
   app.get("/api/debug/supabase-brd/:external_id", isAuthenticated, async (req, res) => {
     try {
