@@ -152,6 +152,8 @@ export const updateProjectDocumentSchema = createInsertSchema(projectDocuments).
   content: true,
   html: true,
   status: true,
+  externalId: true,
+  generationStartedAt: true,
 });
 
 // Export types

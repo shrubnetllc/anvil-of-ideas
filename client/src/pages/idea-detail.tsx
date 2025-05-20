@@ -4,7 +4,7 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2, RefreshCw } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDate, jsonToCSV, downloadCSV } from "@/lib/utils";
@@ -826,7 +826,7 @@ export default function IdeaDetail() {
                             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
                             <p>Loading business requirements document...</p>
                           </div>
-                        ) : businessRequirementsGenerating ? (
+                        ) : businessRequirementsGenerating && !businessRequirementsTimedOut ? (
                           <div className="text-center py-8">
                             <div className="mb-4 mx-auto relative w-16 h-16">
                               <div className="absolute inset-0 flex items-center justify-center animate-pulse">
@@ -845,6 +845,47 @@ export default function IdeaDetail() {
                             <p className="text-neutral-500 text-sm italic">
                               This process usually takes 1-2 minutes.
                             </p>
+                          </div>
+                        ) : businessRequirementsTimedOut ? (
+                          <div className="border border-destructive rounded-md p-6 mb-4 bg-destructive/10">
+                            <div className="flex items-start space-x-4">
+                              <div className="mt-1">
+                                <AlertTriangle className="h-6 w-6 text-destructive" />
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="font-bold text-destructive mb-2">Generation Timed Out</h4>
+                                <p className="text-neutral-700 mb-4">
+                                  The business requirements document generation is taking longer than expected. 
+                                  This could be due to high system load or complexity of your project.
+                                </p>
+                                <div className="flex items-center space-x-3">
+                                  <Button 
+                                    onClick={handleGenerateBusinessRequirementsClick}
+                                    disabled={isGeneratingBusinessRequirements}
+                                    className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
+                                  >
+                                    {isGeneratingBusinessRequirements ? (
+                                      <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Retrying...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                        Retry Generation
+                                      </>
+                                    )}
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    onClick={fetchBusinessRequirements}
+                                  >
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    Check Status
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         ) : businessRequirements ? (
                           <div>
