@@ -707,19 +707,22 @@ export default function IdeaDetail() {
   
   // Lean Canvas regeneration
   const handleGenerateCanvasClick = () => {
-    regenerateCanvas();
+    regenerateCanvas({});
   };
   
-  // Handle regenerating Lean Canvas - using React Query mutation from the hook
+  // Handle regenerating Lean Canvas with notes - using React Query mutation from the hook
   const handleRegenerateLeanCanvasClick = () => {
-    // Use the regeneration function from the hook
-    regenerateCanvas();
+    // Pass the notes to the regeneration function if they exist
+    regenerateCanvas({ notes: canvasNotes });
     
     toast({
       title: "Canvas regeneration started",
       description: "Your Lean Canvas is now being regenerated. This may take a few moments.",
       variant: "default",
     });
+    
+    // Reset the notes field after regeneration starts
+    setCanvasNotes('');
   };
 
   if (isLoadingIdea) {
@@ -1356,16 +1359,27 @@ export default function IdeaDetail() {
                                   <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
                                 </div>
                                 
-                                {/* Added Regenerate button to the Lean Canvas tab */}
-                                <div className="mt-6 flex justify-end">
-                                  <Button 
-                                    onClick={handleRegenerateCanvasClick} 
-                                    disabled={isRegenerating}
-                                    className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
-                                  >
-                                    <RotateCcw className="mr-2 h-4 w-4" />
-                                    {isRegenerating ? "Regenerating..." : "Regenerate Lean Canvas"}
-                                  </Button>
+                                {/* Standardized Regenerate UI matching other document types */}
+                                <div className="mt-6 border-t border-neutral-200 pt-6">
+                                  <h4 className="text-sm font-medium text-neutral-800 mb-3">Regenerate Lean Canvas</h4>
+                                  <div className="bg-neutral-50 border border-neutral-200 rounded-md p-4 mb-4">
+                                    <Label htmlFor="canvasNotes" className="text-sm font-medium text-neutral-700 mb-2 block">Additional Instructions (Optional)</Label>
+                                    <Textarea 
+                                      id="canvasNotes"
+                                      value={canvasNotes}
+                                      onChange={(e) => setCanvasNotes(e.target.value)}
+                                      placeholder="Add any specific instructions for regenerating this Lean Canvas..."
+                                      className="mb-4 min-h-[80px]"
+                                    />
+                                    <Button 
+                                      onClick={handleRegenerateCanvasClick} 
+                                      disabled={isRegenerating}
+                                      className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
+                                    >
+                                      <RotateCcw className="mr-2 h-4 w-4" />
+                                      {isRegenerating ? "Regenerating..." : "Regenerate Canvas"}
+                                    </Button>
+                                  </div>
                                 </div>
                               </div>
                             ) : (

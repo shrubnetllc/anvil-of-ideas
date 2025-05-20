@@ -73,8 +73,8 @@ export function useLeanCanvas(ideaId: number) {
   });
 
   const regenerateCanvasMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/ideas/${ideaId}/generate`, {});
+    mutationFn: async (data?: { notes?: string }) => {
+      const res = await apiRequest("POST", `/api/ideas/${ideaId}/generate`, data || {});
       return res.json();
     },
     onSuccess: () => {
@@ -101,12 +101,17 @@ export function useLeanCanvas(ideaId: number) {
     [updateSectionMutation]
   );
 
+  // Creating a function wrapper to ensure parameters are passed correctly
+  const regenerateCanvas = useCallback((data?: { notes?: string }) => {
+    regenerateCanvasMutation.mutate(data);
+  }, [regenerateCanvasMutation]);
+  
   return {
     canvas,
     isLoading,
     updateSection,
     isUpdating: updateSectionMutation.isPending,
-    regenerateCanvas: regenerateCanvasMutation.mutate,
+    regenerateCanvas,
     isRegenerating: regenerateCanvasMutation.isPending,
   };
 }
