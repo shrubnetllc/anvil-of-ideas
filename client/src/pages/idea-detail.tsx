@@ -137,8 +137,9 @@ export default function IdeaDetail() {
           // If document is completed and has externalId, try to get enriched content from Supabase
           if (data.externalId) {
             try {
-              console.log(`Fetching BRD data from Supabase with document ID: ${data.externalId}`);
-              const supabaseResponse = await fetch(`/api/supabase/business-requirements/${ideaId}`);
+              console.log(`Fetching BRD data from Supabase with document ID: ${data.externalId} for idea ${ideaId}`);
+              // Pass both the ideaId and the external_id as query parameter
+              const supabaseResponse = await fetch(`/api/supabase/business-requirements/${ideaId}?external_id=${data.externalId}`);
               
               if (supabaseResponse.ok) {
                 const supabaseData = await supabaseResponse.json();

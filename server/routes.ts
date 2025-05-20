@@ -1424,11 +1424,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const ideaId = parseInt(req.params.id);
       const userId = req.user!.id;
+      // Check if external_id was explicitly provided in the query
+      const externalIdFromQuery = req.query.external_id as string;
       
       console.log(`==== BUSINESS REQUIREMENTS API ACCESS ====`);
       console.log(`User ${userId} is requesting BRD data for idea ${ideaId}`);
+      if (externalIdFromQuery) {
+        console.log(`External ID provided in query: ${externalIdFromQuery}`);
+      }
       
-      // First get the document from our database to get the external ID
+      // First get the document from our database to get the external ID if not provided
       const document = await storage.getDocumentByType(ideaId, "BusinessRequirements");
       
       if (!document) {
@@ -1448,25 +1453,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
+      // Use the external ID from the query if provided, otherwise use the one from the document
+      const externalIdToUse = externalIdFromQuery || document.externalId;
+      
       // Check for external ID which is needed for Supabase lookup
-      if (!document.externalId) {
-        console.log(`⚠️ ERROR: Document does not have external ID, cannot fetch from Supabase`);
+      if (!externalIdToUse) {
+        console.log(`⚠️ ERROR: No external ID available, cannot fetch from Supabase`);
         return res.status(400).json({ 
-          message: "Business Requirements Document does not have an external ID", 
+          message: "No external ID available to fetch Business Requirements from Supabase", 
           document
         });
       }
       
       // Log that we're using this external ID to fetch from Supabase
-      console.log(`🔍 Using external ID ${document.externalId} to fetch BRD from Supabase`);
+      console.log(`🔍 Using external ID ${externalIdToUse} to fetch BRD from Supabase`);
       
       try {
         const { fetchBusinessRequirements } = await import('./supabase');
-        console.log(`Calling fetchBusinessRequirements with ID: ${document.externalId}, ideaId: ${ideaId}, userId: ${userId}`);
-        const brdData = await fetchBusinessRequirements(document.externalId, ideaId, userId);
+        console.log(`Calling fetchBusinessRequirements with ID: ${externalIdToUse}, ideaId: ${ideaId}, userId: ${userId}`);
+        const brdData = await fetchBusinessRequirements(externalIdToUse, ideaId, userId);
         
         if (!brdData) {
-          console.log(`⚠️ ERROR: No BRD data found in Supabase for external ID ${document.externalId}`);
+          console.log(`⚠️ ERROR: No BRD data found in Supabase for external ID ${externalIdToUse}`);
           return res.status(404).json({ 
             message: "Business Requirements not found in Supabase",
             document
