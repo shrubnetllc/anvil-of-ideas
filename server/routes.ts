@@ -993,6 +993,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Webhook endpoint for n8n to send back the generated business requirements
+  // Webhook endpoint for n8n to return business requirements document generation results
   app.post("/api/webhook/business-requirements-result", async (req, res, next) => {
     // Verify n8n credentials if they are configured
     if (process.env.N8N_AUTH_USERNAME && process.env.N8N_AUTH_PASSWORD) {
