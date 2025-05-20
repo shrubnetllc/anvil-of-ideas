@@ -288,6 +288,7 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
     console.log(`Querying Supabase BRD table with ID: ${brdId}`);
     
     try {
+      // First attempt to query by 'id' column
       const { data, error } = await supabase
         .from('brd')
         .select('*')
@@ -295,7 +296,7 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
         .single();
       
       if (error) {
-        console.error('Error fetching BRD from Supabase:', error);
+        console.log('Error fetching BRD from Supabase by id, trying other approaches:', error);
         
         // Try alternative query approach - some BRD IDs might be stored in 'uuid' column
         const altQuery = await supabase
@@ -305,14 +306,45 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
           .single();
           
         if (altQuery.error || !altQuery.data) {
-          console.warn(`Alternative query also failed for BRD ID ${brdId}`);
-          return null;
+          console.log(`Alternative query by uuid also failed for BRD ID ${brdId}, trying reference_id column`);
+          
+          // Try one more approach - some IDs might be in reference_id column
+          const refIdQuery = await supabase
+            .from('brd')
+            .select('*')
+            .eq('reference_id', brdId)
+            .single();
+            
+          if (refIdQuery.error || !refIdQuery.data) {
+            console.warn(`All query approaches failed for BRD ID ${brdId}`);
+            return null;
+          }
+          
+          console.log(`Successfully retrieved BRD from Supabase using reference_id column with ID ${brdId}`);
+          
+          // Map the data to ensure proper HTML content access
+          const mappedData = {
+            ...refIdQuery.data,
+            html: refIdQuery.data.brd_html || refIdQuery.data.html || refIdQuery.data.content || ''
+          };
+          
+          return {
+            source: 'supabase',
+            data: mappedData
+          };
         }
         
         console.log(`Successfully retrieved BRD from Supabase using uuid column with ID ${brdId}`);
+        
+        // Map the data to ensure proper HTML content access
+        const mappedAltData = {
+          ...altQuery.data,
+          html: altQuery.data.brd_html || altQuery.data.html || altQuery.data.content || ''
+        };
+        
         return {
           source: 'supabase',
-          data: altQuery.data
+          data: mappedAltData
         };
       }
       
@@ -323,9 +355,15 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
       
       console.log(`Successfully retrieved BRD from Supabase with ID ${brdId}`);
       
+      // Map the data to ensure proper HTML content access
+      const mappedData = {
+        ...data,
+        html: data.brd_html || data.html || data.content || ''
+      };
+      
       return {
         source: 'supabase',
-        data
+        data: mappedData
       };
     } catch (error) {
       console.error('Error querying Supabase for BRD:', error);
