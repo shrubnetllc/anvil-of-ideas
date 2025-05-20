@@ -759,7 +759,10 @@ export default function IdeaDetail() {
                               size="sm" 
                               variant="outline" 
                               className="w-full"
-                              onClick={() => document.querySelector('[data-value="requirements"]')?.click()}
+                              onClick={() => {
+                                const element = document.querySelector('[data-value="requirements"]') as HTMLElement;
+                                element?.click();
+                              }}
                             >
                               {projectRequirements ? 'View Document' : 'Create Document'}
                             </Button>
@@ -788,7 +791,10 @@ export default function IdeaDetail() {
                               size="sm" 
                               variant="outline" 
                               className="w-full"
-                              onClick={() => document.querySelector('[data-value="business"]')?.click()}
+                              onClick={() => {
+                                const element = document.querySelector('[data-value="business"]') as HTMLElement;
+                                element?.click();
+                              }}
                             >
                               {businessRequirements ? 'View Document' : 'Create Document'}
                             </Button>
