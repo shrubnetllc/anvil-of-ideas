@@ -658,6 +658,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let supabaseProjectId;
       let leancanvasId;
       try {
+        // First try to get from local database
         const { pool } = await import('./db');
         const result = await pool.query('SELECT project_id, leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
         
@@ -667,12 +668,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`Found project_id ${supabaseProjectId} and leancanvas_id ${leancanvasId} for idea ${ideaId}`);
         } else {
           console.log(`No IDs found for idea ${ideaId} in local database`);
-          supabaseProjectId = ideaId.toString();
+          
+          // If leancanvas_id is null, try to fetch from Supabase directly
+          try {
+            // Try to get the canvas data from Supabase to find the real leancanvas_id
+            const { supabase } = await import('./supabase');
+            console.log(`Querying Supabase lean_canvas table with ideaId=${ideaId}`);
+            
+            // First try to find via Supabase by idea_id
+            let { data: canvasData } = await supabase
+              .from('lean_canvas')
+              .select('*')
+              .eq('idea_id', ideaId)
+              .single();
+            
+            if (!canvasData) {
+              // If no result, try getting the idea first to get its project_id
+              const idea = await storage.getIdeaById(ideaId);
+              if (idea) {
+                supabaseProjectId = idea.projectId;
+                console.log(`Found project_id ${supabaseProjectId} from idea ${ideaId}`);
+                
+                // Then look up the canvas using the idea's project_id
+                if (supabaseProjectId) {
+                  let { data: canvasByProject } = await supabase
+                    .from('lean_canvas')
+                    .select('*')
+                    .eq('project_id', supabaseProjectId)
+                    .single();
+                    
+                  if (canvasByProject) {
+                    canvasData = canvasByProject;
+                  }
+                }
+              }
+            }
+            
+            if (canvasData) {
+              // We have the canvas data from Supabase
+              supabaseProjectId = canvasData.project_id;
+              leancanvasId = canvasData.id; // Use the Supabase ID as leancanvas_id
+              console.log(`Found data in Supabase: project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
+            } else {
+              // Fallback to using ideaId as the project_id
+              supabaseProjectId = ideaId.toString();
+              console.log(`No canvas data found in Supabase. Using fallback project_id=${supabaseProjectId}`);
+            }
+          } catch (supabaseError) {
+            console.error('Error getting canvas from Supabase:', supabaseError);
+            supabaseProjectId = ideaId.toString();
+          }
         }
       } catch (error) {
         console.error('Error getting Supabase IDs:', error);
         supabaseProjectId = projectId.toString();
       }
+      
+      // Make sure we have valid values and not undefined
+      supabaseProjectId = supabaseProjectId || ideaId.toString();
       
       console.log(`Sending business requirements request to n8n with project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
       console.log(`Using webhook URL: ${webhookUrl}`);
