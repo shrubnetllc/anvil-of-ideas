@@ -347,10 +347,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Webhook proxy for Business Requirements
   app.post("/api/webhook/business-requirements", isAuthenticated, async (req, res, next) => {
     try {
-      const { projectId, instructions } = req.body;
+      console.log("BRD webhook received with body:", JSON.stringify(req.body, null, 2));
       
-      if (!projectId) {
-        return res.status(400).json({ message: "Project ID is required" });
+      const { projectId, instructions, ideaId: requestIdeaId } = req.body;
+      
+      if (!projectId && !requestIdeaId) {
+        return res.status(400).json({ message: "Project ID or Idea ID is required" });
+      }
+      
+      // If direct ideaId is provided, we should use that
+      if (requestIdeaId) {
+        console.log(`BRD: Direct ideaId provided in request: ${requestIdeaId}`);
       }
       
       // Use the BRD-specific webhook URL from environment variables

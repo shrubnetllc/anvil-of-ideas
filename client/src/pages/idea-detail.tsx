@@ -210,8 +210,8 @@ export default function IdeaDetail() {
     try {
       setIsGeneratingBusinessRequirements(true);
       
-      // Get project_id from canvas if it exists, or use the idea ID
-      const projectId = canvas?.projectId || ideaId.toString();
+      // Get project_id from canvas if it exists
+      const projectId = canvas?.projectId || null;
       
       // Retrieve the PRD document to get its externalId if available
       let prdId = null;
@@ -220,19 +220,26 @@ export default function IdeaDetail() {
         console.log(`Using existing PRD ID: ${prdId}`);
       }
       
-      console.log(`Starting business requirements generation for project ID: ${projectId}, using PRD ID: ${prdId}`);
+      console.log(`Starting business requirements generation for idea: ${ideaId}, project ID: ${projectId || 'not available'}, using PRD ID: ${prdId || 'not available'}`);
+      
+      // Build request payload - always include numeric ideaId
+      const payload = {
+        ideaId: ideaId, // Always include numeric ID as primary identifier
+        instructions: businessRequirementsNotes || "Provide detailed business requirements aligned with the lean canvas and project requirements."
+      };
+      
+      // Add projectId only if it exists
+      if (projectId) {
+        payload['projectId'] = projectId;
+      }
       
       // Call to n8n webhook via our backend proxy to handle authentication
-      const response = await fetch(`/api/webhook/business-requirements`, {
+      const response = await fetch(`/api/ideas/${ideaId}/generate-business-requirements`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          projectId: projectId,
-          ideaId: ideaId, // Explicitly include the ideaId
-          instructions: businessRequirementsNotes || "Provide detailed business requirements aligned with the lean canvas and project requirements."
-        })
+        body: JSON.stringify(payload)
       });
       
       if (!response.ok) {
