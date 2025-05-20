@@ -4,10 +4,10 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, RotateCcw, ExternalLinkIcon, Database, Info, Hammer, Flame, Sparkles, Download, Pencil, Save, X, Loader2, RefreshCw, Copy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatDate, jsonToCSV, downloadCSV } from "@/lib/utils";
+import { formatDate, jsonToCSV, downloadCSV, copyHtmlToClipboard } from "@/lib/utils";
 import { CanvasSection, canvasSections, Idea, DocumentType, ProjectDocument } from "@shared/schema";
 import { CanvasSectionComponent } from "@/components/canvas-section";
 import { Badge } from "@/components/ui/badge";
@@ -1013,13 +1013,26 @@ export default function IdeaDetail() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => {
-                                        const csvData = jsonToCSV([businessRequirements]);
-                                        downloadCSV(csvData, `business-requirements-${ideaId}.csv`);
+                                      onClick={async () => {
+                                        const success = await copyHtmlToClipboard("business-requirements-content");
+                                        if (success) {
+                                          toast({
+                                            title: "Content copied to clipboard",
+                                            description: "Business requirements copied as formatted text",
+                                            duration: 3000
+                                          });
+                                        } else {
+                                          toast({
+                                            title: "Failed to copy content",
+                                            description: "Please try again or select and copy manually",
+                                            variant: "destructive",
+                                            duration: 3000
+                                          });
+                                        }
                                       }}
                                     >
-                                      <Download className="mr-2 h-4 w-4" />
-                                      Export CSV
+                                      <Copy className="mr-2 h-4 w-4" />
+                                      Copy Content
                                     </Button>
                                     <Button
                                       size="sm"
