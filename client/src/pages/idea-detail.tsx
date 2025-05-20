@@ -137,15 +137,34 @@ export default function IdeaDetail() {
           // If document is completed and has externalId, try to get enriched content from Supabase
           if (data.externalId) {
             try {
-              console.log(`Fetching BRD data from Supabase with document ID: ${data.externalId} for idea ${ideaId}`);
-              // Pass both the ideaId and the external_id as query parameter
+              console.log(`🔍 Fetching BRD data from Supabase with document ID: ${data.externalId} for idea ${ideaId}`);
+              
+              // First try our direct debug endpoint to verify data is accessible
+              const directDebugUrl = `/api/debug/supabase-brd/${data.externalId}`;
+              console.log(`🔍 First trying direct debug endpoint: ${directDebugUrl}`);
+              
+              try {
+                const debugResponse = await fetch(directDebugUrl);
+                const debugData = await debugResponse.json();
+                console.log('🔍 Direct debug response:', debugData);
+                
+                if (debugResponse.ok && debugData.has_html) {
+                  console.log(`🔍 Debug endpoint confirms HTML content exists with length: ${debugData.html_length}`);
+                } else {
+                  console.warn('🔍 Debug endpoint could not find HTML content');
+                }
+              } catch (debugError) {
+                console.error('🔍 Error using debug endpoint:', debugError);
+              }
+              
+              // Now try the regular endpoint
+              console.log(`🔍 Now trying standard endpoint...`);
               const supabaseResponse = await fetch(`/api/supabase/business-requirements/${ideaId}?external_id=${data.externalId}`);
+              console.log(`🔍 Response status:`, supabaseResponse.status);
               
               if (supabaseResponse.ok) {
                 const supabaseData = await supabaseResponse.json();
-                console.log('Retrieved business requirements from Supabase:', supabaseData);
-                
-                console.log('Supabase response data:', supabaseData);
+                console.log('🔍 Full Supabase response:', supabaseData);
               
               // The updated response format should have HTML content directly in the data.html field
               let htmlContent = null;
