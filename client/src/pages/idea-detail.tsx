@@ -392,9 +392,24 @@ export default function IdeaDetail() {
             const updatedDoc = await checkResponse.json();
             setBusinessRequirements(updatedDoc);
             
+            // Check for timeout during polling
+            if (updatedDoc.generationStartedAt) {
+              const startTime = new Date(updatedDoc.generationStartedAt);
+              const now = new Date();
+              const diffMinutes = (now.getTime() - startTime.getTime()) / (1000 * 60);
+              
+              console.log(`BRD generation running for ${diffMinutes.toFixed(1)} minutes`);
+              
+              if (diffMinutes >= 2) {
+                console.log('BRD generation timed out - showing retry button');
+                setBusinessRequirementsTimedOut(true);
+              }
+            }
+            
             if (updatedDoc.status !== 'Generating') {
               clearInterval(pollTimer);
               setBusinessRequirementsGenerating(false);
+              setBusinessRequirementsTimedOut(false);
               console.log("Business requirements generation completed:", updatedDoc);
               
               toast({
@@ -409,10 +424,21 @@ export default function IdeaDetail() {
         }
       }, 10000); // Poll every 10 seconds
       
+      // Check for timeout sooner (after 30 seconds)
+      const timeoutCheck = setTimeout(() => {
+        fetchBusinessRequirements(); // This will check the status and detect timeout if needed
+      }, 30000);
+      
       // Clear polling after 2 minutes maximum
-      setTimeout(() => {
+      const maxTimeout = setTimeout(() => {
         clearInterval(pollTimer);
+        clearTimeout(timeoutCheck);
         fetchBusinessRequirements(); // Fetch final state
+        
+        // Explicitly check for timeout
+        if (businessRequirementsGenerating) {
+          setBusinessRequirementsTimedOut(true);
+        }
       }, 120000);
       
       toast({
