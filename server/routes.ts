@@ -715,18 +715,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Call the n8n webhook with the payload
+      // Ensure we use the exact payload structure expected by the API
+      const payload = {
+        leancanvas_id: leancanvasId,
+        prd_id: prdId,
+        project_id: supabaseProjectId,
+        instructions: instructions || "Be comprehensive and detailed."
+      };
+      
+      console.log(`Sending BRD webhook with payload:`, payload);
+      
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": authHeader
         },
-        body: JSON.stringify({
-          project_id: supabaseProjectId,
-          leancanvas_id: leancanvasId,
-          prd_id: prdId,
-          instructions: instructions || "Be comprehensive and detailed."
-        })
+        body: JSON.stringify(payload)
       });
       
       if (!response.ok) {
