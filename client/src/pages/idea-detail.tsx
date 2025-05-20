@@ -1149,10 +1149,7 @@ export default function IdeaDetail() {
                                     </div>
                                     <h3 className="font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Forged Lean Canvas</h3>
                                   </div>
-                                  <Badge variant="outline" className="flex items-center">
-                                    <Database className="h-3 w-3 mr-1 text-primary" />
-                                    <span className="text-xs">Supabase</span>
-                                  </Badge>
+
                                 </div>
                                 <div className="prose prose-sm max-w-none overflow-auto mb-8">
                                   <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
