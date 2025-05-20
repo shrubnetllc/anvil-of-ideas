@@ -244,7 +244,7 @@ export default function IdeaDetail() {
                 toast({
                   title: "Limited Content",
                   description: "Could not find HTML content in the Supabase response",
-                  variant: "warning",
+                  variant: "default",
                 });
               }
                 
@@ -727,7 +727,10 @@ export default function IdeaDetail() {
                               size="sm" 
                               variant="outline" 
                               className="w-full"
-                              onClick={() => document.querySelector('[data-value="canvas"]')?.click()}
+                              onClick={() => {
+                                const element = document.querySelector('[data-value="canvas"]') as HTMLElement;
+                                element?.click();
+                              }}
                             >
                               {canvas ? "View Canvas" : "Create Canvas"}
                             </Button>
