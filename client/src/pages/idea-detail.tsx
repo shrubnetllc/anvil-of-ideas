@@ -1830,16 +1830,7 @@ export default function IdeaDetail() {
                             </div>
                           </div>
                           
-                          <div className="mt-8">
-                            <Button 
-                              className="flex items-center justify-center" 
-                              onClick={handleRegenerateCanvasClick}
-                              disabled={isRegenerating || idea.status === 'Generating'}
-                            >
-                              <RotateCcw className="mr-2 h-5 w-5" />
-                              Regenerate Canvas
-                            </Button>
-                          </div>
+                          {/* Removed redundant regenerate button from details tab */}
                         </div>
                     </TabsContent>
                     
