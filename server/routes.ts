@@ -420,6 +420,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Created new document ${document.id} for business requirements`);
       }
       
+      // Get prd_id if available from documents
+      let prdId = null;
+      try {
+        const prdDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
+        if (prdDocument) {
+          prdId = prdDocument.externalId;
+          console.log(`Found existing PRD document with external ID: ${prdId}`);
+        }
+      } catch (error) {
+        console.error('Error getting PRD document:', error);
+      }
+      
       // Call the n8n webhook with the payload
       const response = await fetch(webhookUrl, {
         method: "POST",
@@ -430,6 +442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         body: JSON.stringify({
           project_id: supabaseProjectId,
           leancanvas_id: leancanvasId,
+          prd_id: prdId,
           instructions: instructions || "Be comprehensive and detailed."
         })
       });
@@ -815,7 +828,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Received business requirements data from n8n:", JSON.stringify(req.body, null, 2));
       
       // Extract data from the webhook payload
-      const { ideaId, brd_id, content, html } = req.body;
+      const { ideaId, brd_id, content, html, project_id, leancanvas_id, prd_id } = req.body;
+      
+      console.log(`Received business requirements with: ideaId=${ideaId}, brd_id=${brd_id}, project_id=${project_id}, leancanvas_id=${leancanvas_id}, prd_id=${prd_id}`);
       
       if (!ideaId || !content) {
         return res.status(400).json({ message: "Missing required fields: ideaId, content" });

@@ -211,9 +211,16 @@ export default function IdeaDetail() {
       setIsGeneratingBusinessRequirements(true);
       
       // Get project_id from canvas if it exists, or use the idea ID
-      const projectId = ideaId.toString();
+      const projectId = canvas?.projectId || ideaId.toString();
       
-      console.log(`Starting business requirements generation for project ID: ${projectId}`);
+      // Retrieve the PRD document to get its externalId if available
+      let prdId = null;
+      if (projectRequirements?.externalId) {
+        prdId = projectRequirements.externalId;
+        console.log(`Using existing PRD ID: ${prdId}`);
+      }
+      
+      console.log(`Starting business requirements generation for project ID: ${projectId}, using PRD ID: ${prdId}`);
       
       // Call to n8n webhook via our backend proxy to handle authentication
       const response = await fetch(`/api/webhook/business-requirements`, {
@@ -223,7 +230,7 @@ export default function IdeaDetail() {
         },
         body: JSON.stringify({
           projectId: projectId,
-          instructions: businessRequirementsNotes || "Provide detailed business requirements aligned with the lean canvas."
+          instructions: businessRequirementsNotes || "Provide detailed business requirements aligned with the lean canvas and project requirements."
         })
       });
       
