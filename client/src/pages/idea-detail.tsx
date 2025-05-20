@@ -944,7 +944,7 @@ export default function IdeaDetail() {
                               <Button 
                                 variant="outline" 
                                 size="sm" 
-                                onClick={handleGenerateRequirementsClick}
+                                onClick={handleRegenerateProjectRequirementsClick}
                                 className="flex items-center text-xs h-7"
                               >
                                 <RefreshCw className="h-3 w-3 mr-1" /> Retry
@@ -1177,7 +1177,7 @@ export default function IdeaDetail() {
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={handleGenerateBusinessRequirementsClick}
+                                      onClick={handleRegenerateBusinessRequirementsClick}
                                       disabled={isGeneratingBusinessRequirements}
                                     >
                                       <RefreshCw className="mr-2 h-4 w-4" />
