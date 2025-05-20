@@ -388,7 +388,17 @@ export default function IdeaDetail() {
                           <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-2">
                               <h3 className="font-semibold">Business Requirements</h3>
-                              <Badge variant="outline">Not Created</Badge>
+                              {businessRequirements ? (
+                                <Badge 
+                                  variant={businessRequirements.status === 'Completed' ? 'default' : 'outline'}
+                                  className={businessRequirements.status === 'Completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 
+                                            businessRequirements.status === 'Generating' ? 'bg-amber-100 text-amber-800 hover:bg-amber-100' : ''}
+                                >
+                                  {businessRequirements.status}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">Not Created</Badge>
+                              )}
                             </div>
                             <p className="text-sm text-neutral-600 mb-3">
                               Detailed business requirements specification
@@ -399,7 +409,7 @@ export default function IdeaDetail() {
                               className="w-full"
                               onClick={() => document.querySelector('[data-value="business"]')?.click()}
                             >
-                              Create Document
+                              {businessRequirements ? 'View Document' : 'Create Document'}
                             </Button>
                           </div>
                           

@@ -344,6 +344,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Canvas generation route
+  // Webhook proxy for Business Requirements
+  app.post("/api/webhook/business-requirements", isAuthenticated, async (req, res, next) => {
+    try {
+      const { projectId, instructions } = req.body;
+      
+      if (!projectId) {
+        return res.status(400).json({ message: "Project ID is required" });
+      }
+      
+      // Use the BRD-specific webhook URL from environment variables
+      const webhookUrl = process.env.N8N_BRD_WEBHOOK_URL;
+      const username = process.env.N8N_AUTH_USERNAME;
+      const password = process.env.N8N_AUTH_PASSWORD;
+      
+      if (!webhookUrl) {
+        return res.status(500).json({ message: "N8N Business Requirements webhook URL not configured" });
+      }
+      
+      if (!username || !password) {
+        return res.status(500).json({ message: "N8N authentication credentials not configured" });
+      }
+      
+      // Create basic auth header
+      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+      
+      // Get the numeric idea ID
+      const ideaId = parseInt(projectId.toString());
+      
+      // Get the project_id and leancanvas_id from lean_canvas table
+      let supabaseProjectId;
+      let leancanvasId;
+      try {
+        const { pool } = await import('./db');
+        const result = await pool.query('SELECT project_id, leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        
+        if (result.rows.length > 0) {
+          supabaseProjectId = result.rows[0].project_id;
+          leancanvasId = result.rows[0].leancanvas_id;
+          console.log(`Found project_id ${supabaseProjectId} and leancanvas_id ${leancanvasId} for idea ${ideaId}`);
+        } else {
+          console.log(`No IDs found for idea ${ideaId} in local database`);
+          supabaseProjectId = ideaId.toString();
+        }
+      } catch (error) {
+        console.error('Error getting Supabase IDs:', error);
+        supabaseProjectId = projectId.toString();
+      }
+      
+      console.log(`Sending business requirements request to n8n with project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
+      console.log(`Using webhook URL: ${webhookUrl}`);
+      console.log(`With instructions: ${instructions || "No specific instructions"}`);
+      
+      // Create a document record before calling N8N
+      let document;
+      const existingDocument = await storage.getDocumentByType(ideaId, "BusinessRequirements");
+      
+      if (existingDocument) {
+        // Update existing document
+        await storage.updateDocument(existingDocument.id, {
+          status: "Generating",
+          generationStartedAt: new Date()
+        });
+        document = await storage.getDocumentById(existingDocument.id);
+        console.log(`Updated existing document ${existingDocument.id} for business requirements`);
+      } else {
+        // Create a new document
+        document = await storage.createDocument({
+          ideaId,
+          documentType: "BusinessRequirements",
+          title: "Business Requirements Document",
+          status: "Generating",
+          generationStartedAt: new Date()
+        });
+        console.log(`Created new document ${document.id} for business requirements`);
+      }
+      
+      // Call the n8n webhook with the payload
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader
+        },
+        body: JSON.stringify({
+          project_id: supabaseProjectId,
+          leancanvas_id: leancanvasId,
+          instructions: instructions || "Be comprehensive and detailed."
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to call business requirements webhook: ${response.status} ${errorText}`);
+        
+        res.status(200).json({ 
+          message: "Business requirements document created, but webhook failed. Document will remain in Generating state until timeout.",
+          document,
+          webhookError: errorText
+        });
+        return;
+      }
+      
+      // Get webhook response
+      const responseText = await response.text();
+      console.log(`N8N BRD webhook response: ${responseText}`);
+      
+      try {
+        // Try to parse response as JSON
+        const responseData = JSON.parse(responseText);
+        if (responseData.external_id) {
+          // If response has external_id, store it with the document
+          await storage.updateDocument(document.id, {
+            externalId: responseData.external_id
+          });
+        }
+      } catch (e) {
+        console.log(`N8N response is not valid JSON: ${responseText}`);
+      }
+      
+      // Return success
+      res.status(200).json({ 
+        message: "Business requirements document generation started",
+        document 
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   // Webhook proxy for Project Requirements
   app.post("/api/webhook/requirements", isAuthenticated, async (req, res, next) => {
     try {
@@ -663,6 +792,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Webhook endpoint for n8n to send back the generated business requirements
+  app.post("/api/webhook/business-requirements-result", async (req, res, next) => {
+    // Verify n8n credentials if they are configured
+    if (process.env.N8N_AUTH_USERNAME && process.env.N8N_AUTH_PASSWORD) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Basic ')) {
+        return res.status(401).json({ message: "Unauthorized - Missing credentials" });
+      }
+      
+      // Decode and verify the credentials
+      const base64Credentials = authHeader.split(' ')[1];
+      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+      const [username, password] = credentials.split(':');
+      
+      if (username !== process.env.N8N_AUTH_USERNAME || password !== process.env.N8N_AUTH_PASSWORD) {
+        return res.status(401).json({ message: "Unauthorized - Invalid credentials" });
+      }
+    }
+    
+    try {
+      console.log("Received business requirements data from n8n:", JSON.stringify(req.body, null, 2));
+      
+      // Extract data from the webhook payload
+      const { ideaId, brd_id, content, html } = req.body;
+      
+      if (!ideaId || !content) {
+        return res.status(400).json({ message: "Missing required fields: ideaId, content" });
+      }
+      
+      // Search for a document with this brd_id as externalId
+      // If not found, try to find by ideaId and documentType
+      let existingDocument = null;
+      
+      if (brd_id) {
+        const documents = await storage.getDocumentsByIdeaId(parseInt(ideaId));
+        existingDocument = documents.find(doc => 
+          doc.documentType === "BusinessRequirements" && doc.externalId === brd_id
+        );
+      }
+      
+      if (!existingDocument) {
+        existingDocument = await storage.getDocumentByType(parseInt(ideaId), "BusinessRequirements");
+      }
+      
+      if (existingDocument) {
+        // Update existing document with the content from n8n
+        await storage.updateDocument(existingDocument.id, {
+          content,
+          html: html || null,
+          status: "Completed",
+          updatedAt: new Date(),
+          externalId: brd_id || existingDocument.externalId // Preserve the external ID if it exists
+        });
+        console.log(`Updated existing document for idea ${ideaId} with business requirements`);
+      } else {
+        // Create new document
+        await storage.createDocument({
+          ideaId: parseInt(ideaId),
+          documentType: "BusinessRequirements",
+          title: "Business Requirements Document",
+          content,
+          html: html || null,
+          status: "Completed",
+          externalId: brd_id || null
+        });
+        console.log(`Created new document for idea ${ideaId} with business requirements`);
+      }
+      
+      // Get the idea information to send notification
+      try {
+        const idea = await storage.getIdeaById(parseInt(ideaId));
+        if (idea && idea.founderEmail) {
+          // Send email notification that the requirements are generated
+          const title = idea.title || idea.idea.substring(0, 30) + '...';
+          await emailService.sendCanvasGeneratedEmail(idea.founderEmail, idea.founderName || 'User', title);
+          console.log(`Sent business requirements generation notification email to ${idea.founderEmail}`);
+        }
+      } catch (emailError) {
+        console.error('Failed to send business requirements generation notification:', emailError);
+        // Continue even if email sending fails
+      }
+      
+      res.status(200).json({ message: "Business requirements document updated successfully" });
+    } catch (error) {
+      console.error("Error processing business requirements webhook:", error);
+      next(error);
+    }
+  });
+  
   // Webhook endpoint for n8n to send back the generated requirements
   app.post("/api/webhook/requirements-result", async (req, res, next) => {
     // Verify n8n credentials if they are configured
