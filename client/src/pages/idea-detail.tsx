@@ -144,8 +144,17 @@ export default function IdeaDetail() {
                 const supabaseData = await supabaseResponse.json();
                 console.log('Retrieved business requirements from Supabase:', supabaseData);
                 
-                // If we have HTML content from Supabase, use it
-                if (supabaseData.data && supabaseData.data.html) {
+                // Check for HTML content in various potential fields from Supabase
+                const htmlContent = 
+                  (supabaseData.data && supabaseData.data.brd_html) || 
+                  (supabaseData.data && supabaseData.data.html) || 
+                  null;
+                
+                console.log('Looking for HTML content in Supabase response...');
+                
+                if (htmlContent) {
+                  console.log('Found HTML content in Supabase response');
+                  
                   // First update the local document with HTML content if it was empty
                   if (!data.html) {
                     try {
@@ -155,16 +164,28 @@ export default function IdeaDetail() {
                           'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                          html: supabaseData.data.html
+                          html: htmlContent
                         })
                       });
+                      console.log('Updated local document with HTML content from Supabase');
                     } catch (updateError) {
                       console.error('Error updating local document with Supabase HTML:', updateError);
                     }
                   }
                   
-                  // Update the display immediately
-                  setBusinessRequirementsHtml(supabaseData.data.html);
+                  // Update the business requirements with the HTML content
+                  setBusinessRequirementsHtml(htmlContent);
+                  
+                  // Update the document in state to include the HTML
+                  setBusinessRequirements({
+                    ...data,
+                    html: htmlContent
+                  });
+                  
+                  // Also log the content for debugging
+                  console.log('HTML content preview:', htmlContent.substring(0, 200) + '...');
+                } else {
+                  console.log('No HTML content found in Supabase response');
                 }
                 
                 // If we have markdown/content from Supabase, use it
@@ -953,16 +974,22 @@ export default function IdeaDetail() {
                                 </div>
                                 
                                 {/* Display the business requirements content */}
-                                {businessRequirements.html ? (
-                                  <div 
-                                    className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700"
-                                    dangerouslySetInnerHTML={{ __html: businessRequirements.html }}
-                                  />
-                                ) : (
-                                  <div className="whitespace-pre-wrap font-mono text-sm bg-neutral-50 p-4 rounded-md">
-                                    {businessRequirements.content}
-                                  </div>
-                                )}
+                                <div id="business-requirements-content" className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700">
+                                  {/* We'll try to retrieve business requirements HTML content from Supabase */}
+                                  {businessRequirements.html ? (
+                                    <div dangerouslySetInnerHTML={{ __html: businessRequirements.html }} />
+                                  ) : businessRequirements.content ? (
+                                    <div className="whitespace-pre-wrap font-mono text-sm bg-neutral-50 p-4 rounded-md">
+                                      {businessRequirements.content}
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 text-center">
+                                      <p className="text-neutral-600">
+                                        Business requirements content is being processed. Check status to refresh.
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             ) : (
                               <div className="text-center py-8">
