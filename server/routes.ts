@@ -288,14 +288,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       try {
         const responseJson = JSON.parse(responseText);
+        // Look for various possible ID fields in the response
         if (responseJson.id) {
           functionalId = responseJson.id;
-          console.log(`Parsed functional ID from JSON response: ${functionalId}`);
+          console.log(`Parsed functional ID from JSON response 'id' field: ${functionalId}`);
+        } else if (responseJson.functional_id) {
+          functionalId = responseJson.functional_id;
+          console.log(`Parsed functional ID from JSON response 'functional_id' field: ${functionalId}`);
+        } else if (responseJson.functionalId) {
+          functionalId = responseJson.functionalId;
+          console.log(`Parsed functional ID from JSON response 'functionalId' field: ${functionalId}`);
+        } else if (responseJson.functional_requirements_id) {
+          functionalId = responseJson.functional_requirements_id;
+          console.log(`Parsed functional ID from JSON response 'functional_requirements_id' field: ${functionalId}`);
+        } else {
+          // Log the full response to help debug
+          console.log('Full webhook response JSON:', responseJson);
+          
+          // Try to find any field that might contain an ID (containing 'id' in the key name)
+          const possibleIdFields = Object.keys(responseJson).filter(key => 
+            key.toLowerCase().includes('id') && typeof responseJson[key] === 'string'
+          );
+          
+          if (possibleIdFields.length > 0) {
+            functionalId = responseJson[possibleIdFields[0]];
+            console.log(`Using field '${possibleIdFields[0]}' as functionalId: ${functionalId}`);
+          }
         }
       } catch (jsonError) {
-        // If not JSON, treat as plain text
-        functionalId = responseText.trim();
-        console.log(`Using plain text response as functional ID: ${functionalId}`);
+        console.error('Error parsing webhook response JSON:', jsonError);
+        // If not JSON, treat as plain text if it looks like a UUID
+        const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+        const match = responseText.match(uuidRegex);
+        
+        if (match) {
+          functionalId = match[0];
+          console.log(`Extracted UUID from text response: ${functionalId}`);
+        } else if (responseText.trim().length < 100) {  // Only use as ID if it's reasonably short
+          functionalId = responseText.trim();
+          console.log(`Using plain text response as functional ID: ${functionalId}`);
+        } else {
+          console.log('Response text too long to be an ID, not using as external ID');
+        }
       }
       
       // Step 6: Store the external ID with the document
