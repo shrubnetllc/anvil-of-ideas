@@ -83,6 +83,45 @@ export default function IdeaDetail() {
       fetchFunctionalRequirements();
     }
   }, [ideaId]);
+  
+  // Auto-check with Supabase when tabs change
+  useEffect(() => {
+    if (activeTab === "functionalRequirements" && functionalRequirements?.externalId) {
+      console.log('Functional Requirements tab selected - automatically checking status with Supabase');
+      
+      // Auto-check with Supabase first
+      fetch(`/api/supabase/functional-requirements/${ideaId}`)
+        .then(() => {
+          console.log('Successfully checked with Supabase for latest functional requirements data');
+          // Wait a moment for server processing
+          return new Promise(resolve => setTimeout(resolve, 500));
+        })
+        .then(() => {
+          // Then fetch the updated document from our local DB
+          return fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
+        })
+        .then(response => {
+          if (response.ok) return response.json();
+          throw new Error('Failed to fetch updated document');
+        })
+        .then(updatedDocument => {
+          console.log('Auto-updated document after tab selection:', updatedDocument);
+          
+          // Update our state with the latest data
+          setFunctionalRequirements(updatedDocument);
+          
+          // If document has HTML content or is completed, ensure we don't show timeout dialog
+          if (updatedDocument.html || updatedDocument.status === 'Completed') {
+            console.log('Document has HTML content or is Completed - clearing timeout state');
+            setFunctionalRequirementsGenerating(false);
+            setFunctionalRequirementsTimedOut(false);
+          }
+        })
+        .catch(error => {
+          console.error('Error in automatic tab status check:', error);
+        });
+    }
+  }, [activeTab, ideaId, functionalRequirements?.externalId]);
 
   // Fetch the project requirements document
   const fetchProjectRequirements = async () => {
