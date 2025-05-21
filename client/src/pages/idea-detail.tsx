@@ -375,12 +375,24 @@ export default function IdeaDetail() {
             try {
               console.log(`🔍 Fetching Functional Requirements data from Supabase with document ID: ${data.externalId} for idea ${ideaId}`);
               
-              const supabaseResponse = await fetch(`/api/supabase/functional-requirements/${ideaId}?external_id=${data.externalId}`);
+              // First try direct debug endpoint to verify content is available
+              console.log(`🔍 First trying direct debug endpoint: /api/debug/supabase-frd/${data.externalId}`);
+              const debugResponse = await fetch(`/api/debug/supabase-frd/${data.externalId}`);
+              const debugData = await debugResponse.json();
+              console.log(`🔍 Direct debug response:`, debugData);
+              
+              if (debugData.success) {
+                console.log(`🔍 Debug endpoint confirms HTML content exists with length: ${debugData.data?.frd_html?.length || debugData.data?.html?.length}`);
+              }
+              
+              // Now try standard endpoint
+              console.log(`🔍 Now trying standard endpoint...`);
+              const supabaseResponse = await fetch(`/api/supabase/functional-requirements/${ideaId}`);
               console.log(`🔍 Response status:`, supabaseResponse.status);
               
               if (supabaseResponse.ok) {
                 const supabaseData = await supabaseResponse.json();
-                console.log('🔍 Supabase response:', supabaseData);
+                console.log('🔍 Full Supabase response:', supabaseData);
               
                 // The updated response format should have HTML content directly in the data.html field
                 let htmlContent = null;
@@ -390,6 +402,10 @@ export default function IdeaDetail() {
                   // This is the standard format our server should return now
                   htmlContent = supabaseData.data.html;
                   console.log('Found HTML in standard html field:', htmlContent.substring(0, 100) + '...');
+                } else if (supabaseData.data && supabaseData.data.frd_html) {
+                  // This is the FRD table format
+                  htmlContent = supabaseData.data.frd_html;
+                  console.log('Found HTML in frd_html field:', htmlContent.substring(0, 100) + '...');
                 } else if (supabaseData.data && supabaseData.data.functional_html) {
                   // This is a fallback for direct database format
                   htmlContent = supabaseData.data.functional_html;

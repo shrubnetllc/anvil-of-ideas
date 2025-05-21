@@ -1839,6 +1839,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Direct debug endpoint for Supabase FRD
+  app.get("/api/debug/supabase-frd/:external_id", isAuthenticated, async (req, res) => {
+    try {
+      const externalId = req.params.external_id;
+      const { supabase } = await import('./supabase');
+      
+      console.log(`=== DIRECT SUPABASE FRD DEBUG ===`);
+      console.log(`Debugging Supabase FRD with ID: ${externalId}`);
+      
+      // Log all FRD records (for debugging only)
+      try {
+        const allRecords = await supabase
+          .from('frd')
+          .select('id')
+          .limit(10);
+        
+        console.log(`Available FRD records: ${JSON.stringify(allRecords.data || [])}`);
+      } catch (err) {
+        console.log('Could not list FRD records', err);
+      }
+      
+      // Try to query the FRD table directly using ID field
+      console.log('Attempting primary query using id field on FRD table...');
+      const { data, error } = await supabase
+        .from('frd')
+        .select('*')
+        .eq('id', externalId)
+        .single();
+      
+      if (error) {
+        console.log(`Error in direct FRD lookup by id: ${error.message}`);
+        
+        // Try project_id field
+        console.log('Attempting query using project_id field...');
+        const projectIdResult = await supabase
+          .from('frd')
+          .select('*')
+          .eq('project_id', externalId)
+          .single();
+        
+        if (projectIdResult.error) {
+          console.log(`project_id lookup failed: ${projectIdResult.error.message}`);
+          
+          // Try the original table as fallback
+          console.log('Attempting query on functional_requirements table...');
+          const originalTable = await supabase
+            .from('functional_requirements')
+            .select('*')
+            .eq('id', externalId)
+            .single();
+          
+          if (originalTable.error) {
+            console.log(`Original table lookup failed: ${originalTable.error.message}`);
+            return res.status(404).json({
+              success: false,
+              error: 'Document not found in Supabase',
+              attempts: ['frd.id', 'frd.project_id', 'functional_requirements.id'],
+              externalId
+            });
+          } else {
+            console.log(`Found FRD in original table lookup`);
+            
+            // Log available fields
+            console.log(`Fields: ${Object.keys(originalTable.data).join(', ')}`);
+            
+            // Check for HTML content
+            const hasHtml = originalTable.data.html || originalTable.data.func_html;
+            console.log(`Has HTML content: ${!!hasHtml}`);
+            
+            // Log a sample of the HTML if it exists
+            if (hasHtml) {
+              const htmlContent = originalTable.data.html || originalTable.data.func_html;
+              console.log(`HTML content length: ${htmlContent.length}`);
+              console.log(`Sample: ${htmlContent.substring(0, 200)}...`);
+            }
+            
+            return res.json({
+              success: true,
+              source: 'functional_requirements',
+              data: originalTable.data
+            });
+          }
+        } else {
+          console.log(`Found FRD by project_id lookup`);
+          
+          // Log available fields
+          console.log(`Fields: ${Object.keys(projectIdResult.data).join(', ')}`);
+          
+          // Check for HTML content
+          const hasHtml = projectIdResult.data.frd_html || projectIdResult.data.html;
+          console.log(`Has HTML content: ${!!hasHtml}`);
+          
+          // Log a sample of the HTML if it exists
+          if (hasHtml) {
+            const htmlContent = projectIdResult.data.frd_html || projectIdResult.data.html;
+            console.log(`HTML content length: ${htmlContent.length}`);
+            console.log(`Sample: ${htmlContent.substring(0, 200)}...`);
+          }
+          
+          return res.json({
+            success: true,
+            source: 'project_id',
+            data: projectIdResult.data
+          });
+        }
+      } else {
+        console.log(`Found FRD by direct id lookup`);
+        
+        // Log available fields
+        console.log(`Fields: ${Object.keys(data).join(', ')}`);
+        
+        // Check for HTML content
+        const hasHtml = data.frd_html || data.html;
+        console.log(`Has HTML content: ${!!hasHtml}`);
+        
+        // Log a sample of the HTML if it exists
+        if (hasHtml) {
+          const htmlContent = data.frd_html || data.html;
+          console.log(`HTML content length: ${htmlContent.length}`);
+          console.log(`Sample: ${htmlContent.substring(0, 200)}...`);
+        }
+        
+        return res.json({
+          success: true,
+          source: 'id',
+          data
+        });
+      }
+    } catch (error) {
+      console.error('Debug endpoint error:', error);
+      return res.status(500).json({
+        success: false,
+        error: 'Internal server error: ' + (error.message || 'Unknown error')
+      });
+    }
+  });
+  
   // Direct debug endpoint for Supabase BRD
   app.get("/api/debug/supabase-brd/:external_id", isAuthenticated, async (req, res) => {
     try {
