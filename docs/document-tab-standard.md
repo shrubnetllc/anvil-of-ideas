@@ -11,6 +11,252 @@ Each document type should follow this tab implementation pattern:
 3. Implement the document tab content following the standard layout
 4. Add necessary state variables and API endpoints
 
+## Database Structure
+
+### projectDocuments Table
+
+The document data is stored in the `projectDocuments` table with the following key structure:
+
+```typescript
+// From shared/schema.ts
+export const projectDocuments = pgTable("project_documents", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  ideaId: integer("idea_id").notNull().references(() => ideas.id, { onDelete: "cascade" }),
+  documentType: text("document_type").notNull(),
+  status: text("status", { enum: projectStatuses }).notNull().default("Draft"),
+  generationStartedAt: timestamp("generation_started_at", { mode: 'date' }),
+  html: text("html"),
+  content: text("content"),
+  externalId: text("external_id"),
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("created_at", { mode: 'date' }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { mode: 'date' }).notNull().defaultNow(),
+});
+```
+
+### Key Fields:
+
+- **documentType**: Identifies the type of document (e.g., 'ProjectRequirements', 'BusinessRequirements', 'FunctionalRequirements')
+- **status**: One of 'Draft', 'Generating', or 'Completed'
+- **externalId**: References the ID in the external system (Supabase) where the full document content is stored
+- **html**: Contains HTML content for immediate rendering (may be updated from Supabase later)
+- **content**: Contains plain text/JSON content if not using HTML
+
+## N8N Integration
+
+The platform uses n8n for document generation, and each document type has its own webhook endpoint.
+
+### Environment Configuration
+
+For each document type, a corresponding webhook URL must be configured:
+
+```
+N8N_WEBHOOK_URL=...              # For Lean Canvas
+N8N_PRD_WEBHOOK_URL=...          # For Project Requirements
+N8N_BRD_WEBHOOK_URL=...          # For Business Requirements
+N8N_FUNCTIONAL_WEBHOOK_URL=...   # For Functional Requirements
+```
+
+### Authentication
+
+Authentication to n8n is handled through environment variables:
+
+```
+N8N_AUTH_USERNAME=...
+N8N_AUTH_PASSWORD=...
+```
+
+The API calls include these credentials in the webhook calls.
+
+### Webhook Request Payload
+
+When generating a document, the following standard payload is sent to the n8n webhook:
+
+```json
+{
+  "ideaId": 123,                       // The ID of the idea
+  "documentId": 456,                   // The ID of the newly created document 
+  "instructions": "Optional notes...",  // Any user-provided instruction notes
+  "title": "Project Title"             // The title of the idea project
+}
+```
+
+### Webhook Response
+
+The n8n webhook should respond with a JSON object containing:
+
+```json
+{
+  "id": "external-id-string",  // The ID to store as externalId in the database
+  "status": "success"          // Confirmation that generation has started
+}
+```
+
+This `id` field is stored in the `externalId` column of the document record and is used for retrieving the document content from Supabase later.
+
+### Supabase Integration
+
+For document types that store their content in Supabase:
+
+1. The document is initially created in our local database with status "Generating"
+2. The n8n webhook returns an external ID that links to the Supabase record
+3. We store this external ID in our document record
+4. We periodically check Supabase for content updates using the external ID
+5. When content is found, we update our local record and set status to "Completed"
+
+#### Database Lookup Structure
+
+The external system uses different table structures for different document types:
+
+- Lean Canvas: Stored in the `lean_canvas` table, referenced by `leancanvas_id`
+- Business Requirements: Stored in the `business_requirements` table, referenced by `id`
+- Project Requirements: Stored in the `project_requirements` table, referenced by `id`
+
+For each document type, we need to implement a specific lookup function in the `server/supabase.ts` file.
+
+### Implementing Supabase Content Retrieval
+
+To implement the content retrieval for a new document type (e.g., Functional Requirements), follow this pattern in `server/supabase.ts`:
+
+```typescript
+/**
+ * Fetch Functional Requirements data from Supabase
+ * @param functionalId The external ID of the functional requirements document in Supabase
+ * @param ideaId The ID of the idea
+ * @param requestingUserId Optional user ID for security validation
+ */
+export async function fetchFunctionalRequirements(functionalId: string, ideaId: number, requestingUserId?: number) {
+  try {
+    console.log(`[SUPABASE FUNCTIONAL] START: Fetching Functional ID ${functionalId} for idea ${ideaId}`);
+    
+    // Security check
+    if (requestingUserId) {
+      const idea = await storage.getIdeaById(ideaId, requestingUserId);
+      if (!idea) {
+        console.log('[SECURITY] Not authorized: User does not own this idea');
+        throw new Error('Not authorized to access this idea');
+      } else {
+        console.log(`[SECURITY] Authorized: User ${requestingUserId} accessing Functional Requirements for idea ${ideaId}`);
+      }
+    }
+    
+    // Query Supabase directly using the ID
+    console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase functional_requirements table`);
+    
+    const { data, error } = await supabase
+      .from('functional_requirements')  // Use the appropriate table name
+      .select('*')
+      .eq('id', functionalId)
+      .single();
+    
+    if (error) {
+      console.error('[SUPABASE FUNCTIONAL] Error:', error.message);
+      throw new Error(`Failed to fetch functional requirements data: ${error.message}`);
+    }
+    
+    if (!data) {
+      console.error(`[SUPABASE FUNCTIONAL] No data found for ID=${functionalId}`);
+      return { 
+        source: 'supabase', 
+        data: null,
+        error: 'No functional requirements data found' 
+      };
+    }
+    
+    // Debug available fields
+    console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(data).join(', ')}`);
+    
+    // Look for HTML content
+    let html = null;
+    
+    // Check standard HTML fields
+    if (data.html) {
+      console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${data.html.length} characters`);
+      html = data.html;
+    } else if (data.functional_html) {
+      console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content in functional_html field with ${data.functional_html.length} characters`);
+      html = data.functional_html;
+    }
+    
+    // Return the data with HTML content added
+    const responseData = {
+      ...data,
+      html: html
+    };
+    
+    console.log(`✓ Successfully retrieved Functional Requirements data from Supabase with keys: ${Object.keys(responseData).join(', ')}`);
+    
+    if (html) {
+      console.log(`✓ Functional Requirements data contains HTML content (${html.length} characters)`);
+      console.log(`HTML preview: ${html.substring(0, 100)}...`);
+    }
+    
+    return {
+      source: 'supabase',
+      data: responseData
+    };
+  } catch (error) {
+    console.error('[SUPABASE FUNCTIONAL] Error:', error);
+    return {
+      source: 'supabase',
+      error: error.message || 'Failed to fetch functional requirements data'
+    };
+  }
+}
+```
+
+Then add a corresponding API endpoint in `server/routes.ts`:
+
+```typescript
+// API endpoint to fetch Functional Requirements content from Supabase
+app.get('/api/supabase/functional-requirements/:ideaId', isAuthenticated, async (req, res) => {
+  try {
+    console.log(`==== FUNCTIONAL REQUIREMENTS API ACCESS ====`);
+    const { ideaId } = req.params;
+    const userId = req.user!.id;
+    
+    console.log(`User ${userId} is requesting Functional Requirements data for idea ${ideaId}`);
+    
+    // First check if we have the document in our database
+    const document = await storage.getDocumentByType(parseInt(ideaId), 'FunctionalRequirements');
+    
+    if (!document || !document.externalId) {
+      return res.status(404).json({ error: 'Functional Requirements document not found or has no external ID' });
+    }
+    
+    console.log(`External ID provided in query: ${document.externalId}`);
+    console.log(`✓ Document found with ID ${document.id}, status ${document.status}, externalId: ${document.externalId}`);
+    
+    // If document exists and has an external ID, fetch from Supabase
+    console.log(`🔍 Using external ID ${document.externalId} to fetch Functional Requirements from Supabase`);
+    
+    const supabaseResponse = await fetchFunctionalRequirements(document.externalId, parseInt(ideaId), userId);
+    
+    if (supabaseResponse.error) {
+      return res.status(500).json({ 
+        error: `Failed to retrieve functional requirements data: ${supabaseResponse.error}` 
+      });
+    }
+    
+    // Update the document with the HTML content if it doesn't already have it
+    if (supabaseResponse.data && supabaseResponse.data.html && (!document.html || document.status !== 'Completed')) {
+      console.log(`✓ Updating document ${document.id} with HTML content from Supabase`);
+      
+      await storage.updateDocument(document.id, {
+        html: supabaseResponse.data.html,
+        status: 'Completed',
+        updatedAt: new Date()
+      });
+    }
+    
+    res.json(supabaseResponse);
+  } catch (error) {
+    console.error('Error fetching functional requirements:', error);
+    res.status(500).json({ error: 'Failed to fetch functional requirements data' });
+  }
+});
+
 ## Required State Variables
 
 For each new document type (e.g., "FunctionalRequirements"), include these state variables:
