@@ -84,20 +84,20 @@ export default function IdeaDetail() {
     }
   }, [ideaId]);
   
-  // Auto-check with Supabase when tabs change
+  // Auto-check with Supabase when tabs change - simpler approach like canvas tab
   useEffect(() => {
-    if (activeTab === "functionalRequirements" && functionalRequirements?.externalId) {
+    if (activeTab === "functionalRequirements") {
       console.log('Functional Requirements tab selected - automatically checking status with Supabase');
       
-      // Auto-check with Supabase first
+      // Force check status regardless of whether we have an externalId or not
+      // First, check with Supabase to get the latest data and update local DB
       fetch(`/api/supabase/functional-requirements/${ideaId}`)
         .then(() => {
-          console.log('Successfully checked with Supabase for latest functional requirements data');
-          // Wait a moment for server processing
-          return new Promise(resolve => setTimeout(resolve, 500));
+          // After Supabase check, get the updated document from local DB
+          // Wait a moment to ensure server has time to process
+          return new Promise(resolve => setTimeout(resolve, 300));
         })
         .then(() => {
-          // Then fetch the updated document from our local DB
           return fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
         })
         .then(response => {
@@ -107,21 +107,58 @@ export default function IdeaDetail() {
         .then(updatedDocument => {
           console.log('Auto-updated document after tab selection:', updatedDocument);
           
-          // Update our state with the latest data
+          // Always update the document state
           setFunctionalRequirements(updatedDocument);
           
-          // If document has HTML content or is completed, ensure we don't show timeout dialog
+          // If we have HTML content or the status is Completed, clear the timeout state
           if (updatedDocument.html || updatedDocument.status === 'Completed') {
-            console.log('Document has HTML content or is Completed - clearing timeout state');
+            console.log('Document has HTML content or is Completed - clearing all flags');
             setFunctionalRequirementsGenerating(false);
             setFunctionalRequirementsTimedOut(false);
+          } else if (updatedDocument.status === 'Generating') {
+            // Only check for timeout if still generating
+            if (updatedDocument.generationStartedAt) {
+              const startTime = new Date(updatedDocument.generationStartedAt);
+              const currentTime = new Date();
+              const elapsedTimeMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+              
+              if (elapsedTimeMinutes > 2) {
+                console.log(`Auto-check: Generation timed out (${elapsedTimeMinutes.toFixed(1)} minutes)`);
+                // For timed out documents with externalId, auto-fix the status
+                if (updatedDocument.externalId) {
+                  // Attempt to auto-fix the status to Completed
+                  return fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'Completed' })
+                  }).then(() => {
+                    // Refetch after update
+                    return fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
+                  }).then(finalResponse => {
+                    if (finalResponse.ok) return finalResponse.json();
+                    throw new Error('Failed to auto-update document status');
+                  }).then(finalDocument => {
+                    setFunctionalRequirements(finalDocument);
+                    setFunctionalRequirementsGenerating(false);
+                    setFunctionalRequirementsTimedOut(false);
+                  }).catch(err => {
+                    console.error('Error auto-fixing status:', err);
+                    setFunctionalRequirementsTimedOut(true);
+                  });
+                } else {
+                  setFunctionalRequirementsTimedOut(true);
+                }
+              } else {
+                setFunctionalRequirementsTimedOut(false);
+              }
+            }
           }
         })
         .catch(error => {
           console.error('Error in automatic tab status check:', error);
         });
     }
-  }, [activeTab, ideaId, functionalRequirements?.externalId]);
+  }, [activeTab, ideaId]);
 
   // Fetch the project requirements document
   const fetchProjectRequirements = async () => {
