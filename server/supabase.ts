@@ -238,22 +238,37 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
  */
 export async function fetchFunctionalRequirements(functionalId: string, ideaId: number, requestingUserId?: number) {
   try {
-    console.log(`[SUPABASE FUNCTIONAL] START: Fetching Functional ID ${functionalId} for idea ${ideaId}`);
+    console.log(`[SUPABASE FUNCTIONAL] START: Fetching Functional Requirements ID ${functionalId} for idea ${ideaId}`);
     
-    // Security check
-    if (requestingUserId) {
-      const idea = await storage.getIdeaById(ideaId, requestingUserId);
-      if (!idea) {
-        console.log('[SECURITY] Not authorized: User does not own this idea');
-        throw new Error('Not authorized to access this idea');
-      } else {
+    // Security check: If requesting user ID is provided, verify ownership
+    if (requestingUserId !== undefined) {
+      try {
+        const { pool } = await import('./db');
+        const securityCheck = await pool.query('SELECT user_id FROM ideas WHERE id = $1', [ideaId]);
+        
+        if (securityCheck.rows.length === 0) {
+          console.log(`[SECURITY] Idea ${ideaId} not found in security check`);
+          return { error: 'Unauthorized access', data: null };
+        }
+        
+        const ownerId = parseInt(securityCheck.rows[0].user_id);
+        if (ownerId !== requestingUserId) {
+          console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
+          return { error: 'Unauthorized access', data: null };
+        }
+        
         console.log(`[SECURITY] Authorized: User ${requestingUserId} accessing Functional Requirements for idea ${ideaId}`);
+      } catch (error) {
+        console.error('[SECURITY] Error checking permissions:', error);
+        return { error: 'Error verifying permissions', data: null };
       }
     }
     
-    // Query Supabase directly using the ID
-    console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase functional_requirements table`);
+    // Query Supabase for the functional requirements document
+    console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase Functional Requirements table`);
     
+    // First try direct query using the ID
+    console.log(`[SUPABASE FUNCTIONAL] Direct query using ID=${functionalId}`);
     const { data, error } = await supabase
       .from('functional_requirements')
       .select('*')
@@ -261,56 +276,74 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
       .single();
     
     if (error) {
-      console.error('[SUPABASE FUNCTIONAL] Error:', error.message);
-      throw new Error(`Failed to fetch functional requirements data: ${error.message}`);
+      console.log(`[SUPABASE FUNCTIONAL] Error with direct ID query: ${error.message}`);
+      
+      // Try fallback query using ID as project_id
+      console.log(`[SUPABASE FUNCTIONAL] Trying fallback with project_id=${functionalId}`);
+      const fallbackResponse = await supabase
+        .from('functional_requirements')
+        .select('*')
+        .eq('project_id', functionalId)
+        .single();
+      
+      if (fallbackResponse.error) {
+        console.log(`[SUPABASE FUNCTIONAL] Fallback query also failed: ${fallbackResponse.error.message}`);
+        return { error: 'Document not found in Supabase', data: null };
+      }
+      
+      if (fallbackResponse.data) {
+        console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record with project_id=${functionalId}`);
+        console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(fallbackResponse.data).join(', ')}`);
+        
+        // Check for HTML content
+        if (fallbackResponse.data.html) {
+          console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${fallbackResponse.data.html.length} characters`);
+        }
+        
+        // Return the response with HTML content in the data.html field for consistency
+        return { 
+          source: 'supabase',
+          error: null, 
+          data: {
+            ...fallbackResponse.data,
+            html: fallbackResponse.data.html || fallbackResponse.data.func_html || null
+          } 
+        };
+      }
     }
     
-    if (!data) {
-      console.error(`[SUPABASE FUNCTIONAL] No data found for ID=${functionalId}`);
+    if (data) {
+      console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record directly with ID=${functionalId}`);
+      console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(data).join(', ')}`);
+      
+      // Check for HTML content in various possible fields
+      const htmlContent = data.html || data.func_html || null;
+      if (htmlContent) {
+        console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${htmlContent.length} characters`);
+      }
+      
+      // Return the response with HTML content in the data.html field for consistency
       return { 
-        source: 'supabase', 
-        data: null,
-        error: 'No functional requirements data found' 
+        source: 'supabase',
+        error: null, 
+        data: {
+          ...data,
+          html: htmlContent
+        } 
       };
     }
     
-    // Debug available fields
-    console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(data).join(', ')}`);
-    
-    // Look for HTML content
-    let html = null;
-    
-    // Check standard HTML fields
-    if (data.html) {
-      console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${data.html.length} characters`);
-      html = data.html;
-    } else if (data.functional_html) {
-      console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content in functional_html field with ${data.functional_html.length} characters`);
-      html = data.functional_html;
-    }
-    
-    // Return the data with HTML content added
-    const responseData = {
-      ...data,
-      html: html
-    };
-    
-    console.log(`✓ Successfully retrieved Functional Requirements data from Supabase with keys: ${Object.keys(responseData).join(', ')}`);
-    
-    if (html) {
-      console.log(`✓ Functional Requirements data contains HTML content (${html.length} characters)`);
-      console.log(`HTML preview: ${html.substring(0, 100)}...`);
-    }
-    
-    return {
+    return { 
       source: 'supabase',
-      data: responseData
+      error: 'Document not found in Supabase', 
+      data: null 
     };
   } catch (error) {
-    console.error('[SUPABASE FUNCTIONAL] Error:', error);
-    return {
+    console.error(`[SUPABASE FUNCTIONAL] Unexpected error:`, error);
+    return { 
       source: 'supabase',
-      error: error.message || 'Failed to fetch functional requirements data'
+      error: 'Error fetching functional requirements data', 
+      data: null 
     };
   }
 }
