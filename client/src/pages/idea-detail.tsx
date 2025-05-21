@@ -850,9 +850,16 @@ export default function IdeaDetail() {
                           <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-2">
                               <h3 className="font-semibold">Lean Canvas</h3>
-                              <Badge variant={canvas ? "default" : "outline"}>
-                                {canvas ? "Created" : "Not Created"}
-                              </Badge>
+                              {canvas ? (
+                                <Badge 
+                                  variant="default"
+                                  className="bg-green-100 text-green-800 hover:bg-green-100"
+                                >
+                                  Completed
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">Not Created</Badge>
+                              )}
                             </div>
                             <p className="text-sm text-neutral-600 mb-3">
                               Business model overview using the Lean Canvas framework
