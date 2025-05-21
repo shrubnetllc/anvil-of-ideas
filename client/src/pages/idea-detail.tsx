@@ -1396,9 +1396,8 @@ export default function IdeaDetail() {
                               variant="outline" 
                               className="w-full"
                               onClick={() => {
-                                // Find the TabsTrigger component with value="functional" and click it
-                                const element = document.querySelector('button[data-state][value="functional"]') as HTMLElement;
-                                element?.click();
+                                // Set the active tab to "functional"
+                                setActiveTab("functional");
                               }}
                             >
                               {functionalRequirements ? 'View Document' : 'Create Document'}
