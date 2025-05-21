@@ -694,10 +694,26 @@ export default function IdeaDetail() {
           const data = await response.json();
           setFunctionalRequirements(data);
           
+          // Check if generation has timed out (2 minutes or more since started)
+          if (data && data.status === 'Generating' && data.generationStartedAt) {
+            const startedAt = new Date(data.generationStartedAt);
+            const now = new Date();
+            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
+            
+            if (diffMinutes >= 2) {
+              console.log(`Functional Requirements generation timed out (started ${diffMinutes.toFixed(1)} minutes ago)`);
+              setFunctionalRequirementsTimedOut(true);
+              // Don't stop polling so we can still detect if it completes later
+            } else {
+              console.log(`Functional Requirements generation in progress (started ${diffMinutes.toFixed(1)} minutes ago)`);
+            }
+          }
+          
           // If status is no longer "Generating", stop polling
           if (data && data.status !== 'Generating') {
             clearInterval(interval);
             setFunctionalRequirementsGenerating(false);
+            setFunctionalRequirementsTimedOut(false); // Reset timeout state if completed
             console.log("Functional Requirements generation completed");
             
             if (data.status === 'Completed') {
