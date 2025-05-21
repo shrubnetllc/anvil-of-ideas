@@ -1303,7 +1303,8 @@ export default function IdeaDetail() {
                                 setActiveTab("canvas");
                               }}
                             >
-                              {(canvas && (canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition)) ? 
+                              {(canvas && (canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition)) ||
+                               (supabaseData && supabaseData.data && supabaseData.data.html) ? 
                                 "View Document" : "Create Document"}
                             </Button>
                           </div>
