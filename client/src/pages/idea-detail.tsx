@@ -1275,10 +1275,12 @@ export default function IdeaDetail() {
                               <h3 className="font-semibold">Lean Canvas</h3>
                               {canvas ? (
                                 <Badge 
-                                  variant="default"
-                                  className="bg-green-100 text-green-800 hover:bg-green-100"
+                                  variant="outline"
+                                  className={canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition ? 
+                                    'bg-green-100 text-green-800 hover:bg-green-100' : ''}
                                 >
-                                  Completed
+                                  {(canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? 
+                                    'Completed' : 'Draft'}
                                 </Badge>
                               ) : (
                                 <Badge variant="outline">Not Created</Badge>
