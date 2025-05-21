@@ -230,6 +230,91 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
  * @param ideaId The ID of the idea
  * @param requestingUserId Optional user ID for security validation
  */
+/**
+ * Fetch Functional Requirements data from Supabase
+ * @param functionalId The external ID of the functional requirements document in Supabase
+ * @param ideaId The ID of the idea
+ * @param requestingUserId Optional user ID for security validation
+ */
+export async function fetchFunctionalRequirements(functionalId: string, ideaId: number, requestingUserId?: number) {
+  try {
+    console.log(`[SUPABASE FUNCTIONAL] START: Fetching Functional ID ${functionalId} for idea ${ideaId}`);
+    
+    // Security check
+    if (requestingUserId) {
+      const idea = await storage.getIdeaById(ideaId, requestingUserId);
+      if (!idea) {
+        console.log('[SECURITY] Not authorized: User does not own this idea');
+        throw new Error('Not authorized to access this idea');
+      } else {
+        console.log(`[SECURITY] Authorized: User ${requestingUserId} accessing Functional Requirements for idea ${ideaId}`);
+      }
+    }
+    
+    // Query Supabase directly using the ID
+    console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase functional_requirements table`);
+    
+    const { data, error } = await supabase
+      .from('functional_requirements')
+      .select('*')
+      .eq('id', functionalId)
+      .single();
+    
+    if (error) {
+      console.error('[SUPABASE FUNCTIONAL] Error:', error.message);
+      throw new Error(`Failed to fetch functional requirements data: ${error.message}`);
+    }
+    
+    if (!data) {
+      console.error(`[SUPABASE FUNCTIONAL] No data found for ID=${functionalId}`);
+      return { 
+        source: 'supabase', 
+        data: null,
+        error: 'No functional requirements data found' 
+      };
+    }
+    
+    // Debug available fields
+    console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(data).join(', ')}`);
+    
+    // Look for HTML content
+    let html = null;
+    
+    // Check standard HTML fields
+    if (data.html) {
+      console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${data.html.length} characters`);
+      html = data.html;
+    } else if (data.functional_html) {
+      console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content in functional_html field with ${data.functional_html.length} characters`);
+      html = data.functional_html;
+    }
+    
+    // Return the data with HTML content added
+    const responseData = {
+      ...data,
+      html: html
+    };
+    
+    console.log(`✓ Successfully retrieved Functional Requirements data from Supabase with keys: ${Object.keys(responseData).join(', ')}`);
+    
+    if (html) {
+      console.log(`✓ Functional Requirements data contains HTML content (${html.length} characters)`);
+      console.log(`HTML preview: ${html.substring(0, 100)}...`);
+    }
+    
+    return {
+      source: 'supabase',
+      data: responseData
+    };
+  } catch (error) {
+    console.error('[SUPABASE FUNCTIONAL] Error:', error);
+    return {
+      source: 'supabase',
+      error: error.message || 'Failed to fetch functional requirements data'
+    };
+  }
+}
+
 export async function fetchBusinessRequirements(brdId: string, ideaId: number, requestingUserId?: number) {
   try {
     console.log(`[SUPABASE BRD] START: Fetching BRD ID ${brdId} for idea ${ideaId}`);
