@@ -2482,15 +2482,7 @@ export default function IdeaDetail() {
                                         </>
                                       )}
                                     </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={handleRegenerateCanvasClick}
-                                      disabled={isRegenerating}
-                                    >
-                                      <RotateCcw className="mr-2 h-4 w-4" />
-                                      {isRegenerating ? "Regenerating..." : "Regenerate"}
-                                    </Button>
+
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -2513,7 +2505,6 @@ export default function IdeaDetail() {
                                       }}
                                     >
                                       <Copy className="mr-2 h-4 w-4" />
-                                      Copy Content
                                     </Button>
                                   </div>
                                 </div>
@@ -2582,7 +2573,7 @@ export default function IdeaDetail() {
                                 )}
                                 
                                 {/* Additional notes panel for regeneration - now using a drawer instead */}
-                                <div className="mt-6 flex">
+                                <div className="mt-6 flex justify-between items-center">
                                   <Dialog>
                                     <DialogTrigger asChild>
                                       <Button
@@ -2617,6 +2608,16 @@ export default function IdeaDetail() {
                                       </DialogFooter>
                                     </DialogContent>
                                   </Dialog>
+                                  
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleRegenerateCanvasClick}
+                                    disabled={isRegenerating}
+                                  >
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    {isRegenerating ? "Regenerating..." : "Regenerate"}
+                                  </Button>
                                 </div>
                               </div>
                             ) : (
