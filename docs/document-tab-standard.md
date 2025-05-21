@@ -332,6 +332,140 @@ All document tabs should use this header format without status badges:
 
 ## Document States
 
+### Document Status Handling Pattern
+
+When implementing document generation with external services (like n8n and Supabase), always follow this pattern to handle document status and timeouts:
+
+#### API Endpoint Status Check Logic
+
+```typescript
+// API endpoint to fetch document content from Supabase
+app.get('/api/supabase/<document-type>/:id', isAuthenticated, async (req, res, next) => {
+  try {
+    const { id: ideaId } = req.params;
+    const userId = req.user!.id;
+    
+    // Get document from local database first
+    const document = await storage.getDocumentByType(parseInt(ideaId), '<DocumentType>');
+    
+    if (!document || !document.externalId) {
+      return res.status(404).json({ error: 'Document not found or has no external ID' });
+    }
+    
+    // If document is stuck in "Generating" for too long, mark it as Completed
+    const TWO_MINUTES = 2 * 60 * 1000; // 2 minutes in milliseconds
+    if (document.status === 'Generating' && document.generationStartedAt) {
+      const timeSinceStart = new Date().getTime() - document.generationStartedAt.getTime();
+      
+      if (timeSinceStart > TWO_MINUTES) {
+        console.log(`⚠️ Document generation timed out, updating status to "Completed"`);
+        try {
+          await storage.updateDocument(document.id, {
+            status: "Completed",
+            updatedAt: new Date()
+          });
+          console.log(`✅ Successfully updated document status to "Completed" due to timeout`);
+          // Update the local document object to reflect the change
+          document.status = "Completed";
+        } catch (err) {
+          console.error(`❌ Failed to update document status: ${err.message}`);
+        }
+      }
+    }
+    
+    // Fetch content from Supabase
+    const supabaseResponse = await fetch<DocumentType>(document.externalId, parseInt(ideaId), userId);
+    
+    // Update document with HTML content if found
+    if (supabaseResponse.data && supabaseResponse.data.html) {
+      try {
+        await storage.updateDocument(document.id, {
+          html: supabaseResponse.data.html,
+          status: 'Completed',
+          updatedAt: new Date()
+        });
+      } catch (error) {
+        console.error('Error updating document with HTML:', error);
+      }
+    }
+    
+    res.json(supabaseResponse);
+  } catch (error) {
+    next(error);
+  }
+});
+```
+
+#### Client-Side Status Check Pattern
+
+When implementing the "Check Status" button for a document, use this pattern to ensure proper status updates:
+
+```tsx
+<Button 
+  variant="outline"
+  onClick={async () => {
+    try {
+      toast({
+        title: "Checking status",
+        description: "Refreshing the latest generation status",
+        duration: 3000
+      });
+      
+      // First, check with Supabase to get latest data and update local DB
+      const supabaseResponse = await fetch(`/api/supabase/<document-type>/${ideaId}`);
+      
+      if (supabaseResponse.ok) {
+        console.log('Successfully checked with Supabase');
+      }
+      
+      // After Supabase check, get the updated document from local DB
+      const refreshResponse = await fetch(`/api/ideas/${ideaId}/documents/<DocumentType>`);
+      if (refreshResponse.ok) {
+        const updatedDocument = await refreshResponse.json();
+        set<DocumentType>(updatedDocument);
+        
+        // Update UI states based on document status
+        if (updatedDocument.status === "Completed") {
+          set<DocumentType>Generating(false);
+          set<DocumentType>TimedOut(false);
+          toast({
+            title: "Status updated",
+            description: "Document status has been updated to Completed",
+            duration: 3000
+          });
+        } else if (updatedDocument.status === "Generating" && updatedDocument.generationStartedAt) {
+          const startTime = new Date(updatedDocument.generationStartedAt);
+          const currentTime = new Date();
+          const elapsedTimeMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+          
+          if (elapsedTimeMinutes > 2) {
+            set<DocumentType>TimedOut(true);
+          } else {
+            set<DocumentType>TimedOut(false);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to check status",
+        variant: "destructive"
+      });
+    }
+  }}
+>
+  <RotateCcw className="mr-2 h-4 w-4" />
+  Check Status
+</Button>
+```
+
+This pattern ensures that:
+1. Documents don't get stuck indefinitely in "Generating" status
+2. The UI properly updates after checking status
+3. Users get clear feedback about the document state
+4. Timeout handling is consistent across all document types
+
 ### 1. Loading State
 
 ```tsx
