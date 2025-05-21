@@ -4,7 +4,7 @@ import { Idea } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
-import { CalendarIcon, MoreHorizontal, ExternalLink, ZapIcon } from "lucide-react";
+import { CalendarIcon, MoreHorizontal, ExternalLink, Zap } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -105,7 +105,7 @@ export function IdeaCard({ idea, onGenerate }: IdeaCardProps) {
                 onClick={handleGenerateClick}
               >
                 Generate Canvas
-                <ZapIcon className="ml-1 h-3 w-3" />
+                <Zap className="ml-1 h-3 w-3" />
               </Button>
             ) : idea.status === 'Generating' ? (
               <div className="inline-flex items-center text-xs font-medium text-neutral-500">

@@ -727,6 +727,11 @@ export default function IdeaDetail() {
       setShowFunctionalRequirementsModal(true);
     }
   };
+  
+  // Function to handle generating functional requirements
+  const handleGenerateFunctionalRequirementsClick = () => {
+    showFunctionalRequirementsDialog();
+  };
 
   const handleRegenerateFunctionalRequirementsClick = async () => {
     if (functionalRequirements && functionalRequirements.id) {
