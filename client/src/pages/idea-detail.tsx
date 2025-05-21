@@ -927,7 +927,7 @@ export default function IdeaDetail() {
                     <TabsContent value="requirements" className="mt-6">
                       <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
                         <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-bold text-neutral-900">Project Requirements</h3>
+                          <h3 className="text-lg font-bold text-neutral-900">Project Requirements Document</h3>
                           {projectRequirements ? (
                             <Badge variant="outline" className="text-xs">
                               {projectRequirements.status}
@@ -940,7 +940,7 @@ export default function IdeaDetail() {
                               disabled={isGeneratingRequirements}
                             >
                               <Hammer className="mr-2 h-4 w-4" />
-                              Generate Requirements
+                              Generate Project Requirements
                             </Button>
                           )}
                         </div>
