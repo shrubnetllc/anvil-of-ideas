@@ -72,6 +72,7 @@ export default function IdeaDetail() {
     if (ideaId) {
       fetchProjectRequirements();
       fetchBusinessRequirements();
+      fetchFunctionalRequirements();
     }
   }, [ideaId]);
 
@@ -331,6 +332,148 @@ export default function IdeaDetail() {
       });
     } finally {
       setIsLoadingBusinessRequirements(false);
+    }
+  };
+  
+  // Fetch the functional requirements document
+  const fetchFunctionalRequirements = async () => {
+    try {
+      setIsLoadingFunctionalRequirements(true);
+      
+      // First get the local document to check its status and get the externalId
+      const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
+      if (response.ok) {
+        const data = await response.json();
+        setFunctionalRequirements(data);
+        
+        // Check if functional requirements are currently generating
+        if (data && data.status === 'Generating') {
+          setFunctionalRequirementsGenerating(true);
+          
+          // Check if generation has timed out (2 minutes or more since started)
+          if (data.generationStartedAt) {
+            const startedAt = new Date(data.generationStartedAt);
+            const now = new Date();
+            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
+            
+            if (diffMinutes >= 2) {
+              console.log(`Functional requirements generation timed out (started ${diffMinutes.toFixed(1)} minutes ago)`);
+              setFunctionalRequirementsTimedOut(true);
+            } else {
+              setFunctionalRequirementsTimedOut(false);
+              console.log(`Functional requirements generation in progress (started ${diffMinutes.toFixed(1)} minutes ago)`);
+            }
+          }
+        } else if (data && data.status === 'Completed') {
+          setFunctionalRequirementsGenerating(false);
+          setFunctionalRequirementsTimedOut(false);
+          
+          // If document is completed and has externalId, try to get enriched content from Supabase
+          if (data.externalId) {
+            try {
+              console.log(`🔍 Fetching Functional Requirements data from Supabase with document ID: ${data.externalId} for idea ${ideaId}`);
+              
+              const supabaseResponse = await fetch(`/api/supabase/functional-requirements/${ideaId}?external_id=${data.externalId}`);
+              console.log(`🔍 Response status:`, supabaseResponse.status);
+              
+              if (supabaseResponse.ok) {
+                const supabaseData = await supabaseResponse.json();
+                console.log('🔍 Supabase response:', supabaseData);
+              
+                // The updated response format should have HTML content directly in the data.html field
+                let htmlContent = null;
+                
+                // Check for HTML content in the most likely places based on our format
+                if (supabaseData.data && supabaseData.data.html) {
+                  // This is the standard format our server should return now
+                  htmlContent = supabaseData.data.html;
+                  console.log('Found HTML in standard html field:', htmlContent.substring(0, 100) + '...');
+                } else if (supabaseData.data && supabaseData.data.functional_html) {
+                  // This is a fallback for direct database format
+                  htmlContent = supabaseData.data.functional_html;
+                  console.log('Found HTML in functional_html field:', htmlContent.substring(0, 100) + '...');
+                } else if (supabaseData.data) {
+                  // Check ALL fields for potential HTML content as a last resort
+                  console.log('Looking for HTML content in all fields of Supabase response...');
+                  
+                  for (const [key, value] of Object.entries(supabaseData.data)) {
+                    if (typeof value === 'string' && 
+                        (value.includes('<html') || 
+                         value.includes('<!DOCTYPE') || 
+                         value.includes('<div') || 
+                         value.includes('<p>'))) {
+                      console.log(`Found potential HTML in field '${key}'`);
+                      htmlContent = value;
+                      break;
+                    }
+                  }
+                }
+                
+                if (htmlContent) {
+                  console.log(`Found HTML content in Supabase response (${htmlContent.length} characters)`);
+                  
+                  // First update the local document with HTML content if it was empty
+                  if (!data.html) {
+                    try {
+                      console.log(`Updating document ${data.id} with HTML content of length ${htmlContent.length}`);
+                      const updateResponse = await fetch(`/api/ideas/${ideaId}/documents/${data.id}`, {
+                        method: 'PATCH',
+                        headers: {
+                          'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                          html: htmlContent,
+                          status: "Completed" // Also make sure to set status to completed
+                        })
+                      });
+                      
+                      if (updateResponse.ok) {
+                        console.log('Successfully updated local document with HTML content from Supabase');
+                      } else {
+                        console.error('Failed to update document:', await updateResponse.text());
+                      }
+                    } catch (updateError) {
+                      console.error('Error updating local document with Supabase HTML:', updateError);
+                    }
+                  }
+                  
+                  // Update the document in state to include the HTML
+                  setFunctionalRequirements({
+                    ...data,
+                    html: htmlContent,
+                    status: "Completed" // Ensure status is completed since we have content
+                  });
+                  
+                  // Also log the content for debugging
+                  console.log('HTML content preview:', htmlContent.substring(0, 200) + '...');
+                } else {
+                  console.log('No HTML content found in any field of Supabase response');
+                }
+              }
+            } catch (supabaseError) {
+              console.error('Error fetching functional requirements from Supabase:', supabaseError);
+            }
+          }
+        } else {
+          // If not generating or completed, reset states
+          setFunctionalRequirementsGenerating(false);
+          setFunctionalRequirementsTimedOut(false);
+        }
+      } else {
+        // No functional requirements exist yet
+        setFunctionalRequirements(null);
+        setFunctionalRequirementsGenerating(false);
+        setFunctionalRequirementsTimedOut(false);
+      }
+    } catch (error) {
+      console.error('Error fetching functional requirements:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load functional requirements",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingFunctionalRequirements(false);
     }
   };
 
