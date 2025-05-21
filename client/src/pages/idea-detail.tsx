@@ -53,6 +53,7 @@ export default function IdeaDetail() {
   const [functionalRequirementsGenerating, setFunctionalRequirementsGenerating] = useState(false);
   const [functionalRequirementsTimedOut, setFunctionalRequirementsTimedOut] = useState(false);
   const [functionalRequirementsNotes, setFunctionalRequirementsNotes] = useState('');
+  const [showFunctionalRequirementsModal, setShowFunctionalRequirementsModal] = useState(false);
   
   // State for lean canvas
   const [canvasNotes, setCanvasNotes] = useState('');
@@ -566,8 +567,8 @@ export default function IdeaDetail() {
     }
   };
   
-  // Handle generating functional requirements
-  const handleGenerateFunctionalRequirementsClick = async () => {
+  // Old implementation - to be removed after testing
+  const oldGenerateFunctionalRequirements = async () => {
     try {
       setIsGeneratingFunctionalRequirements(true);
       
@@ -713,6 +714,18 @@ export default function IdeaDetail() {
     
     // Clean up on component unmount
     return () => clearInterval(interval);
+  };
+  
+  // This function handles the button click and shows dialog if needed
+  const showFunctionalRequirementsDialog = async () => {
+    // Show modal to collect notes if needed
+    if (canvas && projectRequirements && businessRequirements) {
+      // We have all prerequisites, generate directly
+      generateFunctionalRequirements();
+    } else {
+      // Show confirmation dialog with warnings about missing prerequisites
+      setShowFunctionalRequirementsModal(true);
+    }
   };
 
   const handleRegenerateFunctionalRequirementsClick = async () => {
