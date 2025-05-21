@@ -1952,6 +1952,54 @@ export default function IdeaDetail() {
                                     </div>
                                   )}
                                 </div>
+                                
+                                {/* Add regeneration instructions and regenerate button */}
+                                <div className="mt-6 flex justify-between items-center">
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-sm text-neutral-500 inline-flex items-center"
+                                      >
+                                        <FileText className="mr-1 h-4 w-4" />
+                                        Add regeneration instructions
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[550px]">
+                                      <DialogHeader>
+                                        <DialogTitle>Add Regeneration Instructions</DialogTitle>
+                                        <DialogDescription>
+                                          Add specific instructions for regenerating your Business Requirements. These instructions will be used when you click the Regenerate button.
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <div className="py-4">
+                                        <Textarea 
+                                          id="businessRequirementsNotes"
+                                          value={businessRequirementsNotes}
+                                          onChange={(e) => setBusinessRequirementsNotes(e.target.value)}
+                                          placeholder="E.g., Focus more on customer pain points, include detailed market analysis..."
+                                          className="min-h-[150px]"
+                                        />
+                                      </div>
+                                      <DialogFooter>
+                                        <DialogClose asChild>
+                                          <Button type="button">Save Instructions</Button>
+                                        </DialogClose>
+                                      </DialogFooter>
+                                    </DialogContent>
+                                  </Dialog>
+                                  
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleRegenerateBusinessRequirementsClick}
+                                    disabled={isGeneratingBusinessRequirements}
+                                  >
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Regenerate
+                                  </Button>
+                                </div>
                               </div>
                             ) : (
                               <div className="text-center py-8">
