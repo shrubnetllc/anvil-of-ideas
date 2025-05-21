@@ -1214,6 +1214,14 @@ export default function IdeaDetail() {
                 <ArrowLeft className="h-6 w-6" />
               </Button>
               <div>
+                <div className="mb-1">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                    ${idea.status === 'Completed' ? 'bg-green-100 text-green-800' : ''}
+                    ${idea.status === 'Generating' ? 'bg-amber-100 text-amber-800' : ''}
+                    ${idea.status === 'Draft' ? 'bg-neutral-100 text-neutral-800' : ''}`}>
+                    {idea.status}
+                  </span>
+                </div>
                 <h1 className="text-2xl font-bold text-neutral-900">
                   {idea.title || idea.companyName || idea.idea.split(' ').slice(0, 5).join(' ') + '...'}
                 </h1>
@@ -2696,18 +2704,6 @@ export default function IdeaDetail() {
                               <div>
                                 <p className="text-sm font-medium text-neutral-500">Description</p>
                                 <p className="mt-1 text-sm text-neutral-900 font-medium">{idea.idea}</p>
-                              </div>
-                              
-                              <div>
-                                <p className="text-sm font-medium text-neutral-500">Status</p>
-                                <div className="mt-1 flex items-center">
-                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                    ${idea.status === 'Completed' ? 'bg-green-100 text-secondary-500' : ''}
-                                    ${idea.status === 'Generating' ? 'bg-yellow-100 text-yellow-800' : ''}
-                                    ${idea.status === 'Draft' ? 'bg-neutral-100 text-neutral-800' : ''}`}>
-                                    {idea.status}
-                                  </span>
-                                </div>
                               </div>
                               
                               {idea.companyName && (
