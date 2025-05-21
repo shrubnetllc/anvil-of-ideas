@@ -616,7 +616,48 @@ export default function IdeaDetail() {
     }
   };
   
-  // Handle regenerating functional requirements was here
+  // Handle regenerating functional requirements
+  // Update the existing handleRegenerateFunctionalRequirementsClick function
+  const handleRegenerateFunctionalRequirementsClick = async () => {
+    try {
+      setIsGeneratingFunctionalRequirements(true);
+      setFunctionalRequirementsTimedOut(false);
+      
+      // Check if we need to show the notes dialog
+      const requestBody = functionalRequirementsNotes ? { instructions: functionalRequirementsNotes } : {};
+      
+      // Call the API to start the generation process
+      const response = await fetch(`/api/ideas/${ideaId}/generate-functional-requirements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setFunctionalRequirements(data.document);
+        setFunctionalRequirementsGenerating(true);
+        
+        toast({
+          title: "Functional Requirements Generation Started",
+          description: "The system is now creating your Functional Requirements document. This may take a few minutes.",
+        });
+        
+        // Start polling for updates
+        startPollingFunctionalRequirements();
+      } else {
+        if (response.status === 409) {
+          // Document already exists
+          setFunctionalRequirements(data.document);
+          toast({
+            title: "Functional Requirements Document Exists",
+            description: "A Functional Requirements document already exists for this idea. You can view it in the Functional Requirements tab.",
+            variant: "warning"
+          });
+        } else {
           throw new Error(data.error || "Failed to generate Functional Requirements");
         }
       }
