@@ -948,7 +948,7 @@ export default function IdeaDetail() {
                         {isLoadingRequirements ? (
                           <div className="text-center py-8">
                             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-                            <p>Loading project requirements...</p>
+                            <p>Loading project requirements document...</p>
                           </div>
                         ) : projectRequirementsGenerating ? (
                           <div className="text-center py-8">
@@ -961,75 +961,122 @@ export default function IdeaDetail() {
                               </div>
                             </div>
                             <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
-                              Forging Your Requirements
+                              Forging Your Project Requirements
                             </h4>
                             <p className="text-neutral-600 mb-2">
                               Please wait while we hammer out the project requirements for your idea...
                             </p>
-                            <div className="flex items-center justify-center mt-4 space-x-3">
-                              <Badge variant="outline" className="px-3 py-1">
-                                <span className="text-xs">Auto-completes after 2 minutes</span>
-                              </Badge>
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={handleRegenerateProjectRequirementsClick}
-                                className="flex items-center text-xs h-7"
-                              >
-                                <RefreshCw className="h-3 w-3 mr-1" /> Retry
-                              </Button>
-                            </div>
+                            <p className="text-neutral-500 text-sm italic">
+                              This process usually takes 1-2 minutes.
+                            </p>
                           </div>
                         ) : projectRequirements ? (
                           <div>
-                            <div className="flex items-center justify-between mb-4">
-                              <p className="text-sm text-neutral-500">
-                                Last updated: {formatDate(projectRequirements.updatedAt || projectRequirements.createdAt)}
-                              </p>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={async () => {
-                                    const success = await copyHtmlToClipboard("project-requirements-content");
-                                    if (success) {
-                                      toast({
-                                        title: "Content copied to clipboard",
-                                        description: "Project requirements copied as formatted text",
-                                        duration: 3000
-                                      });
-                                    } else {
-                                      toast({
-                                        title: "Failed to copy content",
-                                        description: "Please try again or select and copy manually",
-                                        variant: "destructive",
-                                        duration: 3000
-                                      });
-                                    }
-                                  }}
-                                >
-                                  <Copy className="mr-2 h-4 w-4" />
-                                  Copy Content
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={handleRegenerateProjectRequirementsClick}
-                                  disabled={isGeneratingRequirements}
-                                >
-                                  <RefreshCw className="mr-2 h-4 w-4" />
-                                  Regenerate
-                                </Button>
+                            {projectRequirements.status === 'Completed' ? (
+                              <div>
+                                <div className="mb-6 flex justify-between items-center">
+                                  <div>
+                                    <p className="text-sm text-neutral-500">
+                                      Last updated: {formatDate(projectRequirements.updatedAt || projectRequirements.createdAt)}
+                                    </p>
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={async () => {
+                                        const success = await copyHtmlToClipboard("project-requirements-content");
+                                        if (success) {
+                                          toast({
+                                            title: "Content copied to clipboard",
+                                            description: "Project requirements copied as formatted text",
+                                            duration: 3000
+                                          });
+                                        } else {
+                                          toast({
+                                            title: "Failed to copy content",
+                                            description: "Please try again or select and copy manually",
+                                            variant: "destructive",
+                                            duration: 3000
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      <Copy className="mr-2 h-4 w-4" />
+                                      Copy Content
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={handleRegenerateProjectRequirementsClick}
+                                      disabled={isGeneratingRequirements}
+                                    >
+                                      <RefreshCw className="mr-2 h-4 w-4" />
+                                      Regenerate
+                                    </Button>
+                                  </div>
+                                </div>
+                                
+                                {/* Display the project requirements content */}
+                                <div id="project-requirements-content" className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700">
+                                  {projectRequirements.html ? (
+                                    <div dangerouslySetInnerHTML={{ __html: projectRequirements.html }} />
+                                  ) : projectRequirements.content ? (
+                                    <div className="whitespace-pre-wrap font-mono text-sm bg-neutral-50 p-4 rounded-md">
+                                      {projectRequirements.content}
+                                    </div>
+                                  ) : (
+                                    <div className="p-4 text-center">
+                                      <p className="text-neutral-600">
+                                        Project requirements content is being processed. Check status to refresh.
+                                      </p>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Additional notes panel for regeneration - using a dialog like with lean canvas */}
+                                <div className="mt-6 flex">
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-sm text-neutral-500 inline-flex items-center"
+                                      >
+                                        <FileText className="mr-1 h-4 w-4" />
+                                        Add regeneration instructions
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="sm:max-w-[550px]">
+                                      <DialogHeader>
+                                        <DialogTitle>Add Regeneration Instructions</DialogTitle>
+                                        <DialogDescription>
+                                          Add specific instructions for regenerating your Project Requirements. These instructions will be used when you click the Regenerate button.
+                                        </DialogDescription>
+                                      </DialogHeader>
+                                      <div className="py-4">
+                                        <Textarea 
+                                          id="requirementsNotes"
+                                          value={requirementsNotes}
+                                          onChange={(e) => setRequirementsNotes(e.target.value)}
+                                          placeholder="E.g., Include more specific user stories, emphasize mobile app requirements, focus on security features..."
+                                          className="min-h-[150px]"
+                                        />
+                                      </div>
+                                      <DialogFooter>
+                                        <DialogClose asChild>
+                                          <Button type="button">Save Instructions</Button>
+                                        </DialogClose>
+                                      </DialogFooter>
+                                    </DialogContent>
+                                  </Dialog>
+                                </div>
                               </div>
-                            </div>
-                            
-                            <div id="project-requirements-content" className="prose prose-sm max-w-none overflow-auto">
-                              {projectRequirements.html ? (
-                                <div dangerouslySetInnerHTML={{ __html: projectRequirements.html }} />
-                              ) : (
-                                <div className="whitespace-pre-line">{projectRequirements.content}</div>
-                              )}
-                            </div>
+                            ) : (
+                              <div className="text-center py-8">
+                                <p>Project requirements document is in {projectRequirements.status.toLowerCase()} state.</p>
+                              </div>
+                            )}
                           </div>
                         ) : !isGeneratingRequirements ? (
                           <div>
