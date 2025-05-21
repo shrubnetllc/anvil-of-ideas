@@ -2186,8 +2186,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Update the document with the HTML content if we found some
-      if (htmlContent && (!document.html || document.status !== 'Completed')) {
+      // Update the document's status if needed
+      if (htmlContent) {
         console.log(`✓ Updating document ${document.id} with HTML content of length ${htmlContent.length}`);
         
         try {
@@ -2197,7 +2197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             updatedAt: new Date()
           });
           
-          console.log(`✓ Successfully updated document status to Completed`);
+          console.log(`✓ Successfully updated document status to Completed and added HTML content`);
           
           // Also update the response to include the HTML content in the standard field
           if (supabaseResponse.data) {
@@ -2206,8 +2206,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } catch (updateError) {
           console.error('Error updating document with HTML:', updateError);
         }
-      } else if (!htmlContent) {
-        console.log('⚠️ No HTML content found in Supabase response');
+      } else {
+        // No HTML content found but we should still update the status if it's timed out
+        // Check if the document has been generating for more than 2 minutes
+        const TWO_MINUTES = 2 * 60 * 1000; // 2 minutes in milliseconds
+        const isTimedOut = document.status === 'Generating' && 
+                          document.generationStartedAt && 
+                          (new Date().getTime() - document.generationStartedAt.getTime() > TWO_MINUTES);
+        
+        if (isTimedOut) {
+          console.log(`⚠️ Document ${document.id} generation timed out. Updating status to Completed.`);
+          try {
+            await storage.updateDocument(document.id, {
+              status: 'Completed',
+              updatedAt: new Date()
+            });
+            console.log(`✓ Successfully updated timed-out document status to Completed`);
+          } catch (updateError) {
+            console.error('Error updating document status:', updateError);
+          }
+        } else {
+          console.log('⚠️ No HTML content found in Supabase response and document is not timed out');
+        }
       }
       
       res.json(supabaseResponse);
