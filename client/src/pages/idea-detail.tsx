@@ -767,29 +767,33 @@ export default function IdeaDetail() {
   };
 
   const handleRegenerateFunctionalRequirementsClick = async () => {
-    try {
-      // Skip deletion - just reset UI state and start a new generation
+    if (functionalRequirements && functionalRequirements.id) {
       setIsGeneratingFunctionalRequirements(true);
-      setFunctionalRequirements(null);
-      setFunctionalRequirementsGenerating(true);
-      setFunctionalRequirementsTimedOut(false);
       
-      toast({
-        title: "Regeneration Started",
-        description: "Generating new Functional Requirements document...",
-      });
+      const deleted = await deleteDocument(functionalRequirements.id);
+      if (deleted) {
+        // Reset state to show the empty form
+        setFunctionalRequirements(null);
+        setFunctionalRequirementsGenerating(false);
+        setFunctionalRequirementsTimedOut(false);
+        setFunctionalRequirementsNotes(''); // Reset notes field
+        
+        toast({
+          title: "Ready for regeneration",
+          description: "You can now generate a new Functional Requirements document",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to reset document. Please try again.",
+          variant: "destructive",
+        });
+      }
       
-      // Start the generation process directly
-      generateFunctionalRequirements();
-    } catch (error) {
-      console.error('Error regenerating Functional Requirements:', error);
-      toast({
-        title: "Error",
-        description: "Failed to regenerate Functional Requirements",
-        variant: "destructive",
-      });
       setIsGeneratingFunctionalRequirements(false);
-      setFunctionalRequirementsGenerating(false);
+    } else {
+      handleGenerateFunctionalRequirementsClick();
     }
   };
 
