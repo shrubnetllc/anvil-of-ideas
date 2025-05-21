@@ -566,6 +566,103 @@ export default function IdeaDetail() {
     }
   };
   
+  // Handle generating functional requirements
+  const handleGenerateFunctionalRequirementsClick = async () => {
+    try {
+      setIsGeneratingFunctionalRequirements(true);
+      
+      const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          instructions: functionalRequirementsNotes,
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Started generating functional requirements:', result);
+        setFunctionalRequirementsGenerating(true);
+        setFunctionalRequirementsTimedOut(false);
+        fetchFunctionalRequirements();
+        
+        // Poll for updates
+        const pollTimer = setInterval(async () => {
+          try {
+            await fetchFunctionalRequirements();
+            console.log('Polled functional requirements status');
+          } catch (pollError) {
+            console.error('Error polling document status:', pollError);
+          }
+        }, 10000); // Poll every 10 seconds
+        
+        // Clear polling after 2 minutes maximum
+        setTimeout(() => {
+          clearInterval(pollTimer);
+          fetchFunctionalRequirements(); // Fetch final state
+        }, 120000);
+        
+        toast({
+          title: "Success",
+          description: "Started forging functional requirements. This may take a few minutes.",
+          variant: "default",
+        });
+      } else {
+        throw new Error('Failed to start functional requirements generation');
+      }
+    } catch (error) {
+      console.error('Error generating functional requirements:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate functional requirements. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingFunctionalRequirements(false);
+    }
+  };
+  
+  // Handle regenerating functional requirements
+  const handleRegenerateFunctionalRequirementsClick = async () => {
+    if (functionalRequirements && functionalRequirements.id) {
+      try {
+        setIsGeneratingFunctionalRequirements(true);
+        
+        // Delete the existing document first
+        const response = await fetch(`/api/ideas/${ideaId}/documents/${functionalRequirements.id}`, {
+          method: 'DELETE',
+        });
+        
+        if (response.ok) {
+          // Clear the current document and reset states
+          setFunctionalRequirements(null);
+          setFunctionalRequirementsGenerating(false);
+          setFunctionalRequirementsTimedOut(false);
+          
+          toast({
+            title: "Regeneration Started",
+            description: "The Functional Requirements have been reset and can now be regenerated.",
+          });
+        } else {
+          throw new Error(`Failed to delete Functional Requirements document`);
+        }
+      } catch (error) {
+        console.error('Error regenerating Functional Requirements:', error);
+        toast({
+          title: "Error",
+          description: "Failed to regenerate Functional Requirements",
+          variant: "destructive",
+        });
+      } finally {
+        setIsGeneratingFunctionalRequirements(false);
+      }
+    } else {
+      handleGenerateFunctionalRequirementsClick();
+    }
+  };
+
   // Handle generating business requirements
   const handleGenerateBusinessRequirementsClick = async () => {
     try {
