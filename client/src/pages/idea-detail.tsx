@@ -576,14 +576,36 @@ export default function IdeaDetail() {
     try {
       setIsGeneratingFunctionalRequirements(true);
       
-      const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`, {
+      // Get needed information for the request
+      const projectId = canvas?.projectId || null;
+      const prdId = projectRequirements?.externalId || null;
+      const brdId = businessRequirements?.externalId || null;
+      
+      console.log(`Starting functional requirements generation for idea: ${ideaId}, project ID: ${projectId || 'not available'}, PRD ID: ${prdId || 'not available'}, BRD ID: ${brdId || 'not available'}`);
+      
+      // Build request payload
+      const payload: {
+        instructions: string;
+        projectId?: string;
+        prdId?: string;
+        brdId?: string;
+        leancanvasId?: string;
+      } = {
+        instructions: functionalRequirementsNotes || "Generate comprehensive functional requirements based on the business requirements and project requirements."
+      };
+      
+      // Add available IDs
+      if (projectId) payload.projectId = projectId;
+      if (prdId) payload.prdId = prdId;
+      if (brdId) payload.brdId = brdId;
+      if (canvas?.leancanvasId) payload.leancanvasId = canvas.leancanvasId;
+      
+      const response = await fetch(`/api/ideas/${ideaId}/generate-functional-requirements`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          instructions: functionalRequirementsNotes,
-        }),
+        body: JSON.stringify(payload),
       });
       
       if (response.ok) {
