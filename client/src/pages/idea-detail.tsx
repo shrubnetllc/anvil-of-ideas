@@ -389,12 +389,8 @@ export default function IdeaDetail() {
                   // This is the standard format our server should return now
                   htmlContent = supabaseData.data.html;
                   console.log('Found HTML in standard html field:', htmlContent.substring(0, 100) + '...');
-                } else if (supabaseData.data && supabaseData.data.frd_html) {
-                  // This is the field from the direct 'frd' table in Supabase
-                  htmlContent = supabaseData.data.frd_html;
-                  console.log('Found HTML in frd_html field:', htmlContent.substring(0, 100) + '...');
                 } else if (supabaseData.data && supabaseData.data.functional_html) {
-                  // This is a fallback for legacy format
+                  // This is a fallback for direct database format
                   htmlContent = supabaseData.data.functional_html;
                   console.log('Found HTML in functional_html field:', htmlContent.substring(0, 100) + '...');
                 } else if (supabaseData.data) {
@@ -571,56 +567,43 @@ export default function IdeaDetail() {
     }
   };
   
-  // Function to handle generation of functional requirements
-  const generateFunctionalRequirements = async () => {
+  // Old implementation - to be removed after testing
+  const oldGenerateFunctionalRequirements = async () => {
     try {
       setIsGeneratingFunctionalRequirements(true);
       
-      // Get needed information for the request
-      const projectId = canvas?.projectId || null;
-      const prdId = projectRequirements?.externalId || null;
-      const brdId = businessRequirements?.externalId || null;
-      
-      console.log(`Starting functional requirements generation for idea: ${ideaId}, project ID: ${projectId || 'not available'}, PRD ID: ${prdId || 'not available'}, BRD ID: ${brdId || 'not available'}`);
-      
-      // Build request payload
-      const payload: {
-        instructions: string;
-        projectId?: string;
-        prdId?: string;
-        brdId?: string;
-        leancanvasId?: string;
-      } = {
-        instructions: functionalRequirementsNotes || "Generate comprehensive functional requirements based on the business requirements and project requirements."
-      };
-      
-      // Add available IDs
-      if (projectId) payload.projectId = projectId;
-      if (prdId) payload.prdId = prdId;
-      if (brdId) payload.brdId = brdId;
-      if (canvas?.leancanvasId) payload.leancanvasId = canvas.leancanvasId;
-      
-      const response = await fetch(`/api/ideas/${ideaId}/generate-functional-requirements`, {
+      const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          instructions: functionalRequirementsNotes,
+        }),
       });
       
       if (response.ok) {
         const result = await response.json();
         console.log('Started generating functional requirements:', result);
-        
-        // Update UI state
         setFunctionalRequirementsGenerating(true);
         setFunctionalRequirementsTimedOut(false);
+        fetchFunctionalRequirements();
         
-        // Fetch the initial document
-        await fetchFunctionalRequirements();
+        // Poll for updates
+        const pollTimer = setInterval(async () => {
+          try {
+            await fetchFunctionalRequirements();
+            console.log('Polled functional requirements status');
+          } catch (pollError) {
+            console.error('Error polling document status:', pollError);
+          }
+        }, 10000); // Poll every 10 seconds
         
-        // Start polling for updates
-        startPollingFunctionalRequirements();
+        // Clear polling after 2 minutes maximum
+        setTimeout(() => {
+          clearInterval(pollTimer);
+          fetchFunctionalRequirements(); // Fetch final state
+        }, 120000);
         
         toast({
           title: "Success",
@@ -643,57 +626,84 @@ export default function IdeaDetail() {
   };
   
   // Handle regenerating functional requirements
-  // Update the existing handleRegenerateFunctionalRequirementsClick function
-  // Function to handle generating functional requirements
-  const handleGenerateFunctionalRequirementsClick = () => {
-    // Show modal to collect notes if needed
-    if (canvas && projectRequirements && businessRequirements) {
-      // We have all prerequisites, generate directly
-      generateFunctionalRequirements();
-    } else {
-      // Show confirmation dialog with warnings about missing prerequisites
-      setShowFunctionalRequirementsModal(true);
+  // Generate Functional Requirements document
+  const generateFunctionalRequirements = async () => {
+    try {
+      setIsGeneratingFunctionalRequirements(true);
+      setFunctionalRequirementsTimedOut(false);
+      
+      // Check if we need to show the notes dialog
+      const requestBody = functionalRequirementsNotes ? { instructions: functionalRequirementsNotes } : {};
+      
+      // Call the API to start the generation process
+      const response = await fetch(`/api/ideas/${ideaId}/generate-functional-requirements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setFunctionalRequirements(data.document);
+        setFunctionalRequirementsGenerating(true);
+        
+        toast({
+          title: "Functional Requirements Generation Started",
+          description: "The system is now creating your Functional Requirements document. This may take a few minutes.",
+        });
+        
+        // Start polling for updates
+        startPollingFunctionalRequirements();
+      } else {
+        if (response.status === 409) {
+          // Document already exists
+          setFunctionalRequirements(data.document);
+          toast({
+            title: "Functional Requirements Document Exists",
+            description: "A Functional Requirements document already exists for this idea. You can view it in the Functional Requirements tab.",
+            variant: "warning"
+          });
+        } else {
+          throw new Error(data.error || "Failed to generate Functional Requirements");
+        }
+      }
+    } catch (error) {
+      console.error("Error generating Functional Requirements:", error);
+      toast({
+        title: "Generation Failed",
+        description: `Failed to start Functional Requirements generation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    } finally {
+      setIsGeneratingFunctionalRequirements(false);
     }
   };
-
+  
   // Start polling for Functional Requirements updates
   const startPollingFunctionalRequirements = () => {
-    console.log("Starting to poll for Functional Requirements updates...");
-    setFunctionalRequirementsTimedOut(false);
-    setFunctionalRequirementsGenerating(true);
-    
     // Poll every 10 seconds
     const interval = setInterval(async () => {
       console.log("Polling for Functional Requirements updates...");
       try {
-        // Refresh the functional requirements data
-        await fetchFunctionalRequirements();
-        
-        // Check if we need to stop polling
-        if (functionalRequirements) {
-          // If document is completed, stop polling
-          if (functionalRequirements.status === 'Completed') {
-            console.log("Functional Requirements generation completed");
-            setFunctionalRequirementsGenerating(false);
-            setFunctionalRequirementsTimedOut(false);
-            
-            toast({
-              title: "Success",
-              description: "Your Functional Requirements document has been generated successfully.",
-            });
+        const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
+        if (response.ok) {
+          const data = await response.json();
+          setFunctionalRequirements(data);
+          
+          // If status is no longer "Generating", stop polling
+          if (data && data.status !== 'Generating') {
             clearInterval(interval);
-          } 
-          // If document is still generating, check for timeout
-          else if (functionalRequirements.status === 'Generating' && functionalRequirements.generationStartedAt) {
-            const startedAt = new Date(functionalRequirements.generationStartedAt);
-            const now = new Date();
-            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
+            setFunctionalRequirementsGenerating(false);
+            console.log("Functional Requirements generation completed");
             
-            // If generation has been running for more than 2 minutes, mark as timed out
-            if (diffMinutes >= 2) {
-              console.log(`Functional Requirements generation timed out after ${diffMinutes.toFixed(1)} minutes`);
-              setFunctionalRequirementsTimedOut(true);
-              clearInterval(interval);
+            if (data.status === 'Completed') {
+              toast({
+                title: "Functional Requirements Ready",
+                description: "Your Functional Requirements document has been generated successfully.",
+              });
             }
           }
         }
@@ -704,6 +714,23 @@ export default function IdeaDetail() {
     
     // Clean up on component unmount
     return () => clearInterval(interval);
+  };
+  
+  // This function handles the button click and shows dialog if needed
+  const showFunctionalRequirementsDialog = async () => {
+    // Show modal to collect notes if needed
+    if (canvas && projectRequirements && businessRequirements) {
+      // We have all prerequisites, generate directly
+      generateFunctionalRequirements();
+    } else {
+      // Show confirmation dialog with warnings about missing prerequisites
+      setShowFunctionalRequirementsModal(true);
+    }
+  };
+  
+  // Function to handle generating functional requirements
+  const handleGenerateFunctionalRequirementsClick = () => {
+    showFunctionalRequirementsDialog();
   };
 
   const handleRegenerateFunctionalRequirementsClick = async () => {
@@ -1694,7 +1721,7 @@ export default function IdeaDetail() {
                             <Button 
                               size="sm" 
                               variant="outline"
-                              onClick={() => handleGenerateFunctionalRequirementsClick()}
+                              onClick={handleGenerateFunctionalRequirementsClick}
                               disabled={isGeneratingFunctionalRequirements}
                             >
                               <Hammer className="mr-2 h-4 w-4" />

@@ -32,7 +32,6 @@ export default function IdeaDetail() {
   const [isLoadingRequirements, setIsLoadingRequirements] = useState(false);
   const [isGeneratingRequirements, setIsGeneratingRequirements] = useState(false);
   const [projectRequirementsGenerating, setProjectRequirementsGenerating] = useState(false);
-  const [projectRequirementsTimedOut, setProjectRequirementsTimedOut] = useState(false);
   const [requirementsNotes, setRequirementsNotes] = useState('');
   
   // State for business requirements
@@ -45,15 +44,6 @@ export default function IdeaDetail() {
   const [businessRequirementsHtml, setBusinessRequirementsHtml] = useState("");
   const [businessRequirementsContent, setBusinessRequirementsContent] = useState("");
   const [businessRequirementsNotes, setBusinessRequirementsNotes] = useState('');
-  
-  // State for functional requirements
-  const [functionalRequirements, setFunctionalRequirements] = useState<ProjectDocument | null>(null);
-  const [isLoadingFunctionalRequirements, setIsLoadingFunctionalRequirements] = useState(false);
-  const [isGeneratingFunctionalRequirements, setIsGeneratingFunctionalRequirements] = useState(false);
-  const [functionalRequirementsGenerating, setFunctionalRequirementsGenerating] = useState(false);
-  const [functionalRequirementsTimedOut, setFunctionalRequirementsTimedOut] = useState(false);
-  const [functionalRequirementsNotes, setFunctionalRequirementsNotes] = useState('');
-  const [showFunctionalRequirementsModal, setShowFunctionalRequirementsModal] = useState(false);
   
   // State for lean canvas
   const [canvasNotes, setCanvasNotes] = useState('');
@@ -73,7 +63,6 @@ export default function IdeaDetail() {
     if (ideaId) {
       fetchProjectRequirements();
       fetchBusinessRequirements();
-      fetchFunctionalRequirements();
     }
   }, [ideaId]);
 
@@ -89,24 +78,8 @@ export default function IdeaDetail() {
         // Check if requirements are currently generating
         if (data && data.status === 'Generating') {
           setProjectRequirementsGenerating(true);
-          
-          // Check if generation has timed out (2 minutes or more since started)
-          if (data.generationStartedAt) {
-            const startedAt = new Date(data.generationStartedAt);
-            const now = new Date();
-            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
-            
-            if (diffMinutes >= 2) {
-              console.log(`Project requirements generation timed out (started ${diffMinutes.toFixed(1)} minutes ago)`);
-              setProjectRequirementsTimedOut(true);
-            } else {
-              setProjectRequirementsTimedOut(false);
-              console.log(`Project requirements generation in progress (started ${diffMinutes.toFixed(1)} minutes ago)`);
-            }
-          }
         } else {
           setProjectRequirementsGenerating(false);
-          setProjectRequirementsTimedOut(false);
         }
       } else {
         // No requirements exist yet
@@ -335,148 +308,6 @@ export default function IdeaDetail() {
       setIsLoadingBusinessRequirements(false);
     }
   };
-  
-  // Fetch the functional requirements document
-  const fetchFunctionalRequirements = async () => {
-    try {
-      setIsLoadingFunctionalRequirements(true);
-      
-      // First get the local document to check its status and get the externalId
-      const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
-      if (response.ok) {
-        const data = await response.json();
-        setFunctionalRequirements(data);
-        
-        // Check if functional requirements are currently generating
-        if (data && data.status === 'Generating') {
-          setFunctionalRequirementsGenerating(true);
-          
-          // Check if generation has timed out (2 minutes or more since started)
-          if (data.generationStartedAt) {
-            const startedAt = new Date(data.generationStartedAt);
-            const now = new Date();
-            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
-            
-            if (diffMinutes >= 2) {
-              console.log(`Functional requirements generation timed out (started ${diffMinutes.toFixed(1)} minutes ago)`);
-              setFunctionalRequirementsTimedOut(true);
-            } else {
-              setFunctionalRequirementsTimedOut(false);
-              console.log(`Functional requirements generation in progress (started ${diffMinutes.toFixed(1)} minutes ago)`);
-            }
-          }
-        } else if (data && data.status === 'Completed') {
-          setFunctionalRequirementsGenerating(false);
-          setFunctionalRequirementsTimedOut(false);
-          
-          // If document is completed and has externalId, try to get enriched content from Supabase
-          if (data.externalId) {
-            try {
-              console.log(`🔍 Fetching Functional Requirements data from Supabase with document ID: ${data.externalId} for idea ${ideaId}`);
-              
-              const supabaseResponse = await fetch(`/api/supabase/functional-requirements/${ideaId}?external_id=${data.externalId}`);
-              console.log(`🔍 Response status:`, supabaseResponse.status);
-              
-              if (supabaseResponse.ok) {
-                const supabaseData = await supabaseResponse.json();
-                console.log('🔍 Supabase response:', supabaseData);
-              
-                // The updated response format should have HTML content directly in the data.html field
-                let htmlContent = null;
-                
-                // Check for HTML content in the most likely places based on our format
-                if (supabaseData.data && supabaseData.data.html) {
-                  // This is the standard format our server should return now
-                  htmlContent = supabaseData.data.html;
-                  console.log('Found HTML in standard html field:', htmlContent.substring(0, 100) + '...');
-                } else if (supabaseData.data && supabaseData.data.functional_html) {
-                  // This is a fallback for direct database format
-                  htmlContent = supabaseData.data.functional_html;
-                  console.log('Found HTML in functional_html field:', htmlContent.substring(0, 100) + '...');
-                } else if (supabaseData.data) {
-                  // Check ALL fields for potential HTML content as a last resort
-                  console.log('Looking for HTML content in all fields of Supabase response...');
-                  
-                  for (const [key, value] of Object.entries(supabaseData.data)) {
-                    if (typeof value === 'string' && 
-                        (value.includes('<html') || 
-                         value.includes('<!DOCTYPE') || 
-                         value.includes('<div') || 
-                         value.includes('<p>'))) {
-                      console.log(`Found potential HTML in field '${key}'`);
-                      htmlContent = value;
-                      break;
-                    }
-                  }
-                }
-                
-                if (htmlContent) {
-                  console.log(`Found HTML content in Supabase response (${htmlContent.length} characters)`);
-                  
-                  // First update the local document with HTML content if it was empty
-                  if (!data.html) {
-                    try {
-                      console.log(`Updating document ${data.id} with HTML content of length ${htmlContent.length}`);
-                      const updateResponse = await fetch(`/api/ideas/${ideaId}/documents/${data.id}`, {
-                        method: 'PATCH',
-                        headers: {
-                          'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                          html: htmlContent,
-                          status: "Completed" // Also make sure to set status to completed
-                        })
-                      });
-                      
-                      if (updateResponse.ok) {
-                        console.log('Successfully updated local document with HTML content from Supabase');
-                      } else {
-                        console.error('Failed to update document:', await updateResponse.text());
-                      }
-                    } catch (updateError) {
-                      console.error('Error updating local document with Supabase HTML:', updateError);
-                    }
-                  }
-                  
-                  // Update the document in state to include the HTML
-                  setFunctionalRequirements({
-                    ...data,
-                    html: htmlContent,
-                    status: "Completed" // Ensure status is completed since we have content
-                  });
-                  
-                  // Also log the content for debugging
-                  console.log('HTML content preview:', htmlContent.substring(0, 200) + '...');
-                } else {
-                  console.log('No HTML content found in any field of Supabase response');
-                }
-              }
-            } catch (supabaseError) {
-              console.error('Error fetching functional requirements from Supabase:', supabaseError);
-            }
-          }
-        } else {
-          // If not generating or completed, reset states
-          setFunctionalRequirementsGenerating(false);
-          setFunctionalRequirementsTimedOut(false);
-        }
-      } else {
-        // No functional requirements exist yet
-        setFunctionalRequirements(null);
-        setFunctionalRequirementsGenerating(false);
-        setFunctionalRequirementsTimedOut(false);
-      }
-    } catch (error) {
-      console.error('Error fetching functional requirements:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load functional requirements",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoadingFunctionalRequirements(false);
-    }
-  };
 
   // Handle generating project requirements
   const handleGenerateRequirementsClick = async () => {
@@ -567,217 +398,6 @@ export default function IdeaDetail() {
     }
   };
   
-  // Function to handle generation of functional requirements
-  const generateFunctionalRequirements = async () => {
-    try {
-      setIsGeneratingFunctionalRequirements(true);
-      
-      const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          instructions: functionalRequirementsNotes,
-        }),
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('Started generating functional requirements:', result);
-        
-        // Update UI state
-        setFunctionalRequirementsGenerating(true);
-        setFunctionalRequirementsTimedOut(false);
-        
-        // Fetch the initial document
-        await fetchFunctionalRequirements();
-        
-        // Start polling for updates
-        startPollingFunctionalRequirements();
-        
-        toast({
-          title: "Success",
-          description: "Started forging functional requirements. This may take a few minutes.",
-          variant: "default",
-        });
-      } else {
-        throw new Error('Failed to start functional requirements generation');
-      }
-    } catch (error) {
-      console.error('Error generating functional requirements:', error);
-      toast({
-        title: "Error",
-        description: "Failed to generate functional requirements. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsGeneratingFunctionalRequirements(false);
-    }
-  };
-  
-  // Handle regenerating functional requirements
-  // Update the existing handleRegenerateFunctionalRequirementsClick function
-  const handleRegenerateFunctionalRequirementsClick = async () => {
-    try {
-      setIsGeneratingFunctionalRequirements(true);
-      setFunctionalRequirementsTimedOut(false);
-      
-      // Check if we need to show the notes dialog
-      const requestBody = functionalRequirementsNotes ? { instructions: functionalRequirementsNotes } : {};
-      
-      // Call the API to start the generation process
-      const response = await fetch(`/api/ideas/${ideaId}/generate-functional-requirements`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setFunctionalRequirements(data.document);
-        setFunctionalRequirementsGenerating(true);
-        
-        toast({
-          title: "Functional Requirements Generation Started",
-          description: "The system is now creating your Functional Requirements document. This may take a few minutes.",
-        });
-        
-        // Start polling for updates
-        startPollingFunctionalRequirements();
-      } else {
-        if (response.status === 409) {
-          // Document already exists
-          setFunctionalRequirements(data.document);
-          toast({
-            title: "Functional Requirements Document Exists",
-            description: "A Functional Requirements document already exists for this idea. You can view it in the Functional Requirements tab.",
-            variant: "warning"
-          });
-        } else {
-          throw new Error(data.error || "Failed to generate Functional Requirements");
-        }
-      }
-    } catch (error) {
-      console.error("Error generating Functional Requirements:", error);
-      toast({
-        title: "Generation Failed",
-        description: `Failed to start Functional Requirements generation: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        variant: "destructive"
-      });
-    } finally {
-      setIsGeneratingFunctionalRequirements(false);
-    }
-  };
-  
-  // Start polling for Functional Requirements updates
-  const startPollingFunctionalRequirements = () => {
-    console.log("Starting to poll for Functional Requirements updates...");
-    setFunctionalRequirementsTimedOut(false);
-    setFunctionalRequirementsGenerating(true);
-    
-    // Poll every 10 seconds
-    const interval = setInterval(async () => {
-      console.log("Polling for Functional Requirements updates...");
-      try {
-        // Refresh the functional requirements data
-        await fetchFunctionalRequirements();
-        
-        // Get the latest data from state
-        if (functionalRequirements) {
-          // If document is complete, stop polling
-          if (functionalRequirements.status === 'Completed') {
-            clearInterval(interval);
-            setFunctionalRequirementsGenerating(false);
-            setFunctionalRequirementsTimedOut(false);
-            console.log("Functional Requirements generation completed");
-            
-            toast({
-              title: "Functional Requirements Ready",
-              description: "Your Functional Requirements document has been generated successfully.",
-            });
-          } 
-          // If document is still generating, check for timeout
-          else if (functionalRequirements.status === 'Generating' && functionalRequirements.generationStartedAt) {
-            const startedAt = new Date(functionalRequirements.generationStartedAt);
-            const now = new Date();
-            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
-            
-            // If generation has been running for more than 2 minutes, mark as timed out
-            if (diffMinutes >= 2) {
-              console.log(`Functional Requirements generation timed out after ${diffMinutes.toFixed(1)} minutes`);
-              setFunctionalRequirementsTimedOut(true);
-              clearInterval(interval);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error polling Functional Requirements:", error);
-      }
-    }, 10000);
-    
-    // Clean up on component unmount
-    return () => clearInterval(interval);
-  };
-  
-  // This function handles the button click and shows dialog if needed
-  const showFunctionalRequirementsDialog = async () => {
-    // Show modal to collect notes if needed
-    if (canvas && projectRequirements && businessRequirements) {
-      // We have all prerequisites, generate directly
-      generateFunctionalRequirements();
-    } else {
-      // Show confirmation dialog with warnings about missing prerequisites
-      setShowFunctionalRequirementsModal(true);
-    }
-  };
-  
-  // Function to handle generating functional requirements
-  const handleGenerateFunctionalRequirementsClick = () => {
-    showFunctionalRequirementsDialog();
-  };
-
-  const handleRegenerateFunctionalRequirementsClick = async () => {
-    if (functionalRequirements && functionalRequirements.id) {
-      try {
-        setIsGeneratingFunctionalRequirements(true);
-        
-        // Delete the existing document first
-        const response = await fetch(`/api/ideas/${ideaId}/documents/${functionalRequirements.id}`, {
-          method: 'DELETE',
-        });
-        
-        if (response.ok) {
-          // Clear the current document and reset states
-          setFunctionalRequirements(null);
-          setFunctionalRequirementsGenerating(false);
-          setFunctionalRequirementsTimedOut(false);
-          
-          toast({
-            title: "Regeneration Started",
-            description: "The Functional Requirements have been reset and can now be regenerated.",
-          });
-        } else {
-          throw new Error(`Failed to delete Functional Requirements document`);
-        }
-      } catch (error) {
-        console.error('Error regenerating Functional Requirements:', error);
-        toast({
-          title: "Error",
-          description: "Failed to regenerate Functional Requirements",
-          variant: "destructive",
-        });
-      } finally {
-        setIsGeneratingFunctionalRequirements(false);
-      }
-    } else {
-      handleGenerateFunctionalRequirementsClick();
-    }
-  };
-
   // Handle generating business requirements
   const handleGenerateBusinessRequirementsClick = async () => {
     try {
@@ -1213,16 +833,9 @@ export default function IdeaDetail() {
                           <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-2">
                               <h3 className="font-semibold">Lean Canvas</h3>
-                              {canvas ? (
-                                <Badge 
-                                  variant="default"
-                                  className="bg-green-100 text-green-800 hover:bg-green-100"
-                                >
-                                  Completed
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline">Not Created</Badge>
-                              )}
+                              <Badge variant={canvas ? "default" : "outline"}>
+                                {canvas ? "Created" : "Not Created"}
+                              </Badge>
                             </div>
                             <p className="text-sm text-neutral-600 mb-3">
                               Business model overview using the Lean Canvas framework
@@ -1315,7 +928,11 @@ export default function IdeaDetail() {
                       <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-lg font-bold text-neutral-900">Project Requirements Document</h3>
-                          {!projectRequirements && (
+                          {projectRequirements ? (
+                            <Badge variant="outline" className="text-xs">
+                              {projectRequirements.status}
+                            </Badge>
+                          ) : (
                             <Button 
                               size="sm" 
                               variant="outline"
@@ -1333,7 +950,7 @@ export default function IdeaDetail() {
                             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
                             <p>Loading project requirements document...</p>
                           </div>
-                        ) : projectRequirementsGenerating && !projectRequirementsTimedOut ? (
+                        ) : projectRequirementsGenerating ? (
                           <div className="text-center py-8">
                             <div className="mb-4 mx-auto relative w-16 h-16">
                               <div className="absolute inset-0 flex items-center justify-center animate-pulse">
@@ -1352,47 +969,6 @@ export default function IdeaDetail() {
                             <p className="text-neutral-500 text-sm italic">
                               This process usually takes 1-2 minutes.
                             </p>
-                          </div>
-                        ) : projectRequirementsTimedOut ? (
-                          <div className="border border-destructive rounded-md p-6 mb-4 bg-destructive/10">
-                            <div className="flex items-start space-x-4">
-                              <div className="mt-1">
-                                <AlertTriangle className="h-6 w-6 text-destructive" />
-                              </div>
-                              <div className="flex-1">
-                                <h4 className="font-bold text-destructive mb-2">Generation Timed Out</h4>
-                                <p className="text-neutral-700 mb-4">
-                                  The project requirements document generation is taking longer than expected. 
-                                  This could be due to high system load or complexity of your project.
-                                </p>
-                                <div className="flex items-center space-x-3">
-                                  <Button 
-                                    onClick={handleGenerateRequirementsClick}
-                                    disabled={isGeneratingRequirements}
-                                    className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
-                                  >
-                                    {isGeneratingRequirements ? (
-                                      <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Retrying...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <RefreshCw className="mr-2 h-4 w-4" />
-                                        Retry Generation
-                                      </>
-                                    )}
-                                  </Button>
-                                  <Button 
-                                    variant="outline" 
-                                    onClick={fetchProjectRequirements}
-                                  >
-                                    <RotateCcw className="mr-2 h-4 w-4" />
-                                    Check Status
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
                           </div>
                         ) : projectRequirements ? (
                           <div>
@@ -1503,25 +1079,38 @@ export default function IdeaDetail() {
                             )}
                           </div>
                         ) : !isGeneratingRequirements ? (
-                          <div className="py-8">
-                            <div className="mb-6">
-                              <p className="mb-2">Provide optional instructions for generating your project requirements document:</p>
-                              <Textarea
-                                value={requirementsNotes}
-                                onChange={(e) => setRequirementsNotes(e.target.value)}
-                                placeholder="e.g., Focus on specific features, include technical constraints, specify target platforms..."
-                                className="h-24"
-                              />
+                          <div>
+                            <div className="text-center py-8">
+                              <div className="mx-auto w-16 h-16 mb-4 bg-amber-50 rounded-full flex items-center justify-center">
+                                <Hammer className="h-8 w-8 text-amber-600" />
+                              </div>
+                              <h4 className="text-lg font-medium mb-2">No Project Requirements Yet</h4>
+                              <p className="text-neutral-600 max-w-lg mx-auto mb-4">
+                                Generate project requirements to define the high-level goals, scope, and constraints of your project.
+                              </p>
                             </div>
-                            <div className="flex justify-center">
-                              <Button 
-                                onClick={handleGenerateRequirementsClick}
-                                disabled={isGeneratingRequirements}
-                                className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
-                              >
-                                <Hammer className="mr-2 h-4 w-4" />
-                                {isGeneratingRequirements ? 'Generating...' : 'Generate Project Requirements'}
-                              </Button>
+                            
+                            {/* Notes to include for consideration */}
+                            <div className="mt-8 border-t border-neutral-200 pt-6">
+                              <h4 className="font-medium mb-2">Notes to include for consideration</h4>
+                              <p className="text-sm text-neutral-600 mb-4">
+                                Add any specific notes or requirements you'd like us to consider when generating the project requirements document.
+                              </p>
+                              <div className="space-y-4">
+                                <Textarea 
+                                  placeholder="Example: Include mobile responsive design requirements, focus on security features, etc."
+                                  className="h-24"
+                                  value={requirementsNotes}
+                                  onChange={(e) => setRequirementsNotes(e.target.value)}
+                                />
+                                <Button 
+                                  onClick={handleGenerateRequirementsClick}
+                                  disabled={isGeneratingRequirements}
+                                  className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
+                                >
+                                  <Hammer className="mr-2 h-4 w-4" /> Forge Requirements
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         ) : (
@@ -1543,7 +1132,11 @@ export default function IdeaDetail() {
                       <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-lg font-bold text-neutral-900">Business Requirements Document</h3>
-                          {!businessRequirements && (
+                          {businessRequirements ? (
+                            <Badge variant="outline" className="text-xs">
+                              {businessRequirements.status}
+                            </Badge>
+                          ) : (
                             <Button 
                               size="sm" 
                               variant="outline"
@@ -1712,232 +1305,6 @@ export default function IdeaDetail() {
                               >
                                 <Flame className="mr-2 h-4 w-4" />
                                 {isGeneratingBusinessRequirements ? 'Generating...' : 'Generate Business Requirements'}
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </TabsContent>
-                    
-                    {/* Functional Requirements Content */}
-                    <TabsContent value="functional" className="mt-6">
-                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
-                        <div className="flex items-center justify-between mb-4">
-                          <h3 className="text-lg font-bold text-neutral-900">Functional Requirements Document</h3>
-                          {!functionalRequirements && !functionalRequirementsGenerating && (
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={handleGenerateFunctionalRequirementsClick}
-                              disabled={isGeneratingFunctionalRequirements}
-                            >
-                              <Hammer className="mr-2 h-4 w-4" />
-                              Generate Functional Requirements
-                            </Button>
-                          )}
-                          {functionalRequirements && (
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={handleRegenerateFunctionalRequirementsClick}
-                              disabled={isGeneratingFunctionalRequirements}
-                            >
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              Regenerate Document
-                            </Button>
-                          )}
-                        </div>
-                        
-                        {isLoadingFunctionalRequirements ? (
-                          <div className="text-center py-8">
-                            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
-                            <p>Loading functional requirements document...</p>
-                          </div>
-                        ) : functionalRequirementsGenerating ? (
-                          <div className="text-center py-8">
-                            <div className="mb-4 mx-auto relative w-16 h-16">
-                              <div className="absolute inset-0 flex items-center justify-center animate-pulse">
-                                <Flame className="h-14 w-14 text-amber-400" />
-                              </div>
-                              <div className="absolute inset-0 flex items-center justify-center animate-spin">
-                                <Hammer className="h-10 w-10 text-primary" />
-                              </div>
-                            </div>
-                            <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
-                              Forging Your Functional Requirements Document
-                            </h4>
-                            <p className="text-neutral-600 mb-2">
-                              Please wait while we hammer out the functional requirements for your idea...
-                            </p>
-                            <p className="text-neutral-500 text-sm italic">
-                              This process usually takes 1-2 minutes.
-                            </p>
-                          </div>
-                        ) : functionalRequirementsTimedOut ? (
-                          <div className="border border-destructive rounded-md p-6 mb-4 bg-destructive/10">
-                            <div className="flex items-start space-x-4">
-                              <div className="mt-1">
-                                <AlertTriangle className="h-6 w-6 text-destructive" />
-                              </div>
-                              <div className="flex-1">
-                                <h4 className="font-bold text-destructive mb-2">Generation Timed Out</h4>
-                                <p className="text-neutral-700 mb-4">
-                                  The functional requirements document generation is taking longer than expected. 
-                                  This could be due to high system load or complexity of your project.
-                                </p>
-                                <div className="flex items-center space-x-3">
-                                  <Button 
-                                    onClick={handleRegenerateFunctionalRequirementsClick}
-                                    disabled={isGeneratingFunctionalRequirements}
-                                    className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
-                                  >
-                                    {isGeneratingFunctionalRequirements ? (
-                                      <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Retrying...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <RefreshCw className="mr-2 h-4 w-4" />
-                                        Retry Generation
-                                      </>
-                                    )}
-                                  </Button>
-                                  <Button 
-                                    variant="outline" 
-                                    onClick={fetchFunctionalRequirements}
-                                  >
-                                    <RotateCcw className="mr-2 h-4 w-4" />
-                                    Check Status
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ) : functionalRequirements ? (
-                          <div>
-                            <div className="mb-6 flex justify-between items-center">
-                              <div>
-                                <Badge 
-                                  variant="default"
-                                  className="bg-green-100 text-green-800 hover:bg-green-100"
-                                >
-                                  Completed
-                                </Badge>
-                                <p className="text-sm text-neutral-500 mt-1">
-                                  Last updated: {formatDate(functionalRequirements.updatedAt || functionalRequirements.createdAt)}
-                                </p>
-                              </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={async () => {
-                                    const success = await copyHtmlToClipboard("functional-requirements-content");
-                                    if (success) {
-                                      toast({
-                                        title: "Content copied to clipboard",
-                                        description: "Functional requirements copied as formatted text",
-                                        duration: 3000
-                                      });
-                                    } else {
-                                      toast({
-                                        title: "Failed to copy content",
-                                        description: "Please try again or select and copy manually",
-                                        variant: "destructive",
-                                        duration: 3000
-                                      });
-                                    }
-                                  }}
-                                >
-                                  <Copy className="mr-2 h-4 w-4" />
-                                  Copy Content
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={handleRegenerateFunctionalRequirementsClick}
-                                  disabled={isGeneratingFunctionalRequirements}
-                                >
-                                  <RefreshCw className="mr-2 h-4 w-4" />
-                                  Regenerate
-                                </Button>
-                              </div>
-                            </div>
-                            
-                            <div id="functional-requirements-content" className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700">
-                              {functionalRequirements.html ? (
-                                <div dangerouslySetInnerHTML={{ __html: functionalRequirements.html }} />
-                              ) : functionalRequirements.content ? (
-                                <div className="whitespace-pre-wrap font-mono text-sm bg-neutral-50 p-4 rounded-md">
-                                  {functionalRequirements.content}
-                                </div>
-                              ) : (
-                                <div className="p-4 text-center">
-                                  <p className="text-neutral-600">
-                                    Functional requirements content is being processed. Check status to refresh.
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                            
-                            {/* Regeneration Instructions Panel */}
-                            <div className="mt-6 flex">
-                              <Dialog>
-                                <DialogTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-sm text-neutral-500 inline-flex items-center"
-                                  >
-                                    <FileText className="mr-1 h-4 w-4" />
-                                    Add regeneration instructions
-                                  </Button>
-                                </DialogTrigger>
-                                <DialogContent className="sm:max-w-[550px]">
-                                  <DialogHeader>
-                                    <DialogTitle>Add Regeneration Instructions</DialogTitle>
-                                    <DialogDescription>
-                                      Add specific instructions for regenerating your Functional Requirements. These instructions will be used when you click the Regenerate button.
-                                    </DialogDescription>
-                                  </DialogHeader>
-                                  <div className="py-4">
-                                    <Textarea 
-                                      id="functionalRequirementsNotes"
-                                      value={functionalRequirementsNotes}
-                                      onChange={(e) => setFunctionalRequirementsNotes(e.target.value)}
-                                      placeholder="E.g., Include more specific details about user interface features, focus on data validation requirements..."
-                                      className="min-h-[150px]"
-                                    />
-                                  </div>
-                                  <DialogFooter>
-                                    <DialogClose asChild>
-                                      <Button type="button">Save Instructions</Button>
-                                    </DialogClose>
-                                  </DialogFooter>
-                                </DialogContent>
-                              </Dialog>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="py-8">
-                            <div className="mb-6">
-                              <p className="mb-2">Provide optional instructions for generating your functional requirements document:</p>
-                              <Textarea
-                                value={functionalRequirementsNotes}
-                                onChange={(e) => setFunctionalRequirementsNotes(e.target.value)}
-                                placeholder="e.g., Specific user features, UI/UX requirements, integrations needed..."
-                                className="h-24"
-                              />
-                            </div>
-                            <div className="flex justify-center">
-                              <Button 
-                                onClick={handleGenerateFunctionalRequirementsClick}
-                                disabled={isGeneratingFunctionalRequirements}
-                                className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
-                              >
-                                <Hammer className="mr-2 h-4 w-4" />
-                                {isGeneratingFunctionalRequirements ? 'Generating...' : 'Generate Functional Requirements'}
                               </Button>
                             </div>
                           </div>
