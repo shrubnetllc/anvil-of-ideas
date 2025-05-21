@@ -1217,7 +1217,6 @@ export default function IdeaDetail() {
                 <h1 className="text-2xl font-bold text-neutral-900">
                   {idea.title || idea.companyName || idea.idea.split(' ').slice(0, 5).join(' ') + '...'}
                 </h1>
-                <p className="mt-1 text-neutral-600">{idea.idea}</p>
               </div>
             </div>
 
