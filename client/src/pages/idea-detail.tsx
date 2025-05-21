@@ -80,7 +80,24 @@ export default function IdeaDetail() {
     if (ideaId) {
       fetchProjectRequirements();
       fetchBusinessRequirements();
-      fetchFunctionalRequirements();
+      
+      // For functional requirements, we'll do a two-step process:
+      // 1. First check with Supabase for the latest data
+      fetch(`/api/supabase/functional-requirements/${ideaId}`)
+        .then(() => {
+          console.log('Initial Supabase check for Functional Requirements complete');
+          // Wait a moment for server to process updates
+          return new Promise(resolve => setTimeout(resolve, 800));
+        })
+        .then(() => {
+          // 2. Then fetch the updated document
+          fetchFunctionalRequirements();
+        })
+        .catch(err => {
+          console.error('Error in initial Supabase check:', err);
+          // Still try to fetch the local document in case of error
+          fetchFunctionalRequirements();
+        });
     }
   }, [ideaId]);
   
