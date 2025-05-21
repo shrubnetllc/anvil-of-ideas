@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
 import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema, insertProjectDocumentSchema, updateProjectDocumentSchema, DocumentType } from "@shared/schema";
-import { fetchLeanCanvasData, fetchUserIdeas } from "./supabase";
+import { fetchLeanCanvasData, fetchUserIdeas, fetchBusinessRequirements, fetchFunctionalRequirements } from "./supabase";
 import { emailService } from "./email";
 import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
 
@@ -151,6 +151,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate Business Requirements Document for an idea
+  // Functional Requirements Document generation API
+  app.post("/api/ideas/:id/generate-functional-requirements", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      const { instructions } = req.body;
+      
+      console.log(`[FUNCTIONAL REQUIREMENTS] User ${userId} requesting functional requirements generation for idea ${ideaId}`);
+      
+      // Verify the idea exists and belongs to the user
+      const idea = await storage.getIdeaById(ideaId, userId);
+      if (!idea) {
+        return res.status(404).json({ error: "Idea not found or you don't have access to it" });
+      }
+      
+      // Check if a functional requirements document already exists
+      const existingDoc = await storage.getDocumentByType(ideaId, 'FunctionalRequirements');
+      if (existingDoc) {
+        return res.status(409).json({ 
+          error: 'Functional requirements document already exists', 
+          document: existingDoc 
+        });
+      }
+      
+      // Step 1: Create the document with Generating status
+      const document = await storage.createDocument({
+        ideaId,
+        title: "Functional Requirements Document",
+        documentType: "FunctionalRequirements",
+        status: "Generating",
+        generationStartedAt: new Date()
+      });
+      
+      console.log(`Created functional requirements document with ID ${document.id}`);
+      
+      // Step 2: Collect and verify the IDs for related documents
+      let canvasId = null;
+      let prdId = null;
+      let brdId = null;
+      let projectId = null;
+      
+      // Get the lean canvas ID
+      try {
+        const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
+        if (canvas && canvas.leancanvasId) {
+          canvasId = canvas.leancanvasId;
+          console.log(`Found canvas ID: ${canvasId}`);
+        }
+        if (canvas && canvas.projectId) {
+          projectId = canvas.projectId;
+          console.log(`Found project ID: ${projectId}`);
+        }
+      } catch (canvasError) {
+        console.error("Error getting canvas ID:", canvasError);
+      }
+      
+      // Get the PRD external ID
+      try {
+        const prdDoc = await storage.getDocumentByType(ideaId, 'ProjectRequirements');
+        if (prdDoc && prdDoc.externalId) {
+          prdId = prdDoc.externalId;
+          console.log(`Found PRD ID: ${prdId}`);
+        }
+      } catch (prdError) {
+        console.error("Error getting PRD ID:", prdError);
+      }
+      
+      // Get the BRD external ID
+      try {
+        const brdDoc = await storage.getDocumentByType(ideaId, 'BusinessRequirements');
+        if (brdDoc && brdDoc.externalId) {
+          brdId = brdDoc.externalId;
+          console.log(`Found BRD ID: ${brdId}`);
+        }
+      } catch (brdError) {
+        console.error("Error getting BRD ID:", brdError);
+      }
+      
+      // Step 3: Prepare the request body for the webhook
+      const webhookUrl = process.env.N8N_FUNCTIONAL_WEBHOOK_URL;
+      if (!webhookUrl) {
+        throw new Error('Functional Requirements webhook URL not configured');
+      }
+      
+      console.log(`Calling functional requirements webhook: ${webhookUrl.substring(0, 20)}...`);
+      
+      const webhookBody = {
+        ideaId,
+        documentId: document.id,
+        leancanvas_id: canvasId,
+        prd_id: prdId,
+        project_id: projectId,
+        brd_id: brdId,
+        title: idea.title,
+        description: idea.idea,
+        instructions: instructions || ""
+      };
+      
+      console.log(`Webhook request body: ${JSON.stringify(webhookBody)}`);
+      
+      // Step 4: Call the webhook
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(webhookBody)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Webhook error (${response.status}): ${errorText}`);
+        throw new Error(`Webhook returned ${response.status}: ${errorText}`);
+      }
+      
+      console.log(`Webhook response status: ${response.status}`);
+      
+      // Step 5: Process the response
+      const responseText = await response.text();
+      console.log(`Webhook response: ${responseText}`);
+      
+      // Try to parse the response to get the external ID
+      let functionalId = null;
+      
+      try {
+        const responseJson = JSON.parse(responseText);
+        if (responseJson.id) {
+          functionalId = responseJson.id;
+          console.log(`Parsed functional ID from JSON response: ${functionalId}`);
+        }
+      } catch (jsonError) {
+        // If not JSON, treat as plain text
+        functionalId = responseText.trim();
+        console.log(`Using plain text response as functional ID: ${functionalId}`);
+      }
+      
+      // Step 6: Store the external ID with the document
+      if (functionalId) {
+        await storage.updateDocument(document.id, {
+          externalId: functionalId
+        });
+        
+        // Get the updated document
+        const updatedDocument = await storage.getDocumentById(document.id);
+        
+        return res.status(200).json({
+          message: "Functional requirements generation started successfully",
+          document: updatedDocument
+        });
+      } else {
+        console.warn("No functional ID received from webhook response");
+        return res.status(202).json({
+          message: "Functional requirements generation started but no ID was received",
+          document: document
+        });
+      }
+    } catch (error) {
+      console.error("Error generating functional requirements:", error);
+      next(error);
+    }
+  });
+
   app.post("/api/ideas/:id/generate-business-requirements", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
@@ -1781,6 +1943,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Supabase integration routes
   // Get Business Requirements Document from Supabase
+  // API endpoint to fetch functional requirements content from Supabase
+  app.get("/api/supabase/functional-requirements/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      console.log("==== FUNCTIONAL REQUIREMENTS API ACCESS ====");
+      const { id: ideaId } = req.params;
+      const userId = req.user!.id;
+      
+      console.log(`User ${userId} is requesting Functional Requirements data for idea ${ideaId}`);
+      
+      // First check if we have the document in our database
+      const document = await storage.getDocumentByType(parseInt(ideaId), 'FunctionalRequirements');
+      
+      if (!document || !document.externalId) {
+        return res.status(404).json({ error: 'Functional Requirements document not found or has no external ID' });
+      }
+      
+      console.log(`External ID provided in query: ${document.externalId}`);
+      console.log(`✓ Document found with ID ${document.id}, status ${document.status}, externalId: ${document.externalId}`);
+      
+      // If document exists and has an external ID, fetch from Supabase
+      console.log(`🔍 Using external ID ${document.externalId} to fetch Functional Requirements from Supabase`);
+      
+      const supabaseResponse = await fetchFunctionalRequirements(document.externalId, parseInt(ideaId), userId);
+      
+      if (supabaseResponse.error) {
+        return res.status(500).json({ 
+          error: `Failed to retrieve functional requirements data: ${supabaseResponse.error}` 
+        });
+      }
+      
+      // Update the document with the HTML content if it doesn't already have it
+      if (supabaseResponse.data && supabaseResponse.data.html && (!document.html || document.status !== 'Completed')) {
+        console.log(`✓ Updating document ${document.id} with HTML content from Supabase`);
+        
+        await storage.updateDocument(document.id, {
+          html: supabaseResponse.data.html,
+          status: 'Completed',
+          updatedAt: new Date()
+        });
+      }
+      
+      res.json(supabaseResponse);
+    } catch (error) {
+      console.error('Error fetching functional requirements:', error);
+      next(error);
+    }
+  });
+  
   app.get("/api/supabase/business-requirements/:id", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
