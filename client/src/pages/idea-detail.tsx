@@ -1274,14 +1274,16 @@ export default function IdeaDetail() {
                             <div className="flex justify-between items-start mb-2">
                               <h3 className="font-semibold">Lean Canvas</h3>
                               {canvas ? (
-                                <Badge 
-                                  variant={(canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? 'default' : 'outline'}
-                                  className={(canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? 
-                                    'bg-green-100 text-green-800 hover:bg-green-100' : ''}
-                                >
-                                  {(canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? 
-                                    'Completed' : 'Draft'}
-                                </Badge>
+                                (canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? (
+                                  <Badge 
+                                    variant="default"
+                                    className="bg-green-100 text-green-800 hover:bg-green-100"
+                                  >
+                                    Completed
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline">Draft</Badge>
+                                )
                               ) : (
                                 <Badge variant="outline">Not Created</Badge>
                               )}
@@ -1298,7 +1300,8 @@ export default function IdeaDetail() {
                                 element?.click();
                               }}
                             >
-                              {canvas ? "View Document" : "Create Document"}
+                              {(canvas && (canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition)) ? 
+                                "View Document" : "Create Document"}
                             </Button>
                           </div>
                           
