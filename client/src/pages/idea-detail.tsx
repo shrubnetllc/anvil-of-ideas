@@ -51,6 +51,9 @@ export default function IdeaDetail() {
   
   // Tab management
   const [activeTab, setActiveTab] = useState<string>("documents");
+  
+  // State for Lean Canvas edit mode
+  const [isEditingCanvas, setIsEditingCanvas] = useState(false);
   const [isLoadingFunctionalRequirements, setIsLoadingFunctionalRequirements] = useState(false);
   const [isGeneratingFunctionalRequirements, setIsGeneratingFunctionalRequirements] = useState(false);
   const [functionalRequirementsGenerating, setFunctionalRequirementsGenerating] = useState(false);
@@ -2277,6 +2280,24 @@ export default function IdeaDetail() {
                                     <Button
                                       size="sm"
                                       variant="outline"
+                                      onClick={() => setIsEditingCanvas(!isEditingCanvas)}
+                                      className="flex items-center"
+                                    >
+                                      {isEditingCanvas ? (
+                                        <>
+                                          <X className="mr-2 h-4 w-4" />
+                                          View Canvas
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Pencil className="mr-2 h-4 w-4" />
+                                          Edit Canvas
+                                        </>
+                                      )}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
                                       onClick={handleRegenerateCanvasClick}
                                       disabled={isRegenerating}
                                     >
@@ -2309,9 +2330,69 @@ export default function IdeaDetail() {
                                     </Button>
                                   </div>
                                 </div>
-                                <div id="lean-canvas-content" className="prose prose-sm max-w-none overflow-auto mb-8">
-                                  <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
-                                </div>
+                                {isEditingCanvas ? (
+                                  // Editable grid view
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="Problem"
+                                      content={canvas.problem || ""}
+                                    />
+                                    
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="CustomerSegments"
+                                      content={canvas.customerSegments || ""}
+                                    />
+                                    
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="UniqueValueProposition"
+                                      content={canvas.uniqueValueProposition || ""}
+                                    />
+                                    
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="Solution"
+                                      content={canvas.solution || ""}
+                                    />
+                                    
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="Channels"
+                                      content={canvas.channels || ""}
+                                    />
+                                    
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="RevenueStreams"
+                                      content={canvas.revenueStreams || ""}
+                                    />
+                                    
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="CostStructure"
+                                      content={canvas.costStructure || ""}
+                                    />
+                                    
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="KeyMetrics"
+                                      content={canvas.keyMetrics || ""}
+                                    />
+                                    
+                                    <CanvasSectionComponent
+                                      ideaId={idea.id}
+                                      section="UnfairAdvantage"
+                                      content={canvas.unfairAdvantage || ""}
+                                    />
+                                  </div>
+                                ) : (
+                                  // HTML view
+                                  <div id="lean-canvas-content" className="prose prose-sm max-w-none overflow-auto mb-8">
+                                    <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
+                                  </div>
+                                )}
                                 
                                 {/* Additional notes panel for regeneration - now using a drawer instead */}
                                 <div className="mt-6 flex">
