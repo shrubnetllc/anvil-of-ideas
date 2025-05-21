@@ -625,6 +625,96 @@ export default function IdeaDetail() {
   };
   
   // Handle regenerating functional requirements
+  // Generate Functional Requirements document
+  const generateFunctionalRequirements = async () => {
+    try {
+      setIsGeneratingFunctionalRequirements(true);
+      setFunctionalRequirementsTimedOut(false);
+      
+      // Check if we need to show the notes dialog
+      const requestBody = functionalRequirementsNotes ? { instructions: functionalRequirementsNotes } : {};
+      
+      // Call the API to start the generation process
+      const response = await fetch(`/api/ideas/${ideaId}/generate-functional-requirements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestBody)
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setFunctionalRequirements(data.document);
+        setFunctionalRequirementsGenerating(true);
+        
+        toast({
+          title: "Functional Requirements Generation Started",
+          description: "The system is now creating your Functional Requirements document. This may take a few minutes.",
+        });
+        
+        // Start polling for updates
+        startPollingFunctionalRequirements();
+      } else {
+        if (response.status === 409) {
+          // Document already exists
+          setFunctionalRequirements(data.document);
+          toast({
+            title: "Functional Requirements Document Exists",
+            description: "A Functional Requirements document already exists for this idea. You can view it in the Functional Requirements tab.",
+            variant: "warning"
+          });
+        } else {
+          throw new Error(data.error || "Failed to generate Functional Requirements");
+        }
+      }
+    } catch (error) {
+      console.error("Error generating Functional Requirements:", error);
+      toast({
+        title: "Generation Failed",
+        description: `Failed to start Functional Requirements generation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: "destructive"
+      });
+    } finally {
+      setIsGeneratingFunctionalRequirements(false);
+    }
+  };
+  
+  // Start polling for Functional Requirements updates
+  const startPollingFunctionalRequirements = () => {
+    // Poll every 10 seconds
+    const interval = setInterval(async () => {
+      console.log("Polling for Functional Requirements updates...");
+      try {
+        const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
+        if (response.ok) {
+          const data = await response.json();
+          setFunctionalRequirements(data);
+          
+          // If status is no longer "Generating", stop polling
+          if (data && data.status !== 'Generating') {
+            clearInterval(interval);
+            setFunctionalRequirementsGenerating(false);
+            console.log("Functional Requirements generation completed");
+            
+            if (data.status === 'Completed') {
+              toast({
+                title: "Functional Requirements Ready",
+                description: "Your Functional Requirements document has been generated successfully.",
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error polling Functional Requirements:", error);
+      }
+    }, 10000);
+    
+    // Clean up on component unmount
+    return () => clearInterval(interval);
+  };
+
   const handleRegenerateFunctionalRequirementsClick = async () => {
     if (functionalRequirements && functionalRequirements.id) {
       try {
