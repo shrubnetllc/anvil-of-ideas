@@ -32,6 +32,7 @@ export default function IdeaDetail() {
   const [isLoadingRequirements, setIsLoadingRequirements] = useState(false);
   const [isGeneratingRequirements, setIsGeneratingRequirements] = useState(false);
   const [projectRequirementsGenerating, setProjectRequirementsGenerating] = useState(false);
+  const [projectRequirementsTimedOut, setProjectRequirementsTimedOut] = useState(false);
   const [requirementsNotes, setRequirementsNotes] = useState('');
   
   // State for business requirements
@@ -78,8 +79,24 @@ export default function IdeaDetail() {
         // Check if requirements are currently generating
         if (data && data.status === 'Generating') {
           setProjectRequirementsGenerating(true);
+          
+          // Check if generation has timed out (2 minutes or more since started)
+          if (data.generationStartedAt) {
+            const startedAt = new Date(data.generationStartedAt);
+            const now = new Date();
+            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
+            
+            if (diffMinutes >= 2) {
+              console.log(`Project requirements generation timed out (started ${diffMinutes.toFixed(1)} minutes ago)`);
+              setProjectRequirementsTimedOut(true);
+            } else {
+              setProjectRequirementsTimedOut(false);
+              console.log(`Project requirements generation in progress (started ${diffMinutes.toFixed(1)} minutes ago)`);
+            }
+          }
         } else {
           setProjectRequirementsGenerating(false);
+          setProjectRequirementsTimedOut(false);
         }
       } else {
         // No requirements exist yet
