@@ -2701,7 +2701,7 @@ export default function IdeaDetail() {
                                 <p className="mt-1 text-sm text-neutral-900 font-medium">{idea.title || "-"}</p>
                               </div>
                               
-                              <div>
+                              <div className="col-span-1 md:col-span-2">
                                 <p className="text-sm font-medium text-neutral-500">Description</p>
                                 <p className="mt-1 text-sm text-neutral-900 font-medium">{idea.idea}</p>
                               </div>
