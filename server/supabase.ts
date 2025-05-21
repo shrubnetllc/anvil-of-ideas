@@ -265,12 +265,12 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
     }
     
     // Query Supabase for the functional requirements document
-    console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase Functional Requirements table`);
+    console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase frd table`);
     
     // First try direct query using the ID
     console.log(`[SUPABASE FUNCTIONAL] Direct query using ID=${functionalId}`);
     const { data, error } = await supabase
-      .from('functional_requirements')
+      .from('frd')
       .select('*')
       .eq('id', functionalId)
       .single();
@@ -281,7 +281,7 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
       // Try fallback query using ID as project_id
       console.log(`[SUPABASE FUNCTIONAL] Trying fallback with project_id=${functionalId}`);
       const fallbackResponse = await supabase
-        .from('functional_requirements')
+        .from('frd')
         .select('*')
         .eq('project_id', functionalId)
         .single();
@@ -295,9 +295,9 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
         console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record with project_id=${functionalId}`);
         console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(fallbackResponse.data).join(', ')}`);
         
-        // Check for HTML content
-        if (fallbackResponse.data.html) {
-          console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${fallbackResponse.data.html.length} characters`);
+        // Check for HTML content in frd_html field
+        if (fallbackResponse.data.frd_html) {
+          console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${fallbackResponse.data.frd_html.length} characters`);
         }
         
         // Return the response with HTML content in the data.html field for consistency
@@ -306,7 +306,7 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
           error: null, 
           data: {
             ...fallbackResponse.data,
-            html: fallbackResponse.data.html || fallbackResponse.data.func_html || null
+            html: fallbackResponse.data.frd_html || fallbackResponse.data.html || null
           } 
         };
       }
@@ -316,8 +316,8 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
       console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record directly with ID=${functionalId}`);
       console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(data).join(', ')}`);
       
-      // Check for HTML content in various possible fields
-      const htmlContent = data.html || data.func_html || null;
+      // Check for HTML content in frd_html field (primary) or html field (fallback)
+      const htmlContent = data.frd_html || data.html || null;
       if (htmlContent) {
         console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${htmlContent.length} characters`);
       }

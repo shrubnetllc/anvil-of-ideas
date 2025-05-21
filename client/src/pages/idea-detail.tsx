@@ -1668,7 +1668,7 @@ export default function IdeaDetail() {
                             <Button 
                               size="sm" 
                               variant="outline"
-                              onClick={handleGenerateFunctionalRequirementsClick}
+                              onClick={() => handleGenerateFunctionalRequirementsClick()}
                               disabled={isGeneratingFunctionalRequirements}
                             >
                               <Hammer className="mr-2 h-4 w-4" />
