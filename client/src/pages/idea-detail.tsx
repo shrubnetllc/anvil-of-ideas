@@ -1832,17 +1832,60 @@ export default function IdeaDetail() {
                                   </Button>
                                   <Button 
                                     variant="outline" 
-                                    onClick={() => {
-                                      // Clear existing data first
-                                      setFunctionalRequirements(null);
-                                      // Then fetch fresh data
-                                      fetchFunctionalRequirements();
-                                      
-                                      toast({
-                                        title: "Checking status",
-                                        description: "Refreshing the latest generation status",
-                                        duration: 3000
-                                      });
+                                    onClick={async () => {
+                                      try {
+                                        toast({
+                                          title: "Checking status",
+                                          description: "Refreshing the latest generation status",
+                                          duration: 3000
+                                        });
+                                        
+                                        // First, check with Supabase to get the latest data and update local DB
+                                        console.log('Checking Supabase for latest functional requirements status...');
+                                        const supabaseResponse = await fetch(`/api/supabase/functional-requirements/${ideaId}`);
+                                        
+                                        if (supabaseResponse.ok) {
+                                          console.log('Successfully checked with Supabase');
+                                        } else {
+                                          console.error('Error checking with Supabase:', await supabaseResponse.text());
+                                        }
+                                        
+                                        // After Supabase check, get the updated document from local DB
+                                        const refreshResponse = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
+                                        if (refreshResponse.ok) {
+                                          const updatedDocument = await refreshResponse.json();
+                                          console.log('Updated document after Supabase check:', updatedDocument);
+                                          setFunctionalRequirements(updatedDocument);
+                                          
+                                          // Check if it still needs a timeout dialog
+                                          if (updatedDocument.status === "Completed") {
+                                            setFunctionalRequirementsGenerating(false);
+                                            setFunctionalRequirementsTimedOut(false);
+                                            toast({
+                                              title: "Status updated",
+                                              description: "Document status has been updated to Completed",
+                                              duration: 3000
+                                            });
+                                          } else if (updatedDocument.status === "Generating" && updatedDocument.generationStartedAt) {
+                                            const startTime = new Date(updatedDocument.generationStartedAt);
+                                            const currentTime = new Date();
+                                            const elapsedTimeMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+                                            
+                                            if (elapsedTimeMinutes > 2) {
+                                              setFunctionalRequirementsTimedOut(true);
+                                            } else {
+                                              setFunctionalRequirementsTimedOut(false);
+                                            }
+                                          }
+                                        }
+                                      } catch (error) {
+                                        console.error('Error checking status:', error);
+                                        toast({
+                                          title: "Error",
+                                          description: "Failed to check status",
+                                          variant: "destructive"
+                                        });
+                                      }
                                     }}
                                   >
                                     <RotateCcw className="mr-2 h-4 w-4" />
@@ -1874,17 +1917,60 @@ export default function IdeaDetail() {
                             <Button 
                               variant="outline" 
                               size="sm"
-                              onClick={() => {
-                                // Clear existing data first
-                                setFunctionalRequirements(null);
-                                // Then fetch fresh data
-                                fetchFunctionalRequirements();
-                                
-                                toast({
-                                  title: "Checking status",
-                                  description: "Refreshing the latest generation status",
-                                  duration: 3000
-                                });
+                              onClick={async () => {
+                                try {
+                                  toast({
+                                    title: "Checking status",
+                                    description: "Refreshing the latest generation status",
+                                    duration: 3000
+                                  });
+                                  
+                                  // First, check with Supabase to get the latest data and update local DB
+                                  console.log('Checking Supabase for latest functional requirements status...');
+                                  const supabaseResponse = await fetch(`/api/supabase/functional-requirements/${ideaId}`);
+                                  
+                                  if (supabaseResponse.ok) {
+                                    console.log('Successfully checked with Supabase');
+                                  } else {
+                                    console.error('Error checking with Supabase:', await supabaseResponse.text());
+                                  }
+                                  
+                                  // After Supabase check, get the updated document from local DB
+                                  const refreshResponse = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
+                                  if (refreshResponse.ok) {
+                                    const updatedDocument = await refreshResponse.json();
+                                    console.log('Updated document after Supabase check:', updatedDocument);
+                                    setFunctionalRequirements(updatedDocument);
+                                    
+                                    // Check if it still needs a timeout dialog
+                                    if (updatedDocument.status === "Completed") {
+                                      setFunctionalRequirementsGenerating(false);
+                                      setFunctionalRequirementsTimedOut(false);
+                                      toast({
+                                        title: "Status updated",
+                                        description: "Document status has been updated to Completed",
+                                        duration: 3000
+                                      });
+                                    } else if (updatedDocument.status === "Generating" && updatedDocument.generationStartedAt) {
+                                      const startTime = new Date(updatedDocument.generationStartedAt);
+                                      const currentTime = new Date();
+                                      const elapsedTimeMinutes = (currentTime.getTime() - startTime.getTime()) / (1000 * 60);
+                                      
+                                      if (elapsedTimeMinutes > 2) {
+                                        setFunctionalRequirementsTimedOut(true);
+                                      } else {
+                                        setFunctionalRequirementsTimedOut(false);
+                                      }
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Error checking status:', error);
+                                  toast({
+                                    title: "Error",
+                                    description: "Failed to check status",
+                                    variant: "destructive"
+                                  });
+                                }
                               }}
                             >
                               <RotateCcw className="mr-2 h-4 w-4" />
