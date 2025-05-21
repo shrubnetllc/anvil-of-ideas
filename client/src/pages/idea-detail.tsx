@@ -48,6 +48,9 @@ export default function IdeaDetail() {
   
   // State for functional requirements
   const [functionalRequirements, setFunctionalRequirements] = useState<ProjectDocument | null>(null);
+  
+  // Tab management
+  const [activeTab, setActiveTab] = useState<string>("documents");
   const [isLoadingFunctionalRequirements, setIsLoadingFunctionalRequirements] = useState(false);
   const [isGeneratingFunctionalRequirements, setIsGeneratingFunctionalRequirements] = useState(false);
   const [functionalRequirementsGenerating, setFunctionalRequirementsGenerating] = useState(false);
@@ -1233,7 +1236,7 @@ export default function IdeaDetail() {
               <div className="w-full">
                 {/* Tabs */}
                 <div className="border-b border-neutral-200">
-                  <Tabs defaultValue="canvas">
+                  <Tabs defaultValue="canvas" value={activeTab} onValueChange={setActiveTab}>
                     <TabsList className="w-auto flex flex-wrap">
                       <TabsTrigger value="documents" className="text-sm">
                         <div className="flex items-center">
@@ -1296,9 +1299,8 @@ export default function IdeaDetail() {
                               variant="outline" 
                               className="w-full"
                               onClick={() => {
-                                // Find the TabsTrigger component with value="canvas" and click it
-                                const element = document.querySelector('button[data-state][value="canvas"]') as HTMLElement;
-                                element?.click();
+                                // Set the active tab to "canvas"
+                                setActiveTab("canvas");
                               }}
                             >
                               {(canvas && (canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition)) ? 
@@ -1330,9 +1332,8 @@ export default function IdeaDetail() {
                               variant="outline" 
                               className="w-full"
                               onClick={() => {
-                                // Find the TabsTrigger component with value="requirements" and click it
-                                const element = document.querySelector('button[data-state][value="requirements"]') as HTMLElement;
-                                element?.click();
+                                // Set the active tab to "requirements"
+                                setActiveTab("requirements");
                               }}
                             >
                               {projectRequirements ? 'View Document' : 'Create Document'}
@@ -1363,9 +1364,8 @@ export default function IdeaDetail() {
                               variant="outline" 
                               className="w-full"
                               onClick={() => {
-                                // Find the TabsTrigger component with value="business" and click it
-                                const element = document.querySelector('button[data-state][value="business"]') as HTMLElement;
-                                element?.click();
+                                // Set the active tab to "business"
+                                setActiveTab("business");
                               }}
                             >
                               {businessRequirements ? 'View Document' : 'Create Document'}
