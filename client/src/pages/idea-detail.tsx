@@ -1775,7 +1775,27 @@ export default function IdeaDetail() {
                             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
                             <p>Loading functional requirements document...</p>
                           </div>
-                        ) : functionalRequirementsTimedOut ? (
+                        ) : functionalRequirementsGenerating && !functionalRequirementsTimedOut ? (
+                          <div className="text-center py-8">
+                            <div className="mb-4 mx-auto relative w-16 h-16">
+                              <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                                <Flame className="h-14 w-14 text-amber-400" />
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                                <Hammer className="h-10 w-10 text-primary" />
+                              </div>
+                            </div>
+                            <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
+                              Forging Your Functional Requirements
+                            </h4>
+                            <p className="text-neutral-600 mb-2">
+                              Please wait while we hammer out the functional requirements for your idea...
+                            </p>
+                            <p className="text-neutral-500 text-sm italic">
+                              This process usually takes 1-2 minutes.
+                            </p>
+                          </div>
+                        ) : functionalRequirementsGenerating && functionalRequirementsTimedOut ? (
                           <div className="border border-destructive rounded-md p-6 mb-4 bg-destructive/10">
                             <div className="flex items-start space-x-4">
                               <div className="mt-1">
@@ -1815,6 +1835,26 @@ export default function IdeaDetail() {
                                 </div>
                               </div>
                             </div>
+                          </div>
+                        ) : functionalRequirementsGenerating ? (
+                          <div className="text-center py-8">
+                            <div className="mb-4 mx-auto relative w-16 h-16">
+                              <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                                <Flame className="h-14 w-14 text-amber-400" />
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                                <Hammer className="h-10 w-10 text-primary" />
+                              </div>
+                            </div>
+                            <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
+                              Forging Your Functional Requirements
+                            </h4>
+                            <p className="text-neutral-600 mb-2">
+                              Please wait while we hammer out the functional requirements for your idea...
+                            </p>
+                            <p className="text-neutral-500 text-sm italic">
+                              This process usually takes 1-2 minutes.
+                            </p>
                           </div>
                         ) : functionalRequirements ? (
                           <div>
