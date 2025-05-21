@@ -789,6 +789,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Canvas generation route
+  // Webhook proxy for Functional Requirements
+  app.post("/api/webhook/functional-requirements", isAuthenticated, async (req, res, next) => {
+    try {
+      console.log("Functional Requirements webhook received with body:", JSON.stringify(req.body, null, 2));
+      
+      const { projectId, leancanvasId, prdId, brdId, instructions, ideaId: requestIdeaId } = req.body;
+      
+      if (!requestIdeaId) {
+        return res.status(400).json({ message: "Idea ID is required" });
+      }
+      
+      // Use the Functional Requirements-specific webhook URL from environment variables
+      const webhookUrl = process.env.N8N_FUNCTIONAL_WEBHOOK_URL;
+      const username = process.env.N8N_AUTH_USERNAME;
+      const password = process.env.N8N_AUTH_PASSWORD;
+      
+      if (!webhookUrl) {
+        return res.status(500).json({ message: "N8N Functional Requirements webhook URL not configured" });
+      }
+      
+      if (!username || !password) {
+        return res.status(500).json({ message: "N8N authentication credentials not configured" });
+      }
+      
+      // Create basic auth header
+      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+      
+      // Get the numeric idea ID
+      const ideaId = parseInt(requestIdeaId.toString());
+      console.log(`Processing Functional Requirements generation for idea ${ideaId}`);
+      
+      // Check if the idea exists and user has access
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+      
+      // Create or update a document for this request
+      let document = await storage.getDocumentByType(ideaId, "FunctionalRequirements");
+      
+      if (document) {
+        // Update the existing document
+        await storage.updateDocument(document.id, {
+          status: "Generating",
+          generationStartedAt: new Date()
+        });
+        document = await storage.getDocumentById(document.id);
+        console.log(`Updated existing Functional Requirements document (ID: ${document.id}) for idea ${ideaId}`);
+      } else {
+        // Create a new document
+        document = await storage.createDocument({
+          ideaId,
+          documentType: "FunctionalRequirements",
+          title: "Functional Requirements Document",
+          status: "Generating",
+          generationStartedAt: new Date()
+        });
+        console.log(`Created new Functional Requirements document (ID: ${document.id}) for idea ${ideaId}`);
+      }
+      
+      // Prepare webhook request
+      const webhookBody = {
+        ideaId,
+        documentId: document.id,
+        leancanvas_id: leancanvasId,
+        prd_id: prdId, 
+        project_id: projectId,
+        brd_id: brdId,
+        title: idea.title,
+        description: idea.idea,
+        instructions: instructions || ""
+      };
+      
+      console.log(`Calling webhook for Functional Requirements generation: ${webhookUrl.substring(0, 20)}...`);
+      console.log(`Webhook request body: ${JSON.stringify(webhookBody)}`);
+      
+      // Call the webhook
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify(webhookBody)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Webhook error (${response.status}): ${errorText}`);
+        
+        // Even if the webhook fails, return the document in "Generating" state
+        // so the frontend can still poll for updates
+        return res.status(200).json({
+          message: "Functional Requirements generation initiated but webhook returned an error",
+          document,
+          error: `${response.status}: ${errorText}`
+        });
+      }
+      
+      // Process the webhook response
+      const responseText = await response.text();
+      console.log(`Webhook response: ${responseText}`);
+      
+      // Try to parse the response to get the external ID
+      let frdId = null;
+      
+      try {
+        // First try to parse as JSON
+        const responseData = JSON.parse(responseText);
+        if (responseData.id || responseData.frd_id) {
+          frdId = responseData.id || responseData.frd_id;
+          console.log(`Parsed FRD ID from JSON response: ${frdId}`);
+        }
+      } catch (jsonError) {
+        // If not JSON, treat as plain text
+        frdId = responseText.trim();
+        console.log(`Using plain text response as FRD ID: ${frdId}`);
+      }
+      
+      // Store the external ID with the document
+      if (frdId) {
+        await storage.updateDocument(document.id, {
+          externalId: frdId
+        });
+        
+        // Get the updated document
+        document = await storage.getDocumentById(document.id);
+        console.log(`Updated document ${document.id} with external ID ${frdId}`);
+      } else {
+        console.warn("No FRD ID received from webhook response");
+      }
+      
+      // Return success with the document
+      return res.status(200).json({
+        message: "Functional Requirements generation started successfully",
+        document
+      });
+    } catch (error) {
+      console.error("Error in Functional Requirements webhook:", error);
+      next(error);
+    }
+  });
+
   // Webhook proxy for Business Requirements
   app.post("/api/webhook/business-requirements", isAuthenticated, async (req, res, next) => {
     try {
@@ -1398,6 +1541,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
         throw new Error("Failed to start canvas generation");
       }
     } catch (error) {
+      next(error);
+    }
+  });
+
+  // Webhook endpoint for n8n to send back the generated functional requirements
+  app.post("/api/webhook/functional-requirements-result", async (req, res, next) => {
+    // Verify n8n credentials if they are configured
+    if (process.env.N8N_AUTH_USERNAME && process.env.N8N_AUTH_PASSWORD) {
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith('Basic ')) {
+        return res.status(401).json({ message: "Unauthorized - Missing credentials" });
+      }
+      
+      // Decode and verify the credentials
+      const base64Credentials = authHeader.split(' ')[1];
+      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+      const [username, password] = credentials.split(':');
+      
+      if (username !== process.env.N8N_AUTH_USERNAME || password !== process.env.N8N_AUTH_PASSWORD) {
+        return res.status(401).json({ message: "Unauthorized - Invalid credentials" });
+      }
+    }
+    
+    try {
+      console.log("Received functional requirements data from n8n:", JSON.stringify(req.body, null, 2));
+      
+      // Extract data from the webhook payload
+      const { ideaId, frd_id, content, html, frd_html, project_id } = req.body;
+      
+      if (!ideaId) {
+        return res.status(400).json({ message: "Missing required field: ideaId" });
+      }
+      
+      // Search for an existing document by externalId or type
+      let existingDocument = null;
+      
+      // First try to find by the external ID if provided
+      if (frd_id) {
+        const allDocs = await storage.getDocumentsByIdeaId(parseInt(ideaId));
+        existingDocument = allDocs.find(doc => 
+          doc.documentType === "FunctionalRequirements" && doc.externalId === frd_id
+        );
+      }
+      
+      // If not found by external ID, try to find by type
+      if (!existingDocument) {
+        existingDocument = await storage.getDocumentByType(parseInt(ideaId), "FunctionalRequirements");
+      }
+      
+      // Determine the HTML content - use the most appropriate field
+      const htmlContent = frd_html || html || null;
+      const textContent = content || null;
+      
+      if (existingDocument) {
+        // Update existing document
+        console.log(`Updating existing Functional Requirements document ${existingDocument.id} for idea ${ideaId}`);
+        await storage.updateDocument(existingDocument.id, {
+          content: textContent,
+          html: htmlContent,
+          status: "Completed",
+          externalId: frd_id || existingDocument.externalId // Preserve externalId if not provided
+        });
+      } else {
+        // Create new document
+        console.log(`Creating new Functional Requirements document for idea ${ideaId}`);
+        await storage.createDocument({
+          ideaId: parseInt(ideaId),
+          documentType: "FunctionalRequirements",
+          title: "Functional Requirements Document",
+          content: textContent,
+          html: htmlContent,
+          status: "Completed",
+          externalId: frd_id || null
+        });
+      }
+      
+      // Try to send an email notification if we have user email
+      try {
+        const idea = await storage.getIdeaById(parseInt(ideaId));
+        if (idea && idea.founderEmail) {
+          // Send email notification
+          const title = idea.title || idea.idea.substring(0, 30) + '...';
+          await emailService.sendCanvasGeneratedEmail(idea.founderEmail, idea.founderName || 'User', title);
+          console.log(`Sent functional requirements generation notification email to ${idea.founderEmail}`);
+        }
+      } catch (emailError) {
+        console.error('Failed to send functional requirements generation notification:', emailError);
+        // Continue even if email fails
+      }
+      
+      res.status(200).json({ message: "Functional requirements document updated successfully" });
+    } catch (error) {
+      console.error("Error processing functional requirements webhook:", error);
       next(error);
     }
   });
