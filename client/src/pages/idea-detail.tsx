@@ -1275,8 +1275,8 @@ export default function IdeaDetail() {
                               <h3 className="font-semibold">Lean Canvas</h3>
                               {canvas ? (
                                 <Badge 
-                                  variant="outline"
-                                  className={canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition ? 
+                                  variant={(canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? 'default' : 'outline'}
+                                  className={(canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? 
                                     'bg-green-100 text-green-800 hover:bg-green-100' : ''}
                                 >
                                   {(canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? 
@@ -1298,7 +1298,7 @@ export default function IdeaDetail() {
                                 element?.click();
                               }}
                             >
-                              {canvas ? "View Canvas" : "Create Canvas"}
+                              {canvas ? "View Document" : "Create Document"}
                             </Button>
                           </div>
                           
