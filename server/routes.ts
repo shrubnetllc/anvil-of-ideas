@@ -251,11 +251,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`Webhook request body: ${JSON.stringify(webhookBody)}`);
       
-      // Step 4: Call the webhook
+      // Step 4: Call the webhook with authentication
+      const username = process.env.N8N_AUTH_USERNAME;
+      const password = process.env.N8N_AUTH_PASSWORD;
+      
+      if (!username || !password) {
+        throw new Error('N8N authentication credentials not configured');
+      }
+      
+      // Create Basic Auth header
+      const auth = Buffer.from(`${username}:${password}`).toString('base64');
+      
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': `Basic ${auth}`
         },
         body: JSON.stringify(webhookBody)
       });
