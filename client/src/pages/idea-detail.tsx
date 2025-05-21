@@ -1703,16 +1703,6 @@ export default function IdeaDetail() {
                                       }}
                                     >
                                       <Copy className="mr-2 h-4 w-4" />
-                                      Copy Content
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={handleRegenerateProjectRequirementsClick}
-                                      disabled={isGeneratingRequirements}
-                                    >
-                                      <RefreshCw className="mr-2 h-4 w-4" />
-                                      Regenerate
                                     </Button>
                                   </div>
                                 </div>
