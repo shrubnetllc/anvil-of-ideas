@@ -2155,15 +2155,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Update the document with the HTML content if it doesn't already have it
-      if (supabaseResponse.data && supabaseResponse.data.html && (!document.html || document.status !== 'Completed')) {
-        console.log(`✓ Updating document ${document.id} with HTML content from Supabase`);
+      // Extract HTML content - check multiple possible fields where HTML content might be found
+      let htmlContent = null;
+      
+      if (supabaseResponse.data) {
+        // Check the different possible locations for HTML content
+        if (supabaseResponse.data.html) {
+          console.log('✓ Found HTML content in standard html field');
+          htmlContent = supabaseResponse.data.html;
+        } else if (supabaseResponse.data.frd_html) {
+          console.log('✓ Found HTML content in frd_html field');
+          htmlContent = supabaseResponse.data.frd_html;
+        } else if (supabaseResponse.data.func_html) {
+          console.log('✓ Found HTML content in func_html field');
+          htmlContent = supabaseResponse.data.func_html;
+        } else {
+          // Check all fields for HTML-like content as a last resort
+          for (const [key, value] of Object.entries(supabaseResponse.data)) {
+            if (typeof value === 'string' && 
+                (value.includes('<html') || 
+                value.includes('<!DOCTYPE') || 
+                value.includes('<body') ||
+                value.includes('<div') || 
+                value.includes('<p>'))) {
+              console.log(`✓ Found HTML content in field '${key}'`);
+              htmlContent = value;
+              break;
+            }
+          }
+        }
+      }
+      
+      // Update the document with the HTML content if we found some
+      if (htmlContent && (!document.html || document.status !== 'Completed')) {
+        console.log(`✓ Updating document ${document.id} with HTML content of length ${htmlContent.length}`);
         
-        await storage.updateDocument(document.id, {
-          html: supabaseResponse.data.html,
-          status: 'Completed',
-          updatedAt: new Date()
-        });
+        try {
+          await storage.updateDocument(document.id, {
+            html: htmlContent,
+            status: 'Completed',
+            updatedAt: new Date()
+          });
+          
+          console.log(`✓ Successfully updated document status to Completed`);
+          
+          // Also update the response to include the HTML content in the standard field
+          if (supabaseResponse.data) {
+            supabaseResponse.data.html = htmlContent;
+          }
+        } catch (updateError) {
+          console.error('Error updating document with HTML:', updateError);
+        }
+      } else if (!htmlContent) {
+        console.log('⚠️ No HTML content found in Supabase response');
       }
       
       res.json(supabaseResponse);
