@@ -1282,7 +1282,7 @@ export default function IdeaDetail() {
                                     Completed
                                   </Badge>
                                 ) : (
-                                  <Badge variant="outline">Draft</Badge>
+                                  <Badge variant="outline">Not Created</Badge>
                                 )
                               ) : (
                                 <Badge variant="outline">Not Created</Badge>
