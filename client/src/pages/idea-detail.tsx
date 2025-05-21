@@ -1832,7 +1832,18 @@ export default function IdeaDetail() {
                                   </Button>
                                   <Button 
                                     variant="outline" 
-                                    onClick={fetchFunctionalRequirements}
+                                    onClick={() => {
+                                      // Clear existing data first
+                                      setFunctionalRequirements(null);
+                                      // Then fetch fresh data
+                                      fetchFunctionalRequirements();
+                                      
+                                      toast({
+                                        title: "Checking status",
+                                        description: "Refreshing the latest generation status",
+                                        duration: 3000
+                                      });
+                                    }}
                                   >
                                     <RotateCcw className="mr-2 h-4 w-4" />
                                     Check Status
@@ -1857,9 +1868,28 @@ export default function IdeaDetail() {
                             <p className="text-neutral-600 mb-2">
                               Please wait while we hammer out the functional requirements for your idea...
                             </p>
-                            <p className="text-neutral-500 text-sm italic">
+                            <p className="text-neutral-500 text-sm italic mb-4">
                               This process usually takes 1-2 minutes.
                             </p>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => {
+                                // Clear existing data first
+                                setFunctionalRequirements(null);
+                                // Then fetch fresh data
+                                fetchFunctionalRequirements();
+                                
+                                toast({
+                                  title: "Checking status",
+                                  description: "Refreshing the latest generation status",
+                                  duration: 3000
+                                });
+                              }}
+                            >
+                              <RotateCcw className="mr-2 h-4 w-4" />
+                              Check Status
+                            </Button>
                           </div>
                         ) : functionalRequirements ? (
                           <div>
