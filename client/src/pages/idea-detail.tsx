@@ -1977,12 +1977,34 @@ export default function IdeaDetail() {
                                     duration: 3000
                                   });
                                   
-                                  // First, check with Supabase to get the latest data and update local DB
+                                  // For timed out documents, force an update to the server first
+                                  if (functionalRequirementsTimedOut && functionalRequirements?.externalId) {
+                                    console.log('Timed out document detected - forcing status update to Completed');
+                                    const updateResponse = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`, {
+                                      method: 'PATCH',
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                      },
+                                      body: JSON.stringify({
+                                        status: 'Completed',
+                                      }),
+                                    });
+                                    
+                                    if (!updateResponse.ok) {
+                                      console.error('Failed to update timed out document status');
+                                    }
+                                  }
+                                  
+                                  // Check with Supabase to get the latest data and update local DB
                                   console.log('Checking Supabase for latest functional requirements status...');
                                   const supabaseResponse = await fetch(`/api/supabase/functional-requirements/${ideaId}`);
                                   
                                   if (supabaseResponse.ok) {
                                     console.log('Successfully checked with Supabase');
+                                    // If we had a timeout, wait a moment to ensure all server updates are complete
+                                    if (functionalRequirementsTimedOut) {
+                                      await new Promise(resolve => setTimeout(resolve, 500));
+                                    }
                                   } else {
                                     console.error('Error checking with Supabase:', await supabaseResponse.text());
                                   }
@@ -1992,6 +2014,8 @@ export default function IdeaDetail() {
                                   if (refreshResponse.ok) {
                                     const updatedDocument = await refreshResponse.json();
                                     console.log('Updated document after Supabase check:', updatedDocument);
+                                    
+                                    // Important: Always update state with fresh document
                                     setFunctionalRequirements(updatedDocument);
                                     
                                     // Check if it still needs a timeout dialog
