@@ -567,8 +567,8 @@ export default function IdeaDetail() {
     }
   };
   
-  // Old implementation - to be removed after testing
-  const oldGenerateFunctionalRequirements = async () => {
+  // Function to handle generation of functional requirements
+  const generateFunctionalRequirements = async () => {
     try {
       setIsGeneratingFunctionalRequirements(true);
       
@@ -585,25 +585,16 @@ export default function IdeaDetail() {
       if (response.ok) {
         const result = await response.json();
         console.log('Started generating functional requirements:', result);
+        
+        // Update UI state
         setFunctionalRequirementsGenerating(true);
         setFunctionalRequirementsTimedOut(false);
-        fetchFunctionalRequirements();
         
-        // Poll for updates
-        const pollTimer = setInterval(async () => {
-          try {
-            await fetchFunctionalRequirements();
-            console.log('Polled functional requirements status');
-          } catch (pollError) {
-            console.error('Error polling document status:', pollError);
-          }
-        }, 10000); // Poll every 10 seconds
+        // Fetch the initial document
+        await fetchFunctionalRequirements();
         
-        // Clear polling after 2 minutes maximum
-        setTimeout(() => {
-          clearInterval(pollTimer);
-          fetchFunctionalRequirements(); // Fetch final state
-        }, 120000);
+        // Start polling for updates
+        startPollingFunctionalRequirements();
         
         toast({
           title: "Success",
@@ -626,29 +617,6 @@ export default function IdeaDetail() {
   };
   
   // Handle regenerating functional requirements
-  // Generate Functional Requirements document
-  const generateFunctionalRequirements = async () => {
-    try {
-      setIsGeneratingFunctionalRequirements(true);
-      setFunctionalRequirementsTimedOut(false);
-      
-      // Check if we need to show the notes dialog
-      const requestBody = functionalRequirementsNotes ? { instructions: functionalRequirementsNotes } : {};
-      
-      // Call the API to start the generation process
-      const response = await fetch(`/api/ideas/${ideaId}/generate-functional-requirements`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setFunctionalRequirements(data.document);
-        setFunctionalRequirementsGenerating(true);
         
         toast({
           title: "Functional Requirements Generation Started",
@@ -684,26 +652,42 @@ export default function IdeaDetail() {
   
   // Start polling for Functional Requirements updates
   const startPollingFunctionalRequirements = () => {
+    console.log("Starting to poll for Functional Requirements updates...");
+    setFunctionalRequirementsTimedOut(false);
+    setFunctionalRequirementsGenerating(true);
+    
     // Poll every 10 seconds
     const interval = setInterval(async () => {
       console.log("Polling for Functional Requirements updates...");
       try {
-        const response = await fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
-        if (response.ok) {
-          const data = await response.json();
-          setFunctionalRequirements(data);
-          
-          // If status is no longer "Generating", stop polling
-          if (data && data.status !== 'Generating') {
+        // Refresh the functional requirements data
+        await fetchFunctionalRequirements();
+        
+        // Get the latest data from state
+        if (functionalRequirements) {
+          // If document is complete, stop polling
+          if (functionalRequirements.status === 'Completed') {
             clearInterval(interval);
             setFunctionalRequirementsGenerating(false);
+            setFunctionalRequirementsTimedOut(false);
             console.log("Functional Requirements generation completed");
             
-            if (data.status === 'Completed') {
-              toast({
-                title: "Functional Requirements Ready",
-                description: "Your Functional Requirements document has been generated successfully.",
-              });
+            toast({
+              title: "Functional Requirements Ready",
+              description: "Your Functional Requirements document has been generated successfully.",
+            });
+          } 
+          // If document is still generating, check for timeout
+          else if (functionalRequirements.status === 'Generating' && functionalRequirements.generationStartedAt) {
+            const startedAt = new Date(functionalRequirements.generationStartedAt);
+            const now = new Date();
+            const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
+            
+            // If generation has been running for more than 2 minutes, mark as timed out
+            if (diffMinutes >= 2) {
+              console.log(`Functional Requirements generation timed out after ${diffMinutes.toFixed(1)} minutes`);
+              setFunctionalRequirementsTimedOut(true);
+              clearInterval(interval);
             }
           }
         }
