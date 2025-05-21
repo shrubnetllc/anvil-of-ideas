@@ -95,7 +95,7 @@ export default function IdeaDetail() {
         .then(() => {
           // After Supabase check, get the updated document from local DB
           // Wait a moment to ensure server has time to process
-          return new Promise(resolve => setTimeout(resolve, 300));
+          return new Promise(resolve => setTimeout(resolve, 500));
         })
         .then(() => {
           return fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
@@ -110,9 +110,38 @@ export default function IdeaDetail() {
           // Always update the document state
           setFunctionalRequirements(updatedDocument);
           
-          // If we have HTML content or the status is Completed, clear the timeout state
-          if (updatedDocument.html || updatedDocument.status === 'Completed') {
-            console.log('Document has HTML content or is Completed - clearing all flags');
+          // New approach: If we have HTML content but status is not Completed, force an update
+          if (updatedDocument.html && updatedDocument.status !== 'Completed') {
+            console.log('Document has HTML content but status is not Completed - forcing status update');
+            
+            // Immediately update status to Completed in database
+            return fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: 'Completed' })
+            })
+            .then(() => {
+              // Refetch after update to get the latest document
+              return fetch(`/api/ideas/${ideaId}/documents/FunctionalRequirements`);
+            })
+            .then(finalResponse => {
+              if (finalResponse.ok) return finalResponse.json();
+              throw new Error('Failed to auto-update document status');
+            })
+            .then(finalDocument => {
+              // Update UI with final document
+              setFunctionalRequirements(finalDocument);
+              // Clear all timeout/generating flags
+              setFunctionalRequirementsGenerating(false);
+              setFunctionalRequirementsTimedOut(false);
+              // Log success
+              console.log('Successfully force-updated document status to Completed');
+            });
+          }
+          
+          // If status is already Completed, just clear the flags
+          if (updatedDocument.status === 'Completed') {
+            console.log('Document status is already Completed - clearing all flags');
             setFunctionalRequirementsGenerating(false);
             setFunctionalRequirementsTimedOut(false);
           } else if (updatedDocument.status === 'Generating') {
