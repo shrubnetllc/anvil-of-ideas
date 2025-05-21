@@ -1079,38 +1079,25 @@ export default function IdeaDetail() {
                             )}
                           </div>
                         ) : !isGeneratingRequirements ? (
-                          <div>
-                            <div className="text-center py-8">
-                              <div className="mx-auto w-16 h-16 mb-4 bg-amber-50 rounded-full flex items-center justify-center">
-                                <Hammer className="h-8 w-8 text-amber-600" />
-                              </div>
-                              <h4 className="text-lg font-medium mb-2">No Project Requirements Yet</h4>
-                              <p className="text-neutral-600 max-w-lg mx-auto mb-4">
-                                Generate project requirements to define the high-level goals, scope, and constraints of your project.
-                              </p>
+                          <div className="py-8">
+                            <div className="mb-6">
+                              <p className="mb-2">Provide optional instructions for generating your project requirements document:</p>
+                              <Textarea
+                                value={requirementsNotes}
+                                onChange={(e) => setRequirementsNotes(e.target.value)}
+                                placeholder="e.g., Focus on specific features, include technical constraints, specify target platforms..."
+                                className="h-24"
+                              />
                             </div>
-                            
-                            {/* Notes to include for consideration */}
-                            <div className="mt-8 border-t border-neutral-200 pt-6">
-                              <h4 className="font-medium mb-2">Notes to include for consideration</h4>
-                              <p className="text-sm text-neutral-600 mb-4">
-                                Add any specific notes or requirements you'd like us to consider when generating the project requirements document.
-                              </p>
-                              <div className="space-y-4">
-                                <Textarea 
-                                  placeholder="Example: Include mobile responsive design requirements, focus on security features, etc."
-                                  className="h-24"
-                                  value={requirementsNotes}
-                                  onChange={(e) => setRequirementsNotes(e.target.value)}
-                                />
-                                <Button 
-                                  onClick={handleGenerateRequirementsClick}
-                                  disabled={isGeneratingRequirements}
-                                  className="bg-gradient-to-r from-primary to-secondary text-white hover:from-primary/90 hover:to-secondary/90"
-                                >
-                                  <Hammer className="mr-2 h-4 w-4" /> Forge Requirements
-                                </Button>
-                              </div>
+                            <div className="flex justify-center">
+                              <Button 
+                                onClick={handleGenerateRequirementsClick}
+                                disabled={isGeneratingRequirements}
+                                className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
+                              >
+                                <Hammer className="mr-2 h-4 w-4" />
+                                {isGeneratingRequirements ? 'Generating...' : 'Generate Project Requirements'}
+                              </Button>
                             </div>
                           </div>
                         ) : (
