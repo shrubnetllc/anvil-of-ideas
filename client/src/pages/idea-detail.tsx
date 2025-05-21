@@ -389,8 +389,12 @@ export default function IdeaDetail() {
                   // This is the standard format our server should return now
                   htmlContent = supabaseData.data.html;
                   console.log('Found HTML in standard html field:', htmlContent.substring(0, 100) + '...');
+                } else if (supabaseData.data && supabaseData.data.frd_html) {
+                  // This is the field from the direct 'frd' table in Supabase
+                  htmlContent = supabaseData.data.frd_html;
+                  console.log('Found HTML in frd_html field:', htmlContent.substring(0, 100) + '...');
                 } else if (supabaseData.data && supabaseData.data.functional_html) {
-                  // This is a fallback for direct database format
+                  // This is a fallback for legacy format
                   htmlContent = supabaseData.data.functional_html;
                   console.log('Found HTML in functional_html field:', htmlContent.substring(0, 100) + '...');
                 } else if (supabaseData.data) {
