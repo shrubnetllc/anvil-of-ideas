@@ -1961,25 +1961,73 @@ export default function IdeaDetail() {
                           </Button>
                         </div>
                       ) : idea.status === 'Generating' ? (
-                        <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
-                          <div className="mb-4 mx-auto relative w-16 h-16">
-                            <div className="absolute inset-0 flex items-center justify-center animate-pulse">
-                              <Flame className="h-14 w-14 text-amber-400" />
-                            </div>
-                            <div className="absolute inset-0 flex items-center justify-center animate-spin">
-                              <Hammer className="h-10 w-10 text-primary" />
+                        canvasTimedOut ? (
+                          <div className="border border-destructive rounded-md p-6 mb-4 bg-destructive/10">
+                            <div className="flex items-start space-x-4">
+                              <div className="mt-1">
+                                <AlertTriangle className="h-6 w-6 text-destructive" />
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="font-bold text-destructive mb-2">Generation Timed Out</h4>
+                                <p className="text-neutral-700 mb-4">
+                                  The Lean Canvas generation is taking longer than expected. 
+                                  This could be due to high system load or complexity of your project.
+                                </p>
+                                <div className="flex items-center space-x-3">
+                                  <Button 
+                                    onClick={handleRegenerateCanvasClick}
+                                    disabled={isRegenerating}
+                                    className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
+                                  >
+                                    {isRegenerating ? (
+                                      <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Retrying...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                        Retry Generation
+                                      </>
+                                    )}
+                                  </Button>
+                                  <Button 
+                                    variant="outline" 
+                                    onClick={() => {
+                                      // Refresh data
+                                      queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
+                                      queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}/canvas`] });
+                                      queryClient.invalidateQueries({ queryKey: [`/api/supabase/canvas/${ideaId}`] });
+                                    }}
+                                  >
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    Check Status
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          <h3 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">Forging Your Canvas</h3>
-                          <p className="text-neutral-600 mb-2">
-                            Please wait while we hammer out your idea and forge your Lean Canvas. The forge is heating up...
-                          </p>
-                          <div className="flex items-center justify-center mt-4">
-                            <Badge variant="outline" className="px-3 py-1">
-                              <span className="text-xs">Auto-completes after 2 minutes</span>
-                            </Badge>
+                        ) : (
+                          <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8 text-center">
+                            <div className="mb-4 mx-auto relative w-16 h-16">
+                              <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                                <Flame className="h-14 w-14 text-amber-400" />
+                              </div>
+                              <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                                <Hammer className="h-10 w-10 text-primary" />
+                              </div>
+                            </div>
+                            <h3 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">Forging Your Canvas</h3>
+                            <p className="text-neutral-600 mb-2">
+                              Please wait while we hammer out your idea and forge your Lean Canvas. The forge is heating up...
+                            </p>
+                            <div className="flex items-center justify-center mt-4">
+                              <Badge variant="outline" className="px-3 py-1">
+                                <span className="text-xs">Auto-completes after 2 minutes</span>
+                              </Badge>
+                            </div>
                           </div>
-                        </div>
+                        )
                       ) : canvas ? (
                         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden">
                           <div className="p-5">
