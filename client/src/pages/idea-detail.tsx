@@ -1717,7 +1717,7 @@ export default function IdeaDetail() {
                       <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-lg font-bold text-neutral-900">Functional Requirements Document</h3>
-                          {!functionalRequirements && (
+                          {!functionalRequirements && !functionalRequirementsGenerating && (
                             <Button 
                               size="sm" 
                               variant="outline"
@@ -1726,6 +1726,17 @@ export default function IdeaDetail() {
                             >
                               <Hammer className="mr-2 h-4 w-4" />
                               Generate Functional Requirements
+                            </Button>
+                          )}
+                          {functionalRequirements && (
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={handleRegenerateFunctionalRequirementsClick}
+                              disabled={isGeneratingFunctionalRequirements}
+                            >
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Regenerate Document
                             </Button>
                           )}
                         </div>
@@ -1769,7 +1780,7 @@ export default function IdeaDetail() {
                                 </p>
                                 <div className="flex items-center space-x-3">
                                   <Button 
-                                    onClick={handleGenerateFunctionalRequirementsClick}
+                                    onClick={handleRegenerateFunctionalRequirementsClick}
                                     disabled={isGeneratingFunctionalRequirements}
                                     className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
                                   >
