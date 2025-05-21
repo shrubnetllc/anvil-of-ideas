@@ -1852,7 +1852,7 @@ export default function IdeaDetail() {
                               This process usually takes 1-2 minutes.
                             </p>
                           </div>
-                        ) : functionalRequirementsGenerating && functionalRequirementsTimedOut ? (
+                        ) : functionalRequirementsGenerating && functionalRequirementsTimedOut && !functionalRequirements?.html ? (
                           <div className="border border-destructive rounded-md p-6 mb-4 bg-destructive/10">
                             <div className="flex items-start space-x-4">
                               <div className="mt-1">
