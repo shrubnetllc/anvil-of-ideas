@@ -60,6 +60,7 @@ export default function IdeaDetail() {
   const [isCanvasGenerated, setIsCanvasGenerated] = useState(false);
   const [canvasGenerating, setCanvasGenerating] = useState(false);
   const [isGeneratingCanvas, setIsGeneratingCanvas] = useState(false);
+  const [canvasTimedOut, setCanvasTimedOut] = useState(false);
   
   const { toast } = useToast();
   
