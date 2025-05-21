@@ -2145,6 +2145,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Direct debug endpoint for Supabase FRD
+  app.get("/api/debug/supabase-frd/:external_id", isAuthenticated, async (req, res) => {
+    try {
+      const externalId = req.params.external_id;
+      const { supabase } = await import('./supabase');
+      
+      console.log(`=== DIRECT SUPABASE FRD DEBUG ===`);
+      console.log(`Debugging Supabase FRD with ID: ${externalId}`);
+      
+      // Try to query the FRD table directly using ID field
+      console.log('Attempting primary query using id field...');
+      const { data, error } = await supabase
+        .from('frd')
+        .select('*')
+        .eq('id', externalId)
+        .single();
+      
+      if (error) {
+        console.log(`Error in direct FRD lookup by id: ${error.message}`);
+        
+        // Try alternative fields - reference_id
+        console.log('Attempting query using reference_id field...');
+        const alt = await supabase
+          .from('frd')
+          .select('*')
+          .eq('reference_id', externalId)
+          .single();
+        
+        if (alt.error) {
+          console.log(`Reference_id lookup failed: ${alt.error.message}`);
+          
+          // Try UUID field
+          console.log('Attempting query using uuid field...');
+          const uuid = await supabase
+            .from('frd')
+            .select('*')
+            .eq('uuid', externalId)
+            .single();
+            
+          if (uuid.error) {
+            console.log(`UUID lookup failed: ${uuid.error.message}`);
+            
+            // Try a raw query to see field names
+            console.log('Attempting raw query to inspect schema...');
+            try {
+              const { data: tableInfo } = await supabase.rpc('get_schema_info', { table_name: 'frd' });
+              console.log('Table schema info:', tableInfo);
+            } catch (e) {
+              console.log('Schema inspection failed:', e);
+            }
+            
+            return res.status(404).json({ 
+              message: "FRD not found in any table/column",
+              checked_fields: ['id', 'reference_id', 'uuid'],
+              external_id: externalId
+            });
+          }
+          
+          console.log(`Found FRD by uuid lookup`);
+          console.log(`Fields: ${Object.keys(uuid.data).join(', ')}`);
+          
+          // Check for HTML content
+          const hasContent = !!uuid.data.frd_html || !!uuid.data.html || !!uuid.data.content;
+          console.log(`Has HTML content: ${hasContent}`);
+          
+          if (hasContent) {
+            const htmlField = uuid.data.frd_html ? 'frd_html' : (uuid.data.html ? 'html' : 'content');
+            const htmlContent = uuid.data[htmlField];
+            console.log(`HTML content from ${htmlField} field, length: ${htmlContent.length}`);
+            console.log(`Sample: ${htmlContent.substring(0, 100)}...`);
+          }
+          
+          return res.json({
+            success: true,
+            source: 'uuid',
+            data: uuid.data
+          });
+        }
+        
+        console.log(`Found FRD by reference_id lookup`);
+        console.log(`Fields: ${Object.keys(alt.data).join(', ')}`);
+        
+        // Check for HTML content
+        const hasContent = !!alt.data.frd_html || !!alt.data.html || !!alt.data.content;
+        console.log(`Has HTML content: ${hasContent}`);
+        
+        if (hasContent) {
+          const htmlField = alt.data.frd_html ? 'frd_html' : (alt.data.html ? 'html' : 'content');
+          const htmlContent = alt.data[htmlField];
+          console.log(`HTML content from ${htmlField} field, length: ${htmlContent.length}`);
+          console.log(`Sample: ${htmlContent.substring(0, 100)}...`);
+        }
+        
+        return res.json({
+          success: true,
+          source: 'reference_id',
+          data: alt.data
+        });
+      }
+      
+      console.log(`Found FRD by direct id lookup`);
+      console.log(`Fields: ${Object.keys(data).join(', ')}`);
+      
+      // Check for HTML content
+      const hasContent = !!data.frd_html || !!data.html || !!data.content;
+      console.log(`Has HTML content: ${hasContent}`);
+      
+      if (hasContent) {
+        const htmlField = data.frd_html ? 'frd_html' : (data.html ? 'html' : 'content');
+        const htmlContent = data[htmlField];
+        console.log(`HTML content from ${htmlField} field, length: ${htmlContent.length}`);
+        console.log(`Sample: ${htmlContent.substring(0, 100)}...`);
+      }
+      
+      return res.json({
+        success: true,
+        source: 'id',
+        data
+      });
+    } catch (error) {
+      console.error('Error in debug endpoint:', error);
+      res.status(500).json({ 
+        error: 'Error accessing Supabase',
+        message: error.message,
+        stack: error.stack
+      });
+    }
+  });
+
   // Direct debug endpoint for Supabase BRD
   app.get("/api/debug/supabase-brd/:external_id", isAuthenticated, async (req, res) => {
     try {
