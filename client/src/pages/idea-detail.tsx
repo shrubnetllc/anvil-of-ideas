@@ -1296,7 +1296,8 @@ export default function IdeaDetail() {
                               variant="outline" 
                               className="w-full"
                               onClick={() => {
-                                const element = document.querySelector('[data-value="canvas"]') as HTMLElement;
+                                // Find the TabsTrigger component with value="canvas" and click it
+                                const element = document.querySelector('button[data-state][value="canvas"]') as HTMLElement;
                                 element?.click();
                               }}
                             >
@@ -1329,7 +1330,8 @@ export default function IdeaDetail() {
                               variant="outline" 
                               className="w-full"
                               onClick={() => {
-                                const element = document.querySelector('[data-value="requirements"]') as HTMLElement;
+                                // Find the TabsTrigger component with value="requirements" and click it
+                                const element = document.querySelector('button[data-state][value="requirements"]') as HTMLElement;
                                 element?.click();
                               }}
                             >
@@ -1361,7 +1363,8 @@ export default function IdeaDetail() {
                               variant="outline" 
                               className="w-full"
                               onClick={() => {
-                                const element = document.querySelector('[data-value="business"]') as HTMLElement;
+                                // Find the TabsTrigger component with value="business" and click it
+                                const element = document.querySelector('button[data-state][value="business"]') as HTMLElement;
                                 element?.click();
                               }}
                             >
@@ -1393,7 +1396,8 @@ export default function IdeaDetail() {
                               variant="outline" 
                               className="w-full"
                               onClick={() => {
-                                const element = document.querySelector('[data-value="functional"]') as HTMLElement;
+                                // Find the TabsTrigger component with value="functional" and click it
+                                const element = document.querySelector('button[data-state][value="functional"]') as HTMLElement;
                                 element?.click();
                               }}
                             >
