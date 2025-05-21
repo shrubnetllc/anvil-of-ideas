@@ -1279,17 +1279,14 @@ export default function IdeaDetail() {
                           <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                             <div className="flex justify-between items-start mb-2">
                               <h3 className="font-semibold">Lean Canvas</h3>
-                              {canvas ? (
-                                (canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition) ? (
-                                  <Badge 
-                                    variant="default"
-                                    className="bg-green-100 text-green-800 hover:bg-green-100"
-                                  >
-                                    Completed
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline">Not Created</Badge>
-                                )
+                              {(canvas && (canvas.problem || canvas.customerSegments || canvas.uniqueValueProposition)) ||
+                               (supabaseData && supabaseData.data && supabaseData.data.html) ? (
+                                <Badge 
+                                  variant="default"
+                                  className="bg-green-100 text-green-800 hover:bg-green-100"
+                                >
+                                  Completed
+                                </Badge>
                               ) : (
                                 <Badge variant="outline">Not Created</Badge>
                               )}
