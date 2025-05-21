@@ -734,40 +734,29 @@ export default function IdeaDetail() {
   };
 
   const handleRegenerateFunctionalRequirementsClick = async () => {
-    if (functionalRequirements && functionalRequirements.id) {
-      try {
-        setIsGeneratingFunctionalRequirements(true);
-        
-        // Delete the existing document first
-        const response = await fetch(`/api/ideas/${ideaId}/documents/${functionalRequirements.id}`, {
-          method: 'DELETE',
-        });
-        
-        if (response.ok) {
-          // Clear the current document and reset states
-          setFunctionalRequirements(null);
-          setFunctionalRequirementsGenerating(false);
-          setFunctionalRequirementsTimedOut(false);
-          
-          toast({
-            title: "Regeneration Started",
-            description: "The Functional Requirements have been reset and can now be regenerated.",
-          });
-        } else {
-          throw new Error(`Failed to delete Functional Requirements document`);
-        }
-      } catch (error) {
-        console.error('Error regenerating Functional Requirements:', error);
-        toast({
-          title: "Error",
-          description: "Failed to regenerate Functional Requirements",
-          variant: "destructive",
-        });
-      } finally {
-        setIsGeneratingFunctionalRequirements(false);
-      }
-    } else {
-      handleGenerateFunctionalRequirementsClick();
+    try {
+      // Skip deletion - just reset UI state and start a new generation
+      setIsGeneratingFunctionalRequirements(true);
+      setFunctionalRequirements(null);
+      setFunctionalRequirementsGenerating(true);
+      setFunctionalRequirementsTimedOut(false);
+      
+      toast({
+        title: "Regeneration Started",
+        description: "Generating new Functional Requirements document...",
+      });
+      
+      // Start the generation process directly
+      generateFunctionalRequirements();
+    } catch (error) {
+      console.error('Error regenerating Functional Requirements:', error);
+      toast({
+        title: "Error",
+        description: "Failed to regenerate Functional Requirements",
+        variant: "destructive",
+      });
+      setIsGeneratingFunctionalRequirements(false);
+      setFunctionalRequirementsGenerating(false);
     }
   };
 
