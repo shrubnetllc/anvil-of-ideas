@@ -919,22 +919,56 @@ export default function IdeaDetail() {
   // This refreshes data automatically every 10 seconds while generating
   useEffect(() => {
     let timer: number | null = null;
+    let timeoutTimer: number | null = null;
     
     if (idea?.status === "Generating") {
+      // Check if generation has timed out (2 minutes or more since started)
+      if (idea.generationStartedAt) {
+        const startedAt = new Date(idea.generationStartedAt);
+        const now = new Date();
+        const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
+        
+        if (diffMinutes >= 2) {
+          console.log(`Canvas generation timed out (started ${diffMinutes.toFixed(1)} minutes ago)`);
+          setCanvasTimedOut(true);
+        } else {
+          setCanvasTimedOut(false);
+          console.log(`Canvas generation in progress (started ${diffMinutes.toFixed(1)} minutes ago)`);
+          
+          // Set a timer to check for timeout after the 2-minute mark
+          const remainingMs = Math.max(0, (2 * 60 * 1000) - (now.getTime() - startedAt.getTime()));
+          if (remainingMs > 0) {
+            timeoutTimer = window.setTimeout(() => {
+              if (idea?.status === "Generating") {
+                console.log('Timeout check triggered: Canvas generation has exceeded 2 minutes');
+                setCanvasTimedOut(true);
+              }
+            }, remainingMs);
+          }
+        }
+      }
+      
+      // Regular polling every 10 seconds
       timer = window.setTimeout(() => {
         // Refresh data every 10 seconds if still in generating state
         queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
         queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}/canvas`] });
         queryClient.invalidateQueries({ queryKey: [`/api/supabase/canvas/${ideaId}`] });
       }, 10000);
+    } else {
+      // Reset the timed out state if idea is no longer generating
+      setCanvasTimedOut(false);
     }
     
     return () => {
       if (timer !== null) {
         clearTimeout(timer);
       }
+      if (timeoutTimer !== null) {
+        clearTimeout(timeoutTimer);
+      }
     };
-  }, [idea?.status, ideaId]);
+  }, [idea?.status, idea?.generationStartedAt, ideaId]);
 
   const handleBackClick = () => {
     navigate("/");
