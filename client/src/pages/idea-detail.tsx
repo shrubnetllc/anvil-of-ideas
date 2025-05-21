@@ -1773,17 +1773,6 @@ export default function IdeaDetail() {
                       <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-lg font-bold text-neutral-900">Functional Requirements Document</h3>
-                          {functionalRequirements && (
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={handleRegenerateFunctionalRequirementsClick}
-                              disabled={isGeneratingFunctionalRequirements}
-                            >
-                              <RefreshCw className="mr-2 h-4 w-4" />
-                              Regenerate Document
-                            </Button>
-                          )}
                         </div>
                         
                         {isLoadingFunctionalRequirements ? (
