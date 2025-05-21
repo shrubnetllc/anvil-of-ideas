@@ -1725,7 +1725,7 @@ export default function IdeaDetail() {
                                 </div>
                                 
                                 {/* Additional notes panel for regeneration - using a dialog like with lean canvas */}
-                                <div className="mt-6 flex">
+                                <div className="mt-6 flex justify-between items-center">
                                   <Dialog>
                                     <DialogTrigger asChild>
                                       <Button
@@ -1760,6 +1760,16 @@ export default function IdeaDetail() {
                                       </DialogFooter>
                                     </DialogContent>
                                   </Dialog>
+                                  
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleRegenerateProjectRequirementsClick}
+                                    disabled={isGeneratingRequirements}
+                                  >
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Regenerate
+                                  </Button>
                                 </div>
                               </div>
                             ) : (
@@ -1921,16 +1931,6 @@ export default function IdeaDetail() {
                                       }}
                                     >
                                       <Copy className="mr-2 h-4 w-4" />
-                                      Copy Content
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={handleRegenerateBusinessRequirementsClick}
-                                      disabled={isGeneratingBusinessRequirements}
-                                    >
-                                      <RefreshCw className="mr-2 h-4 w-4" />
-                                      Regenerate
                                     </Button>
                                   </div>
                                 </div>
