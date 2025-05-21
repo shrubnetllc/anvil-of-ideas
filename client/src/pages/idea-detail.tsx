@@ -1356,6 +1356,38 @@ export default function IdeaDetail() {
                               {businessRequirements ? 'View Document' : 'Create Document'}
                             </Button>
                           </div>
+
+                          {/* Functional Requirements Card */}
+                          <div className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                              <h3 className="font-semibold">Functional Requirements</h3>
+                              {functionalRequirements ? (
+                                <Badge 
+                                  variant={functionalRequirements.status === 'Completed' ? 'default' : 'outline'}
+                                  className={functionalRequirements.status === 'Completed' ? 'bg-green-100 text-green-800 hover:bg-green-100' : 
+                                            functionalRequirements.status === 'Generating' ? 'bg-amber-100 text-amber-800 hover:bg-amber-100' : ''}
+                                >
+                                  {functionalRequirements.status}
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline">Not Created</Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-neutral-600 mb-3">
+                              Technical specifications and detailed system functions
+                            </p>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="w-full"
+                              onClick={() => {
+                                const element = document.querySelector('[data-value="functional"]') as HTMLElement;
+                                element?.click();
+                              }}
+                            >
+                              {functionalRequirements ? 'View Document' : 'Create Document'}
+                            </Button>
+                          </div>
                           
                           {/* Additional document cards would follow the same pattern */}
                           {/* You can add more cards for each document type */}
