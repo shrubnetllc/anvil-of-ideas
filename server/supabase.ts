@@ -267,37 +267,72 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
     // Query Supabase for the functional requirements document
     console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase Functional Requirements table`);
     
-    // First try direct query using the ID
-    console.log(`[SUPABASE FUNCTIONAL] Direct query using ID=${functionalId}`);
+    // First try direct query using the ID from the 'frd' table (correct table for functional requirements)
+    console.log(`[SUPABASE FUNCTIONAL] Direct query using ID=${functionalId} in frd table`);
     const { data, error } = await supabase
-      .from('functional_requirements')
+      .from('frd')
       .select('*')
       .eq('id', functionalId)
       .single();
     
     if (error) {
-      console.log(`[SUPABASE FUNCTIONAL] Error with direct ID query: ${error.message}`);
+      console.log(`[SUPABASE FUNCTIONAL] Error with direct ID query in frd table: ${error.message}`);
       
-      // Try fallback query using ID as project_id
-      console.log(`[SUPABASE FUNCTIONAL] Trying fallback with project_id=${functionalId}`);
+      // Try fallback query using ID as project_id in frd table
+      console.log(`[SUPABASE FUNCTIONAL] Trying fallback with project_id=${functionalId} in frd table`);
       const fallbackResponse = await supabase
-        .from('functional_requirements')
+        .from('frd')
         .select('*')
         .eq('project_id', functionalId)
         .single();
       
       if (fallbackResponse.error) {
         console.log(`[SUPABASE FUNCTIONAL] Fallback query also failed: ${fallbackResponse.error.message}`);
+        
+        // Try the original 'functional_requirements' table as last resort
+        console.log(`[SUPABASE FUNCTIONAL] Trying original functional_requirements table with ID=${functionalId}`);
+        const originalTableResponse = await supabase
+          .from('functional_requirements')
+          .select('*')
+          .eq('id', functionalId)
+          .single();
+        
+        if (originalTableResponse.error) {
+          console.log(`[SUPABASE FUNCTIONAL] Original table query also failed: ${originalTableResponse.error.message}`);
+          return { error: 'Document not found in Supabase', data: null };
+        }
+        
+        if (originalTableResponse.data) {
+          console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record in original table with ID=${functionalId}`);
+          console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(originalTableResponse.data).join(', ')}`);
+          
+          // Check for HTML content
+          const originalHtmlContent = originalTableResponse.data.html || originalTableResponse.data.func_html || null;
+          if (originalHtmlContent) {
+            console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${originalHtmlContent.length} characters`);
+          }
+          
+          return { 
+            source: 'supabase',
+            error: null, 
+            data: {
+              ...originalTableResponse.data,
+              html: originalHtmlContent
+            } 
+          };
+        }
+        
         return { error: 'Document not found in Supabase', data: null };
       }
       
       if (fallbackResponse.data) {
-        console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record with project_id=${functionalId}`);
+        console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record in frd table with project_id=${functionalId}`);
         console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(fallbackResponse.data).join(', ')}`);
         
-        // Check for HTML content
-        if (fallbackResponse.data.html) {
-          console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${fallbackResponse.data.html.length} characters`);
+        // Check for HTML content - in frd table, the HTML is in frd_html field
+        const htmlContent = fallbackResponse.data.frd_html || fallbackResponse.data.html || null;
+        if (htmlContent) {
+          console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${htmlContent.length} characters`);
         }
         
         // Return the response with HTML content in the data.html field for consistency
@@ -306,18 +341,18 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
           error: null, 
           data: {
             ...fallbackResponse.data,
-            html: fallbackResponse.data.html || fallbackResponse.data.func_html || null
+            html: htmlContent
           } 
         };
       }
     }
     
     if (data) {
-      console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record directly with ID=${functionalId}`);
+      console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record directly in frd table with ID=${functionalId}`);
       console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(data).join(', ')}`);
       
-      // Check for HTML content in various possible fields
-      const htmlContent = data.html || data.func_html || null;
+      // Check for HTML content in various possible fields - in frd table, the HTML is in frd_html field
+      const htmlContent = data.frd_html || data.html || data.func_html || null;
       if (htmlContent) {
         console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${htmlContent.length} characters`);
       }
