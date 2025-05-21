@@ -46,6 +46,14 @@ export default function IdeaDetail() {
   const [businessRequirementsContent, setBusinessRequirementsContent] = useState("");
   const [businessRequirementsNotes, setBusinessRequirementsNotes] = useState('');
   
+  // State for functional requirements
+  const [functionalRequirements, setFunctionalRequirements] = useState<ProjectDocument | null>(null);
+  const [isLoadingFunctionalRequirements, setIsLoadingFunctionalRequirements] = useState(false);
+  const [isGeneratingFunctionalRequirements, setIsGeneratingFunctionalRequirements] = useState(false);
+  const [functionalRequirementsGenerating, setFunctionalRequirementsGenerating] = useState(false);
+  const [functionalRequirementsTimedOut, setFunctionalRequirementsTimedOut] = useState(false);
+  const [functionalRequirementsNotes, setFunctionalRequirementsNotes] = useState('');
+  
   // State for lean canvas
   const [canvasNotes, setCanvasNotes] = useState('');
   const [isCanvasGenerated, setIsCanvasGenerated] = useState(false);
