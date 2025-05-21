@@ -1239,7 +1239,7 @@ export default function IdeaDetail() {
               <div className="w-full">
                 {/* Tabs */}
                 <div className="border-b border-neutral-200">
-                  <Tabs defaultValue="canvas" value={activeTab} onValueChange={setActiveTab}>
+                  <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList className="w-auto flex flex-wrap">
                       <TabsTrigger value="documents" className="text-sm">
                         <div className="flex items-center">
