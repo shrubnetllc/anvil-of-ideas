@@ -28,7 +28,6 @@ export default function Settings() {
   const [isSendingNotificationEmail, setIsSendingNotificationEmail] = useState(false);
   const [emailFromAddress, setEmailFromAddress] = useState("");
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
-  const [activeTab, setActiveTab] = useState("email");
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState<boolean | null>(null);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
@@ -312,30 +311,30 @@ export default function Settings() {
             </div>
             
             <Tabs defaultValue="email" className="w-full">
-              <div className="border-b mb-6">
-                <TabsList className="flex bg-transparent p-0">
+              <div className="border-b">
+                <TabsList className="w-full flex justify-start bg-transparent p-0">
                   <TabsTrigger 
                     value="email" 
-                    className="px-4 py-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none data-[state=active]:text-primary"
+                    className="px-4 py-2 rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary"
                   >
                     Email
                   </TabsTrigger>
                   <TabsTrigger 
                     value="account" 
-                    className="px-4 py-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none data-[state=active]:text-primary"
+                    className="px-4 py-2 rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary"
                   >
                     Account
                   </TabsTrigger>
                   <TabsTrigger 
                     value="notifications" 
-                    className="px-4 py-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none data-[state=active]:text-primary"
+                    className="px-4 py-2 rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary"
                   >
                     Notifications
                   </TabsTrigger>
                 </TabsList>
               </div>
               
-              <TabsContent value="email" className="space-y-6">
+              <TabsContent value="email" className="space-y-6 mt-6">
                 <Card className="mb-6">
                   <CardHeader>
                     <CardTitle className="flex items-center">
