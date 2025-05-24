@@ -5,7 +5,6 @@ import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle, Save, User, RefreshCw, X, Info as InfoIcon } from "lucide-react";
@@ -17,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function Settings() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [currentTab, setCurrentTab] = useState("email");
   const [testEmailAddress, setTestEmailAddress] = useState("");
   const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
   const [welcomeEmailAddress, setWelcomeEmailAddress] = useState("");
@@ -258,43 +258,39 @@ export default function Settings() {
       return;
     }
     
-    // Create a mounted flag to prevent state updates after navigation
-    let mounted = true;
     setIsResendingVerification(true);
     
     try {
       const response = await apiRequest("POST", "/api/resend-verification");
-      if (!mounted) return;
-      
       const data = await response.json();
       
-      if (data.success && mounted) {
+      if (data.success) {
         toast({
           title: "Verification Email Sent",
           description: "A new verification email has been sent to your email address.",
           variant: "default"
         });
-      } else if (mounted) {
+      } else {
         throw new Error(data.message || "Failed to send verification email");
       }
     } catch (error) {
-      if (!mounted) return;
-      
       toast({
         title: "Failed to Resend Verification",
         description: error instanceof Error ? error.message : "An unknown error occurred",
         variant: "destructive"
       });
     } finally {
-      if (mounted) {
-        setIsResendingVerification(false);
-      }
+      setIsResendingVerification(false);
     }
-    
-    // Since this is a function that's called on demand (not a useEffect),
-    // we need to attach the cleanup to the component's outer scope
-    return () => { mounted = false; };
   };
+
+  // Simplified tab UI component
+  const tabClass = (tabName: string) => 
+    `px-4 py-2 text-sm font-medium ${
+      currentTab === tabName 
+        ? "border-b-2 border-primary text-primary" 
+        : "text-neutral-500 hover:text-neutral-900 hover:border-b border-neutral-300"
+    }`;
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -310,31 +306,33 @@ export default function Settings() {
               <h1 className="text-2xl font-semibold text-neutral-900">Settings</h1>
             </div>
             
-            <Tabs defaultValue="email" className="w-full">
-              <div className="border-b">
-                <TabsList className="w-full flex justify-start bg-transparent p-0">
-                  <TabsTrigger 
-                    value="email" 
-                    className="px-4 py-2 rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary"
-                  >
-                    Email
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="account" 
-                    className="px-4 py-2 rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary"
-                  >
-                    Account
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="notifications" 
-                    className="px-4 py-2 rounded-none data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary"
-                  >
-                    Notifications
-                  </TabsTrigger>
-                </TabsList>
+            {/* Simple tab navigation */}
+            <div className="border-b border-neutral-200 mb-6">
+              <div className="flex">
+                <button 
+                  className={tabClass("email")}
+                  onClick={() => setCurrentTab("email")}
+                >
+                  Email
+                </button>
+                <button 
+                  className={tabClass("account")}
+                  onClick={() => setCurrentTab("account")}
+                >
+                  Account
+                </button>
+                <button 
+                  className={tabClass("notifications")}
+                  onClick={() => setCurrentTab("notifications")}
+                >
+                  Notifications
+                </button>
               </div>
-              
-              <TabsContent value="email" className="space-y-6 mt-6">
+            </div>
+            
+            {/* Email Tab Content */}
+            {currentTab === "email" && (
+              <div className="space-y-6">
                 <Card className="mb-6">
                   <CardHeader>
                     <CardTitle className="flex items-center">
@@ -503,9 +501,12 @@ export default function Settings() {
                     </div>
                   </CardFooter>
                 </Card>
-              </TabsContent>
-              
-              <TabsContent value="account" className="space-y-6 mt-6">
+              </div>
+            )}
+            
+            {/* Account Tab Content */}
+            {currentTab === "account" && (
+              <div className="space-y-6">
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center">
@@ -575,9 +576,12 @@ export default function Settings() {
                     </div>
                   </CardFooter>
                 </Card>
-              </TabsContent>
-              
-              <TabsContent value="notifications" className="space-y-6 mt-6">
+              </div>
+            )}
+            
+            {/* Notifications Tab Content */}
+            {currentTab === "notifications" && (
+              <div className="space-y-6">
                 <Card>
                   <CardHeader>
                     <CardTitle>Notification Preferences</CardTitle>
@@ -589,8 +593,8 @@ export default function Settings() {
                     <p className="text-neutral-500">Notification preferences will be implemented in a future update.</p>
                   </CardContent>
                 </Card>
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
           </div>
         </main>
       </div>
