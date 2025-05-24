@@ -311,11 +311,13 @@ export default function Settings() {
             </div>
             
             <Tabs defaultValue="email" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="email">Email</TabsTrigger>
-                <TabsTrigger value="account">Account</TabsTrigger>
-                <TabsTrigger value="notifications">Notifications</TabsTrigger>
-              </TabsList>
+              <div className="border-b mb-4">
+                <TabsList className="w-full flex justify-start">
+                  <TabsTrigger value="email" className="flex-1 max-w-[200px]">Email</TabsTrigger>
+                  <TabsTrigger value="account" className="flex-1 max-w-[200px]">Account</TabsTrigger>
+                  <TabsTrigger value="notifications" className="flex-1 max-w-[200px]">Notifications</TabsTrigger>
+                </TabsList>
+              </div>
               
               <TabsContent value="email" className="space-y-6 mt-6">
                 <Card className="mb-6">
