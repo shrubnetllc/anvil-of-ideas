@@ -311,7 +311,7 @@ export default function Settings() {
             </div>
             
             <Tabs defaultValue="email" className="w-full">
-              <TabsList>
+              <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="email">Email</TabsTrigger>
                 <TabsTrigger value="account">Account</TabsTrigger>
                 <TabsTrigger value="notifications">Notifications</TabsTrigger>
