@@ -287,13 +287,15 @@ export default function Settings() {
   // We've removed the tabClass helper since we're using inline styles now
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
+    <div className="flex min-h-screen">
+      <div className="hidden md:block md:w-64 md:flex-shrink-0">
+        <Sidebar />
+      </div>
       
-      <div className="flex flex-col flex-1 overflow-hidden">
+      <div className="flex flex-col flex-1">
         <Header />
         
-        <main className="flex-1 overflow-y-auto bg-neutral-50 px-6 py-8">
+        <main className="flex-1 overflow-y-auto bg-neutral-50 px-6 py-8 ml-0 md:ml-64">
           <div className="max-w-5xl mx-auto">
             <div className="flex items-center mb-6">
               <SettingsIcon className="h-6 w-6 mr-2 text-primary" />
