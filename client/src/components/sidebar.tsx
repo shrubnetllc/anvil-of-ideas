@@ -59,7 +59,10 @@ export function Sidebar() {
             </Link>
             
             <button 
-              onClick={() => window.dispatchEvent(new CustomEvent('open-new-idea-modal'))}
+              onClick={(e) => {
+                e.preventDefault(); // Prevent default to avoid navigation issues
+                window.dispatchEvent(new CustomEvent('open-new-idea-modal'));
+              }}
               className={`flex items-center px-2 py-2 text-sm font-medium rounded-md group w-full text-left
                 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-800`}>
                 <Hammer className="mr-3 h-5 w-5 text-primary-500" />
