@@ -29,6 +29,9 @@ function Router() {
   );
 }
 
+// Import our new NavigationGuard component
+import { NavigationGuard } from "@/components/navigation-guard";
+
 function App() {
   return (
     <ErrorBoundary>
@@ -36,8 +39,10 @@ function App() {
         <ThemeProvider attribute="class" defaultTheme="light">
           <TooltipProvider>
             <AuthProvider>
-              <Toaster />
-              <Router />
+              <NavigationGuard>
+                <Toaster />
+                <Router />
+              </NavigationGuard>
             </AuthProvider>
           </TooltipProvider>
         </ThemeProvider>
