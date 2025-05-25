@@ -37,10 +37,10 @@ export function Sidebar() {
   // Safely dispatch custom event
   const handleNewIdeaClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    try {
-      window.dispatchEvent(new CustomEvent('open-new-idea-modal'));
-    } catch (error) {
-      console.error('Error dispatching custom event:', error);
+    // Use a safer approach to dispatch events
+    if (typeof window !== 'undefined') {
+      const customEvent = new CustomEvent('open-new-idea-modal');
+      window.dispatchEvent(customEvent);
     }
   };
   

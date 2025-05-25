@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useSafeNavigation } from "@/hooks/use-safe-navigation";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Settings() {
   const { user } = useAuth();
+  const { location } = useSafeNavigation(); // Use the safe navigation hook
   const { toast } = useToast();
   const [currentTab, setCurrentTab] = useState("email");
   const [testEmailAddress, setTestEmailAddress] = useState("");

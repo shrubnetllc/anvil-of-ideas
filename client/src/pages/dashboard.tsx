@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useIdeas } from "@/hooks/use-ideas";
 import { useAuth } from "@/hooks/use-auth";
 import { Input } from "@/components/ui/input";
@@ -14,14 +14,14 @@ import { SearchIcon, Hammer, Sparkles, CheckCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
+import { useSafeNavigation } from "@/hooks/use-safe-navigation";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const { ideas, isLoading, generateCanvas } = useIdeas();
   // We only use the local ideas hook - not the Supabase ideas - to avoid any cross-user data leakage
   const { toast } = useToast();
-  const [location] = useLocation();
+  const { location } = useSafeNavigation();
   const [showNewIdeaModal, setShowNewIdeaModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | "All">("All");
@@ -46,7 +46,8 @@ export default function Dashboard() {
         
         // Clear the URL parameter after showing the toast
         try {
-          window.history.replaceState({}, document.title, location.split('?')[0]);
+          const currentPath = location || '/';
+          window.history.replaceState({}, document.title, currentPath.split('?')[0]);
         } catch (error) {
           console.error('Error updating URL state:', error);
         }
@@ -59,7 +60,8 @@ export default function Dashboard() {
         
         // Clear the URL parameter after showing the toast
         try {
-          window.history.replaceState({}, document.title, location.split('?')[0]);
+          const currentPath = location || '/';
+          window.history.replaceState({}, document.title, currentPath.split('?')[0]);
         } catch (error) {
           console.error('Error updating URL state:', error);
         }
