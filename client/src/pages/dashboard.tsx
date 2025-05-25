@@ -103,14 +103,18 @@ export default function Dashboard() {
     setShowNewIdeaModal(true);
   };
   
-  // Add event listener for opening the modal from sidebar
+  // Check if we should open the new idea modal from session storage
   useEffect(() => {
-    const handleOpenModal = () => setShowNewIdeaModal(true);
-    window.addEventListener('open-new-idea-modal', handleOpenModal);
-    
-    return () => {
-      window.removeEventListener('open-new-idea-modal', handleOpenModal);
-    };
+    // Only run in browser
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      const shouldOpenModal = sessionStorage.getItem('open-new-idea-modal');
+      if (shouldOpenModal === 'true') {
+        // Clear the flag immediately
+        sessionStorage.removeItem('open-new-idea-modal');
+        // Open the modal
+        setShowNewIdeaModal(true);
+      }
+    }
   }, []);
 
   return (

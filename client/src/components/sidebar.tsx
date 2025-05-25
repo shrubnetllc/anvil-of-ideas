@@ -34,13 +34,15 @@ export function Sidebar() {
   // Check if the current location is at a specific path
   const isActive = (path: string) => location === path;
   
-  // Safely dispatch custom event
+  // New direct approach that doesn't use custom events
   const handleNewIdeaClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Use a safer approach to dispatch events
-    if (typeof window !== 'undefined') {
-      const customEvent = new CustomEvent('open-new-idea-modal');
-      window.dispatchEvent(customEvent);
+    // Instead of using custom events, let's use a direct approach
+    // by storing a flag in sessionStorage
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      sessionStorage.setItem('open-new-idea-modal', 'true');
+      // Force a navigation to Dashboard which will check this flag
+      window.location.href = '/';
     }
   };
   

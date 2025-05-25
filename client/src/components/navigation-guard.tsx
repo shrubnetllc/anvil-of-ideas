@@ -18,9 +18,13 @@ export function NavigationGuard({ children }: { children: React.ReactNode }) {
       
       // Remove any event listeners that might cause issues
       const cleanupCustomEvents = () => {
-        const noop = () => {};
         try {
+          // Create a placeholder function to ensure any listeners are removed
+          const noop = () => {};
           window.removeEventListener('open-new-idea-modal', noop);
+          
+          // getEventListeners is not a standard browser API, removing this code
+          console.log('Cleaning up event listeners');
         } catch (err) {
           console.log('Event cleanup complete');
         }
@@ -37,9 +41,6 @@ export function NavigationGuard({ children }: { children: React.ReactNode }) {
     }
   }, [location, prevLocation]);
 
-  return (
-    <React.Fragment>
-      {children}
-    </React.Fragment>
-  );
+  // Using div instead of React.Fragment to avoid warnings
+  return <div className="navigation-guard">{children}</div>;
 }
