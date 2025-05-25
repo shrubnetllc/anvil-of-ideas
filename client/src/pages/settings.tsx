@@ -284,13 +284,7 @@ export default function Settings() {
     }
   };
 
-  // Simplified tab UI component
-  const tabClass = (tabName: string) => 
-    `px-4 py-2 text-sm font-medium ${
-      currentTab === tabName 
-        ? "border-b-2 border-primary text-primary" 
-        : "text-neutral-500 hover:text-neutral-900 hover:border-b border-neutral-300"
-    }`;
+  // We've removed the tabClass helper since we're using inline styles now
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -307,22 +301,34 @@ export default function Settings() {
             </div>
             
             {/* Simple tab navigation */}
-            <div className="border-b border-neutral-200 mb-6">
-              <div className="flex">
+            <div className="border-b border-neutral-200 mb-6 w-full">
+              <div className="flex space-x-4">
                 <button 
-                  className={tabClass("email")}
+                  className={`py-2 px-4 font-medium text-sm border-b-2 ${
+                    currentTab === "email" 
+                      ? "border-primary text-primary" 
+                      : "border-transparent text-neutral-500 hover:text-neutral-900"
+                  }`}
                   onClick={() => setCurrentTab("email")}
                 >
                   Email
                 </button>
                 <button 
-                  className={tabClass("account")}
+                  className={`py-2 px-4 font-medium text-sm border-b-2 ${
+                    currentTab === "account" 
+                      ? "border-primary text-primary" 
+                      : "border-transparent text-neutral-500 hover:text-neutral-900"
+                  }`}
                   onClick={() => setCurrentTab("account")}
                 >
                   Account
                 </button>
                 <button 
-                  className={tabClass("notifications")}
+                  className={`py-2 px-4 font-medium text-sm border-b-2 ${
+                    currentTab === "notifications" 
+                      ? "border-primary text-primary" 
+                      : "border-transparent text-neutral-500 hover:text-neutral-900"
+                  }`}
                   onClick={() => setCurrentTab("notifications")}
                 >
                   Notifications
