@@ -78,25 +78,24 @@ export default function IdeaDetail() {
   // Fetch project requirements when component mounts
   useEffect(() => {
     if (ideaId) {
+      // Fetch all document types in parallel
       fetchProjectRequirements();
       fetchBusinessRequirements();
+      fetchFunctionalRequirements();
       
-      // For functional requirements, we'll do a two-step process:
-      // 1. First check with Supabase for the latest data
+      // Still check with Supabase for the latest data, but don't delay displaying the badge
       fetch(`/api/supabase/functional-requirements/${ideaId}`)
         .then(() => {
-          console.log('Initial Supabase check for Functional Requirements complete');
+          console.log('Background Supabase check for Functional Requirements complete');
           // Wait a moment for server to process updates
           return new Promise(resolve => setTimeout(resolve, 800));
         })
         .then(() => {
-          // 2. Then fetch the updated document
+          // Refresh the document data after Supabase has updated it
           fetchFunctionalRequirements();
         })
         .catch(err => {
-          console.error('Error in initial Supabase check:', err);
-          // Still try to fetch the local document in case of error
-          fetchFunctionalRequirements();
+          console.error('Error in background Supabase check:', err);
         });
     }
   }, [ideaId]);
