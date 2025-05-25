@@ -13,6 +13,7 @@ import Settings from "@/pages/settings";
 // Using direct import instead of alias to avoid path issues
 import EmailVerification from "./pages/email-verification";
 import { ProtectedRoute } from "./lib/protected-route";
+import ErrorBoundary from "@/components/error-boundary";
 
 function Router() {
   return (
@@ -30,16 +31,18 @@ function Router() {
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="light">
-        <TooltipProvider>
-          <AuthProvider>
-            <Toaster />
-            <Router />
-          </AuthProvider>
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider attribute="class" defaultTheme="light">
+          <TooltipProvider>
+            <AuthProvider>
+              <Toaster />
+              <Router />
+            </AuthProvider>
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 
