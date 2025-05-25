@@ -294,9 +294,7 @@ export default function Settings() {
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <div className="w-64 flex-shrink-0">
-        <Sidebar />
-      </div>
+      <Sidebar />
       
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header />
