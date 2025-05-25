@@ -295,7 +295,7 @@ export default function Settings() {
       <div className="flex flex-col flex-1">
         <Header />
         
-        <main className="flex-1 overflow-y-auto bg-neutral-50 px-6 py-8 ml-0 md:ml-64">
+        <main className="flex-1 overflow-y-auto bg-neutral-50 px-6 py-8">
           <div className="max-w-5xl mx-auto">
             <div className="flex items-center mb-6">
               <SettingsIcon className="h-6 w-6 mr-2 text-primary" />
