@@ -16,42 +16,43 @@ export function CanvasSectionComponent({ ideaId, section, content }: CanvasSecti
   const { updateSection, isUpdating } = useLeanCanvas(ideaId);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(content);
-  
+  if (!section) return "";
+
   const formatSectionTitle = (section: string) => {
     return section
       .replace(/([A-Z])/g, ' $1')
       .trim();
   };
-  
+
   const handleSave = () => {
     updateSection(section, editedContent);
     setIsEditing(false);
   };
-  
+
   const handleCancel = () => {
     setEditedContent(content);
     setIsEditing(false);
   };
-  
+
   const formatContent = (content: string) => {
     if (!content) return null;
-    
+
     // Check if content is in a bullet point format
     const hasBulletPoints = content.includes('•') || content.includes('-') || content.includes('*');
-    
+
     if (hasBulletPoints) {
       // Split by common bullet point markers
       const lines = content
         .split(/[\n\r]+/)
         .map(line => line.trim())
         .filter(line => line.length > 0);
-      
+
       return (
         <ul className="text-sm text-neutral-700 space-y-2">
           {lines.map((line, index) => (
             <li key={index}>
-              {line.startsWith('•') || line.startsWith('-') || line.startsWith('*') 
-                ? line 
+              {line.startsWith('•') || line.startsWith('-') || line.startsWith('*')
+                ? line
                 : `• ${line}`}
             </li>
           ))}
@@ -61,7 +62,7 @@ export function CanvasSectionComponent({ ideaId, section, content }: CanvasSecti
       return <p className="text-sm text-neutral-700">{content}</p>;
     }
   };
-  
+
   return (
     <>
       <div className="bg-neutral-50 rounded-lg p-4 border border-neutral-200">
@@ -73,7 +74,7 @@ export function CanvasSectionComponent({ ideaId, section, content }: CanvasSecti
         </div>
         {formatContent(content)}
       </div>
-      
+
       <Dialog open={isEditing} onOpenChange={(open) => !open && handleCancel()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -82,7 +83,7 @@ export function CanvasSectionComponent({ ideaId, section, content }: CanvasSecti
               Update the content of this section. Use bullet points (• or -) for lists.
             </DialogDescription>
           </DialogHeader>
-          
+
           <Textarea
             value={editedContent}
             onChange={(e) => setEditedContent(e.target.value)}
@@ -90,7 +91,7 @@ export function CanvasSectionComponent({ ideaId, section, content }: CanvasSecti
             rows={8}
             className="resize-none"
           />
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={handleCancel}>
               Cancel

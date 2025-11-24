@@ -41,7 +41,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Return only the verified ideas
       res.json(verifiedIdeas);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[SECURITY ERROR] Error retrieving ideas:', error);
       next(error);
     }
@@ -87,7 +87,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.status(201).json(idea);
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -109,7 +109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[SECURITY] Authorized access: User ${userId} accessing their idea ${ideaId}`);
       res.json(idea);
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -145,7 +145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(400).json({ message: "No valid fields to update" });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -187,7 +187,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Created functional requirements document with ID ${document.id}`);
 
       // Step 2: Collect and verify the IDs for related documents
-      let canvasId = null;
       let prdId = null;
       let brdId = null;
       let projectId = null;
@@ -195,10 +194,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get the lean canvas ID
       try {
         const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
-        if (canvas && canvas.leancanvasId) {
-          canvasId = canvas.leancanvasId;
-          console.log(`Found canvas ID: ${canvasId}`);
-        }
         if (canvas && canvas.projectId) {
           projectId = canvas.projectId;
           console.log(`Found project ID: ${projectId}`);
@@ -240,7 +235,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const webhookBody = {
         ideaId,
         documentId: document.id,
-        leancanvas_id: canvasId,
         prd_id: prdId,
         project_id: projectId,
         brd_id: brdId,
@@ -352,7 +346,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           document: document
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating functional requirements:", error);
       next(error);
     }
@@ -399,15 +393,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get data from lean canvas
       let projectId;
-      let leancanvasId;
       try {
         const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
         if (canvas) {
           projectId = canvas.projectId;
-          leancanvasId = canvas.leancanvasId;
-          console.log(`Found projectId ${projectId} and leancanvasId ${leancanvasId} for idea ${ideaId}`);
+          console.log(`Found projectId ${projectId} for idea ${ideaId}`);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error getting canvas data:', error);
       }
 
@@ -419,7 +411,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           prdId = prdDocument.externalId;
           console.log(`Found PRD with externalId ${prdId} for idea ${ideaId}`);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error getting PRD document:', error);
       }
 
@@ -443,7 +435,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const webhookPayload = {
         ideaId,
         project_id: projectId,
-        leancanvas_id: leancanvasId,
         prd_id: prdId,
         instructions: instructions || "Be comprehensive and detailed."
       };
@@ -490,17 +481,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
 
             // If we got a BRD ID, store it in the document
-            if (brdId && document) {
+            if (document && brdId) {
               console.log(`Storing BRD ID ${brdId} in document ${document.id}`);
               await storage.updateDocument(document.id, {
                 externalId: brdId
               });
             }
-          } catch (responseError) {
+          } catch (responseError: any) {
             console.error(`Error processing webhook response: ${responseError.message}`);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error(`Error calling business requirements webhook: ${error.message}`);
       }
 
@@ -509,7 +500,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Business requirements document generation started",
         document
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error starting business requirements generation:", error);
       next(error);
     }
@@ -562,7 +553,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         return res.status(200).json(newDocument);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating/updating document:", error);
       next(error);
     }
@@ -717,7 +708,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.status(200).json(document);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error fetching ${req.params.type} document:`, error);
       next(error);
     }
@@ -737,7 +728,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const documents = await storage.getDocumentsByIdeaId(ideaId);
 
       res.status(200).json(documents);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching documents:", error);
       next(error);
     }
@@ -765,7 +756,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedDocument = await storage.getDocumentById(documentId);
 
       res.status(200).json(updatedDocument);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating document:", error);
       next(error);
     }
@@ -792,7 +783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteDocument(documentId);
 
       res.status(200).json({ message: "Document deleted successfully" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting document:", error);
       next(error);
     }
@@ -833,14 +824,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Now try to delete the idea itself
         await storage.deleteIdea(ideaId);
         return res.status(200).json({ message: "Idea deleted successfully" });
-      } catch (deleteError) {
+      } catch (deleteError: any) {
         console.error(`Error during deletion process for idea ${ideaId}:`, deleteError);
         return res.status(500).json({
           message: "Failed to delete idea",
           error: deleteError.message || "Unknown error"
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in delete idea route:", error);
       next(error);
     }
@@ -907,85 +898,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         console.log(`Resolved ideaId: ${ideaId} from projectId: ${projectId}`);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error resolving idea ID:', error);
         return res.status(400).json({ message: "Failed to resolve idea ID from project ID" });
       }
 
-      // Get the project_id and leancanvas_id from lean_canvas table
-      let supabaseProjectId;
+      // Get the project_id from lean_canvas table
+      let supabaseProjectId = projectId;
       let leancanvasId;
+
       try {
         // First try to get from local database
-        const { pool } = await import('./db');
-        const result = await pool.query('SELECT project_id, leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
 
-        if (result.rows.length > 0) {
-          supabaseProjectId = result.rows[0].project_id;
-          leancanvasId = result.rows[0].leancanvas_id;
-          console.log(`Found project_id ${supabaseProjectId} and leancanvas_id ${leancanvasId} for idea ${ideaId}`);
+        if (canvas && canvas.projectId) {
+          supabaseProjectId = canvas.projectId;
+          leancanvasId = canvas.id;
+          console.log(`Found project_id ${supabaseProjectId} for idea ${ideaId} in local DB`);
         } else {
-          console.log(`No IDs found for idea ${ideaId} in local database`);
+          console.log(`No project_id found for idea ${ideaId} in local database, trying Supabase...`);
 
-          // If leancanvas_id is null, try to fetch from Supabase directly
+          // Try to fetch from Supabase directly
           try {
-            // Try to get the canvas data from Supabase to find the real leancanvas_id
             const { supabase } = await import('./supabase');
-            console.log(`Querying Supabase lean_canvas table with ideaId=${ideaId}`);
-
-            // First try to find via Supabase by idea_id
-            let { data: canvasData } = await supabase
+            const { data: canvasData } = await supabase
               .from('lean_canvas')
-              .select('*')
+              .select('project_id, id')
               .eq('idea_id', ideaId)
               .single();
 
-            if (!canvasData) {
-              // If no result, try getting the idea first to get its project_id
-              const idea = await storage.getIdeaById(ideaId);
-              if (idea) {
-                supabaseProjectId = idea.projectId;
-                console.log(`Found project_id ${supabaseProjectId} from idea ${ideaId}`);
-
-                // Then look up the canvas using the idea's project_id
-                if (supabaseProjectId) {
-                  let { data: canvasByProject } = await supabase
-                    .from('lean_canvas')
-                    .select('*')
-                    .eq('project_id', supabaseProjectId)
-                    .single();
-
-                  if (canvasByProject) {
-                    canvasData = canvasByProject;
-                  }
-                }
-              }
-            }
-
-            if (canvasData) {
-              // We have the canvas data from Supabase
+            if (canvasData && canvasData.project_id) {
               supabaseProjectId = canvasData.project_id;
-              leancanvasId = canvasData.id; // Use the Supabase ID as leancanvas_id
-              console.log(`Found data in Supabase: project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
-            } else {
-              // Fallback to using ideaId as the project_id
-              supabaseProjectId = ideaId.toString();
-              console.log(`No canvas data found in Supabase. Using fallback project_id=${supabaseProjectId}`);
+              leancanvasId = canvasData.id;
+              console.log(`Found project_id ${supabaseProjectId} in Supabase`);
             }
           } catch (supabaseError) {
-            console.error('Error getting canvas from Supabase:', supabaseError);
-            supabaseProjectId = ideaId.toString();
+            console.error('Error querying Supabase:', supabaseError);
           }
         }
-      } catch (error) {
-        console.error('Error getting Supabase IDs:', error);
-        supabaseProjectId = projectId.toString();
+      } catch (error: any) {
+        console.error('Error resolving project IDs:', error);
       }
 
-      // Make sure we have valid values and not undefined
-      supabaseProjectId = supabaseProjectId || ideaId.toString();
+      // Ensure we have a string
+      if (!supabaseProjectId) {
+        supabaseProjectId = ideaId.toString();
+      }
 
-      console.log(`Sending business requirements request to n8n with project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
+      console.log(`Sending business requirements request to n8n with project_id=${supabaseProjectId}`);
       console.log(`Using webhook URL: ${webhookUrl}`);
       console.log(`With instructions: ${instructions || "No specific instructions"}`);
 
@@ -1021,7 +981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           prdId = prdDocument.externalId;
           console.log(`Found existing PRD document with external ID: ${prdId}`);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error getting PRD document:', error);
       }
 
@@ -1097,7 +1057,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           console.warn(`WARNING: No BRD ID received from n8n webhook response. This may prevent accessing the document in Supabase later.`);
         }
-      } catch (e) {
+      } catch (e: any) {
         console.error(`Error processing N8N response: ${e.message}`);
       }
 
@@ -1106,7 +1066,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Business requirements document generation started",
         document
       });
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -1164,7 +1124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         console.log(`Resolved ideaId: ${ideaId} from projectId: ${projectId}`);
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error resolving idea ID:', error);
         return res.status(400).json({ message: "Failed to resolve idea ID from project ID" });
       }
@@ -1184,7 +1144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           supabaseProjectId = projectId;
           console.log(`No Supabase project ID found in database, defaulting to ${projectId}`);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error getting Supabase project ID:', error);
         supabaseProjectId = projectId; // Default fallback
       }
@@ -1218,24 +1178,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`Created new document ${document.id} for requirements generation`);
       }
 
-      // Get the leancanvas_id from our database
-      let leancanvasId = null;
-      try {
-        const { pool } = await import('./db');
-        const result = await pool.query('SELECT leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
 
-        if (result.rows.length > 0 && result.rows[0].leancanvas_id) {
-          leancanvasId = result.rows[0].leancanvas_id;
-          console.log(`Found leancanvas_id ${leancanvasId} for idea ${ideaId} in local database`);
-        } else {
-          console.log(`No leancanvas_id found for idea ${ideaId} in local database`);
-        }
-      } catch (dbError) {
-        console.warn('Error querying local database for leancanvas_id:', dbError);
-      }
 
       // Call the n8n webhook with the updated payload structure
-      console.log(`Sending webhook with project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
+      console.log(`Sending webhook with project_id=${supabaseProjectId}`);
       const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
@@ -1245,8 +1191,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         body: JSON.stringify({
           // The n8n workflow expects the Supabase UUID format project_id from the Lean Canvas
           project_id: supabaseProjectId,
-          // Include the leancanvas_id as well
-          leancanvas_id: leancanvasId,
           // Send user's instructions from the UI form
           instructions: instructions || "Be brief and concise."
         })
@@ -1275,21 +1219,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // The response should be a prd_id like "29c3941e-6c36-4557-8bc1-ab21a92738d3"
       // This ID will be needed later to match with the completed document
 
-      // Update the document with the external ID
-      await storage.updateDocument(document.id, {
-        externalId: responseData.trim()
-      });
-      console.log(`Updated document ${document.id} with external ID ${responseData.trim()}`);
+      // This ID will be needed later to match with the completed document
+      if (document) {
+        // Update the document with the external ID
+        await storage.updateDocument(document.id, {
+          externalId: responseData.trim()
+        });
+        console.log(`Updated document ${document.id} with external ID ${responseData.trim()}`);
 
-      // Get the updated document to return
-      const updatedDocument = await storage.getDocumentById(document.id);
+        // Get the updated document to return
+        const updatedDocument = await storage.getDocumentById(document.id);
 
-      res.status(200).json({
-        message: "Requirements generation started",
-        document: updatedDocument,
-        data: responseData.trim()
-      });
-    } catch (error) {
+        res.status(200).json({
+          message: "Requirements generation started",
+          document: updatedDocument,
+          data: responseData.trim()
+        });
+      } else {
+        res.status(200).json({
+          message: "Requirements generation started (document creation failed)",
+          data: responseData.trim()
+        });
+      }
+    } catch (error: any) {
       console.error("Error in requirements webhook proxy:", error);
       next(error);
     }
@@ -1390,7 +1342,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Parse the response JSON to extract project_id and leancanvas_id
         let projectId = '';
-        let leancanvasId = '';
 
         try {
           // Parse the JSON response
@@ -1398,9 +1349,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Extract the individual fields
           projectId = responseData.project_id || '';
-          leancanvasId = responseData.leancanvas_id || '';
 
-          console.log(`Extracted from response: project_id=${projectId}, leancanvas_id=${leancanvasId}`);
+          console.log(`Extracted from response: project_id=${projectId}`);
           console.log(`Full response data:`, JSON.stringify(responseData));
         } catch (jsonError) {
           // Fallback to using the entire response as projectId for backward compatibility
@@ -1409,7 +1359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`Using entire response as project_id: ${projectId}`);
         }
 
-        // Store the project_id and leancanvas_id in the database
+        // Store the project_id in the database
         if (projectId) {
           try {
             // Check if lean canvas already exists for this idea
@@ -1418,16 +1368,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (existingCanvas) {
               // Update the existing canvas with the project_id and leancanvas_id
               await storage.updateLeanCanvas(ideaId, {
-                projectId,
-                leancanvasId
+                projectId
               });
-              console.log(`Updated existing canvas with project_id: ${projectId} and leancanvas_id: ${leancanvasId}`);
+              console.log(`Updated existing canvas with project_id: ${projectId}`);
             } else {
-              // Create a new canvas with the project_id and leancanvas_id
+              // Create a new canvas with the project_id
               await storage.createLeanCanvas({
                 ideaId,
                 projectId,
-                leancanvasId,
                 problem: null,
                 customerSegments: null,
                 uniqueValueProposition: null,
@@ -1436,9 +1384,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 revenueStreams: null,
                 costStructure: null,
                 keyMetrics: null,
-                unfairAdvantage: null
+                unfairAdvantage: null,
+                html: null
               });
-              console.log(`Created new canvas with project_id: ${projectId} and leancanvas_id: ${leancanvasId}`);
+              console.log(`Created new canvas with project_id: ${projectId}`);
             }
           } catch (dbError) {
             console.error('Failed to store project_id in database:', dbError);
@@ -1450,12 +1399,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           message: "Canvas generation started",
           projectId: projectId || null
         });
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error triggering webhook:", error);
         await storage.updateIdeaStatus(ideaId, "Draft");
         throw new Error("Failed to start canvas generation");
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -1484,9 +1433,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Received business requirements data from n8n:", JSON.stringify(req.body, null, 2));
 
       // Extract data from the webhook payload
-      const { ideaId, brd_id, content, html, project_id, leancanvas_id, prd_id } = req.body;
+      const { ideaId, brd_id, content, html, project_id, prd_id } = req.body;
 
-      console.log(`Received business requirements with: ideaId=${ideaId}, brd_id=${brd_id}, project_id=${project_id}, leancanvas_id=${leancanvas_id}, prd_id=${prd_id}`);
+      console.log(`Received business requirements with: ideaId=${ideaId}, brd_id=${brd_id}, project_id=${project_id}, prd_id=${prd_id}`);
       console.log(`Content length: ${content ? content.length : 'missing'}, HTML length: ${html ? html.length : 'missing'}`);
 
       if (!ideaId) {
@@ -1576,7 +1525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.status(200).json({ message: "Business requirements document updated successfully" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error processing business requirements webhook:", error);
       next(error);
     }
@@ -1668,7 +1617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.status(200).json({ message: "Requirements document processed successfully" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error processing requirements webhook:", error);
       next(error);
     }
@@ -1734,7 +1683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.status(200).json({ message: "Canvas created successfully" });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error processing webhook:", error);
       next(error);
     }
@@ -1758,7 +1707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log(`[SECURITY] Authorized canvas access: User ${userId} accessing canvas for their idea ${ideaId}`);
       res.json(canvas);
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -1787,7 +1736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const updatedCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
       res.json(updatedCanvas);
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -1848,7 +1797,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`🔬 BRD VIEWER: Sending ${contentLength} characters of HTML content`);
       return res.send(htmlContent);
 
-    } catch (error) {
+    } catch (error: any) {
       console.error('🔬 BRD VIEWER: Unhandled error', error);
       return res.status(500).send(`
         <html>
@@ -1991,7 +1940,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           data
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Debug endpoint error:', error);
       return res.status(500).json({
         success: false,
@@ -2137,7 +2086,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         has_html: hasContent,
         fields: Object.keys(data)
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in debug endpoint:', error);
       res.status(500).json({
         error: 'Error accessing Supabase',
@@ -2255,7 +2204,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       res.json(supabaseResponse);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching functional requirements:', error);
       next(error);
     }
@@ -2364,7 +2313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           error: "Failed to fetch from Supabase"
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`⚠️ CRITICAL ERROR in /api/supabase/business-requirements/:id endpoint:`, error);
       next(error);
     }
@@ -2410,7 +2359,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           data: localCanvas
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2438,7 +2387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           data: localIdeas
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2459,7 +2408,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ success: false, message: "Failed to send test email" });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2476,7 +2425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isVerified,
         email: req.user.email || null
       });
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2486,7 +2435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const fromAddress = await emailService.getFromAddress();
       res.json({ fromAddress });
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2507,7 +2456,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ success: false, message: "Failed to update email configuration" });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2528,7 +2477,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ success: false, message: "Failed to send welcome email" });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2549,7 +2498,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ success: false, message: "Failed to send canvas generation notification email" });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2559,7 +2508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const settings = await storage.getAllSettings();
       res.json(settings);
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2574,7 +2523,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.json({ key, value });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2589,7 +2538,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       await storage.setSetting(key, value);
       res.json({ key, value });
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2627,7 +2576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Verification failed, redirect to error page
         res.redirect('/?verified=false');
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2665,7 +2614,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Verification failed, redirect to error page
         res.redirect('/?verified=false');
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });
@@ -2703,7 +2652,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ success: false, message: "Failed to send verification email" });
       }
-    } catch (error) {
+    } catch (error: any) {
       next(error);
     }
   });

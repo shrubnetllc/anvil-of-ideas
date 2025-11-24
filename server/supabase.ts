@@ -21,31 +21,31 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 export async function fetchProjectRequirements(prdId: string, ideaId: number, requestingUserId?: number) {
   try {
     console.log(`[SECURITY] Fetching project requirements for PRD ID ${prdId} from Supabase`);
-    
+
     // Security check: If requesting user ID is provided, verify ownership
     if (requestingUserId !== undefined) {
       try {
         const { pool } = await import('./db');
         const securityCheck = await pool.query('SELECT user_id FROM ideas WHERE id = $1', [ideaId]);
-        
+
         if (securityCheck.rows.length === 0) {
           console.log(`[SECURITY] Idea ${ideaId} not found in security check`);
           return null;
         }
-        
+
         const ownerId = parseInt(securityCheck.rows[0].user_id);
         if (ownerId !== requestingUserId) {
           console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
           return null;
         }
-        
+
         console.log(`[SECURITY] Authorized: User ${requestingUserId} owns idea ${ideaId}`);
       } catch (securityError) {
         console.error(`[SECURITY] Error during ownership verification:`, securityError);
         return null;
       }
     }
-    
+
     // Query the Supabase PRD table with the provided PRD ID
     try {
       console.log(`Querying Supabase for PRD ID ${prdId}`);
@@ -54,12 +54,12 @@ export async function fetchProjectRequirements(prdId: string, ideaId: number, re
         .select('*')
         .eq('id', prdId)
         .single();
-      
+
       if (error) {
         console.warn(`Error querying Supabase PRD table with id=${prdId}:`, error);
         return null;
       }
-      
+
       if (data) {
         console.log(`Supabase returned data for PRD ID ${prdId}`);
         // Map and return the PRD data with the HTML content
@@ -74,7 +74,7 @@ export async function fetchProjectRequirements(prdId: string, ideaId: number, re
     } catch (supabaseError) {
       console.warn(`Error with Supabase query for PRD ID ${prdId}:`, supabaseError);
     }
-    
+
     console.log(`No data found in Supabase for PRD ID ${prdId}`);
     return null;
   } catch (error) {
@@ -91,111 +91,84 @@ export async function fetchProjectRequirements(prdId: string, ideaId: number, re
 export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: number) {
   try {
     console.log(`[SECURITY] Fetching lean canvas data for idea ${ideaId} from Supabase`);
-    
+
     // Security check: If requesting user ID is provided, verify ownership
     if (requestingUserId !== undefined) {
       try {
         const { pool } = await import('./db');
         const securityCheck = await pool.query('SELECT user_id FROM ideas WHERE id = $1', [ideaId]);
-        
+
         if (securityCheck.rows.length === 0) {
           console.log(`[SECURITY] Idea ${ideaId} not found in security check`);
           return null;
         }
-        
+
         const ownerId = parseInt(securityCheck.rows[0].user_id);
         if (ownerId !== requestingUserId) {
           console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
           return null;
         }
-        
+
         console.log(`[SECURITY] Authorized: User ${requestingUserId} owns idea ${ideaId}`);
       } catch (securityError) {
         console.error(`[SECURITY] Error during ownership verification:`, securityError);
         return null;
       }
     }
-    
-    // Step 1: Get the project_id and leancanvas_id from our local database
+
+    // Step 1: Get the project_id from our local database
     let projectId = null;
-    let leancanvasId = null;
     try {
-      // Use raw SQL query to get both IDs since we're seeing issues with Drizzle ORM imports
+      // Use raw SQL query to reference project_id
       const { pool } = await import('./db');
-      const result = await pool.query('SELECT project_id, leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
-      
+      const result = await pool.query('SELECT project_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+
       if (result.rows.length > 0) {
         projectId = result.rows[0].project_id;
-        leancanvasId = result.rows[0].leancanvas_id;
-        console.log(`Found project_id ${projectId} and leancanvas_id ${leancanvasId} for idea ${ideaId} in local database`);
+        console.log(`Found project_id ${projectId} for idea ${ideaId} in local database`);
       } else {
-        console.log(`No IDs found for idea ${ideaId} in local database`);
+        console.log(`No project_id found for idea ${ideaId} in local database`);
       }
     } catch (dbError) {
       console.warn('Error querying local database for IDs:', dbError);
     }
-    
-    // Step 2: If we have leancanvas_id (preferred) or project_id, use it to query Supabase
-    if (leancanvasId || projectId) {
-      try {
-        let data, error;
-        
-        // Try to query using the leancanvas_id first (preferred method)
-        if (leancanvasId) {
-          console.log(`Querying Supabase with leancanvas_id=${leancanvasId}`);
-          const response = await supabase
-            .from('lean_canvas')
-            .select('*')
-            .eq('id', leancanvasId)
-            .single();
-            
-          data = response.data;
-          error = response.error;
-          
-          if (error) {
-            console.warn(`Error querying Supabase with id (leancanvas_id)=${leancanvasId}:`, error);
-          } else if (data) {
-            console.log(`Supabase returned data for leancanvas_id ${leancanvasId}`);
-            return mapSupabaseData(data, ideaId, projectId);
-          }
-        }
-        
-        // If leancanvas_id query failed or wasn't available, fall back to project_id
-        if ((!data || error) && projectId) {
-          console.log(`Falling back to project_id query with ${projectId}`);
-          // Try to query using the project_id as id
-          const idResponse = await supabase
-            .from('lean_canvas')
-            .select('*')
-            .eq('id', projectId)
-            .single();
-          
-          if (idResponse.error) {
-            console.warn(`Error querying Supabase with id=${projectId}:`, idResponse.error);
-            
-            // Try using 'project_id' column instead
-            const projectResponse = await supabase
-              .from('lean_canvas')
-              .select('*')
-              .eq('project_id', projectId)
-              .single();
-              
-            if (projectResponse.error) {
-              console.warn(`Error querying Supabase with project_id=${projectId}:`, projectResponse.error);
-            } else if (projectResponse.data) {
-              console.log(`Supabase returned data for project_id ${projectId}`);
-              return mapSupabaseData(projectResponse.data, ideaId, projectId);
-            }
-          } else if (idResponse.data) {
-            console.log(`Supabase returned data for id ${projectId}`);
-            return mapSupabaseData(idResponse.data, ideaId, projectId);
-          }
-        }
-      } catch (supabaseError) {
-        console.warn(`Error with Supabase query:`, supabaseError);
+
+    // Step 2: Query Supabase using idea_id (User requested to use idea_id/id)
+    // We try querying using the idea_id against 'project_id' or 'id' columns in Supabase
+    // as the schemas are unified.
+    try {
+      console.log(`Querying Supabase with idea_id=${ideaId}`);
+
+      // Try querying by idea_id first (assuming column exists as requested)
+      const { data: ideaData, error: ideaError } = await supabase
+        .from('lean_canvas')
+        .select('*')
+        .eq('idea_id', ideaId) // Try direct mapping first
+        .single();
+
+      if (!ideaError && ideaData) {
+        console.log(`Supabase returned data for exact idea_id match: ${ideaId}`);
+        return mapSupabaseData(ideaData, ideaId, ideaData.project_id || projectId);
       }
+
+      // Fallback: Query using project_id if we have it locally
+      if (projectId) {
+        console.log(`Querying Supabase with project_id=${projectId}`);
+        const { data: projectData, error: projectError } = await supabase
+          .from('lean_canvas')
+          .select('*')
+          .eq('project_id', projectId)
+          .single();
+
+        if (!projectError && projectData) {
+          console.log(`Supabase returned data for project_id match: ${projectId}`);
+          return mapSupabaseData(projectData, ideaId, projectId);
+        }
+      }
+    } catch (supabaseError) {
+      console.warn('Error querying Supabase:', supabaseError);
     }
-    
+
     // Step 3: Fallback to using the idea_id as a direct lookup
     console.log(`Trying direct lookup with project_id=${ideaId} in Supabase`);
     try {
@@ -204,7 +177,7 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
         .select('*')
         .eq('project_id', ideaId.toString())
         .single();
-      
+
       if (error) {
         console.warn(`Error querying Supabase with project_id=${ideaId}:`, error);
       } else if (data) {
@@ -214,7 +187,7 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
     } catch (finalError) {
       console.warn(`Final Supabase query attempt failed:`, finalError);
     }
-    
+
     // No data found after all attempts
     console.log(`No data found in Supabase for idea ${ideaId} after all attempts`);
     return null;
@@ -239,34 +212,34 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
 export async function fetchFunctionalRequirements(functionalId: string, ideaId: number, requestingUserId?: number) {
   try {
     console.log(`[SUPABASE FUNCTIONAL] START: Fetching Functional Requirements ID ${functionalId} for idea ${ideaId}`);
-    
+
     // Security check: If requesting user ID is provided, verify ownership
     if (requestingUserId !== undefined) {
       try {
         const { pool } = await import('./db');
         const securityCheck = await pool.query('SELECT user_id FROM ideas WHERE id = $1', [ideaId]);
-        
+
         if (securityCheck.rows.length === 0) {
           console.log(`[SECURITY] Idea ${ideaId} not found in security check`);
           return { error: 'Unauthorized access', data: null };
         }
-        
+
         const ownerId = parseInt(securityCheck.rows[0].user_id);
         if (ownerId !== requestingUserId) {
           console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
           return { error: 'Unauthorized access', data: null };
         }
-        
+
         console.log(`[SECURITY] Authorized: User ${requestingUserId} accessing Functional Requirements for idea ${ideaId}`);
       } catch (error) {
         console.error('[SECURITY] Error checking permissions:', error);
         return { error: 'Error verifying permissions', data: null };
       }
     }
-    
+
     // Query Supabase for the functional requirements document
     console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase Functional Requirements table`);
-    
+
     // First try direct query using the ID from the 'frd' table (correct table for functional requirements)
     console.log(`[SUPABASE FUNCTIONAL] Direct query using ID=${functionalId} in frd table`);
     const { data, error } = await supabase
@@ -274,10 +247,10 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
       .select('*')
       .eq('id', functionalId)
       .single();
-    
+
     if (error) {
       console.log(`[SUPABASE FUNCTIONAL] Error with direct ID query in frd table: ${error.message}`);
-      
+
       // Try fallback query using ID as project_id in frd table
       console.log(`[SUPABASE FUNCTIONAL] Trying fallback with project_id=${functionalId} in frd table`);
       const fallbackResponse = await supabase
@@ -285,10 +258,10 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
         .select('*')
         .eq('project_id', functionalId)
         .single();
-      
+
       if (fallbackResponse.error) {
         console.log(`[SUPABASE FUNCTIONAL] Fallback query also failed: ${fallbackResponse.error.message}`);
-        
+
         // Try the original 'functional_requirements' table as last resort
         console.log(`[SUPABASE FUNCTIONAL] Trying original functional_requirements table with ID=${functionalId}`);
         const originalTableResponse = await supabase
@@ -296,89 +269,89 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
           .select('*')
           .eq('id', functionalId)
           .single();
-        
+
         if (originalTableResponse.error) {
           console.log(`[SUPABASE FUNCTIONAL] Original table query also failed: ${originalTableResponse.error.message}`);
           return { error: 'Document not found in Supabase', data: null };
         }
-        
+
         if (originalTableResponse.data) {
           console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record in original table with ID=${functionalId}`);
           console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(originalTableResponse.data).join(', ')}`);
-          
+
           // Check for HTML content
           const originalHtmlContent = originalTableResponse.data.html || originalTableResponse.data.func_html || null;
           if (originalHtmlContent) {
             console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${originalHtmlContent.length} characters`);
           }
-          
-          return { 
+
+          return {
             source: 'supabase',
-            error: null, 
+            error: null,
             data: {
               ...originalTableResponse.data,
               html: originalHtmlContent
-            } 
+            }
           };
         }
-        
+
         return { error: 'Document not found in Supabase', data: null };
       }
-      
+
       if (fallbackResponse.data) {
         console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record in frd table with project_id=${functionalId}`);
         console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(fallbackResponse.data).join(', ')}`);
-        
+
         // Check for HTML content - in frd table, the HTML is in frd_html field
         const htmlContent = fallbackResponse.data.frd_html || fallbackResponse.data.html || null;
         if (htmlContent) {
           console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${htmlContent.length} characters`);
         }
-        
+
         // Return the response with HTML content in the data.html field for consistency
-        return { 
+        return {
           source: 'supabase',
-          error: null, 
+          error: null,
           data: {
             ...fallbackResponse.data,
             html: htmlContent
-          } 
+          }
         };
       }
     }
-    
+
     if (data) {
       console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record directly in frd table with ID=${functionalId}`);
       console.log(`[SUPABASE FUNCTIONAL] Available fields: ${Object.keys(data).join(', ')}`);
-      
+
       // Check for HTML content in various possible fields - in frd table, the HTML is in frd_html field
       const htmlContent = data.frd_html || data.html || data.func_html || null;
       if (htmlContent) {
         console.log(`[SUPABASE FUNCTIONAL] ✓ Found HTML content with ${htmlContent.length} characters`);
       }
-      
+
       // Return the response with HTML content in the data.html field for consistency
-      return { 
+      return {
         source: 'supabase',
-        error: null, 
+        error: null,
         data: {
           ...data,
           html: htmlContent
-        } 
+        }
       };
     }
-    
-    return { 
+
+    return {
       source: 'supabase',
-      error: 'Document not found in Supabase', 
-      data: null 
+      error: 'Document not found in Supabase',
+      data: null
     };
   } catch (error) {
     console.error(`[SUPABASE FUNCTIONAL] Unexpected error:`, error);
-    return { 
+    return {
       source: 'supabase',
-      error: 'Error fetching functional requirements data', 
-      data: null 
+      error: 'Error fetching functional requirements data',
+      data: null
     };
   }
 }
@@ -386,35 +359,35 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
 export async function fetchBusinessRequirements(brdId: string, ideaId: number, requestingUserId?: number) {
   try {
     console.log(`[SUPABASE BRD] START: Fetching BRD ID ${brdId} for idea ${ideaId}`);
-    
+
     // Security check: Verify the requesting user owns the idea
     if (requestingUserId !== undefined) {
       try {
         const { pool } = await import('./db');
         const securityCheck = await pool.query('SELECT user_id FROM ideas WHERE id = $1', [ideaId]);
-        
+
         if (securityCheck.rows.length === 0) {
           console.log(`[SECURITY] Idea ${ideaId} not found in security check`);
           return null;
         }
-        
+
         const ownerId = parseInt(securityCheck.rows[0].user_id);
         if (ownerId !== requestingUserId) {
           console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
           return null;
         }
-        
+
         console.log(`[SECURITY] Authorized: User ${requestingUserId} accessing BRD for idea ${ideaId}`);
       } catch (securityError) {
         console.error(`[SECURITY] Error during ownership verification:`, securityError);
         return null;
       }
     }
-    
+
     // Check if brdId is valid
     if (!brdId || brdId === 'null' || brdId === 'undefined') {
       console.warn(`[SUPABASE BRD] Invalid BRD ID provided: ${brdId}`);
-      
+
       // Try to fetch the BRD ID from the document in our database
       try {
         const { pool } = await import('./db');
@@ -422,7 +395,7 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
           'SELECT external_id FROM project_documents WHERE idea_id = $1 AND document_type = $2',
           [ideaId, 'BusinessRequirements']
         );
-        
+
         if (docQuery.rows.length > 0 && docQuery.rows[0].external_id) {
           const storedBrdId = docQuery.rows[0].external_id;
           console.log(`[SUPABASE BRD] Found stored BRD ID in database: ${storedBrdId}`);
@@ -436,9 +409,9 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
         return null;
       }
     }
-    
+
     console.log(`[SUPABASE BRD] Using ID=${brdId} to query Supabase BRD table`);
-    
+
     // We'll make a direct attempt first for the BRD document
     try {
       console.log(`[SUPABASE BRD] Direct query using ID=${brdId}`);
@@ -447,18 +420,18 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
         .select('*')
         .eq('id', brdId)
         .single();
-      
+
       // If we get a direct match by ID, use it immediately
       if (!error && data) {
         console.log(`[SUPABASE BRD] ✓ Success! Found record directly with ID=${brdId}`);
         console.log(`[SUPABASE BRD] Available fields: ${Object.keys(data).join(', ')}`);
-        
+
         // Find HTML content in the response, prioritizing brd_html field
         const htmlContent = data.brd_html || data.html || null;
-        
+
         if (htmlContent) {
           console.log(`[SUPABASE BRD] ✓ Found HTML content with ${htmlContent.length} characters`);
-          
+
           // Make sure to copy the HTML content to the html field
           return {
             source: 'supabase',
@@ -471,17 +444,17 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
           };
         } else {
           console.log(`[SUPABASE BRD] ⚠️ No direct HTML content found, checking all string fields...`);
-          
+
           // Search all fields for HTML content
           for (const [key, value] of Object.entries(data)) {
-            if (typeof value === 'string' && 
-                (value.includes('<html') || 
-                 value.includes('<!DOCTYPE') || 
-                 value.includes('<div') || 
-                 value.includes('<p>'))) {
-              
+            if (typeof value === 'string' &&
+              (value.includes('<html') ||
+                value.includes('<!DOCTYPE') ||
+                value.includes('<div') ||
+                value.includes('<p>'))) {
+
               console.log(`[SUPABASE BRD] ✓ Found HTML content in field '${key}' (${value.length} chars)`);
-              
+
               return {
                 source: 'supabase',
                 data: {
@@ -493,7 +466,7 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
               };
             }
           }
-          
+
           // No HTML found but we have the data
           console.log(`[SUPABASE BRD] ⚠️ Found record but no HTML content in any field`);
           return {
@@ -511,18 +484,18 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
     } catch (directError) {
       console.error(`[SUPABASE BRD] Exception during direct lookup:`, directError);
     }
-    
+
     // If direct lookup failed, try alternative approaches
     console.log(`[SUPABASE BRD] Trying alternative lookup strategies...`);
-    
+
     // Try queries with different field matches
     const fieldMatches = [
       { field: 'reference_id', name: 'reference_id' },
       { field: 'uuid', name: 'uuid' },
       { field: 'prd_id', name: 'prd_id' },
-      { field: 'leancanvas_id', name: 'leancanvas_id' }
+      { field: 'prd_id', name: 'prd_id' }
     ];
-    
+
     for (const match of fieldMatches) {
       try {
         console.log(`[SUPABASE BRD] Trying ${match.name}=${brdId}`);
@@ -531,14 +504,14 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
           .select('*')
           .eq(match.field, brdId)
           .single();
-        
+
         if (!error && data) {
           console.log(`[SUPABASE BRD] ✓ Success! Found record with ${match.name}=${brdId}`);
           console.log(`[SUPABASE BRD] Available fields: ${Object.keys(data).join(', ')}`);
-          
+
           // Find HTML content in the response
           const htmlContent = data.brd_html || data.html || null;
-          
+
           if (htmlContent) {
             console.log(`[SUPABASE BRD] ✓ Found HTML content with ${htmlContent.length} characters`);
             return {
@@ -550,17 +523,17 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
               }
             };
           }
-          
+
           // Search all fields for HTML content
           for (const [key, value] of Object.entries(data)) {
-            if (typeof value === 'string' && 
-                (value.includes('<html') || 
-                 value.includes('<!DOCTYPE') || 
-                 value.includes('<div') || 
-                 value.includes('<p>'))) {
-              
+            if (typeof value === 'string' &&
+              (value.includes('<html') ||
+                value.includes('<!DOCTYPE') ||
+                value.includes('<div') ||
+                value.includes('<p>'))) {
+
               console.log(`[SUPABASE BRD] ✓ Found HTML content in field '${key}' (${value.length} chars)`);
-              
+
               return {
                 source: 'supabase',
                 data: {
@@ -571,7 +544,7 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
               };
             }
           }
-          
+
           // Found data but no HTML
           console.log(`[SUPABASE BRD] ⚠️ Found record with ${match.name} but no HTML content`);
           return {
@@ -587,25 +560,24 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
         console.log(`[SUPABASE BRD] Error with ${match.name} lookup:`, matchError);
       }
     }
-    
+
     // Try a broader search as last resort - any BRD that might match our project
     try {
       console.log(`[SUPABASE BRD] Last resort: Trying to find any matching BRD for idea ${ideaId}`);
-      
+
       // First get project_id and leancanvas_id from our database
       const { pool } = await import('./db');
       const projectQuery = await pool.query(
-        'SELECT project_id, leancanvas_id FROM lean_canvas WHERE idea_id = $1',
+        'SELECT project_id FROM lean_canvas WHERE idea_id = $1',
         [ideaId]
       );
-      
+
       if (projectQuery.rows.length > 0) {
         const projectId = projectQuery.rows[0].project_id;
-        const leancanvasId = projectQuery.rows[0].leancanvas_id;
-        
-        if (projectId || leancanvasId) {
-          console.log(`[SUPABASE BRD] Found project_id=${projectId}, leancanvas_id=${leancanvasId}`);
-          
+
+        if (projectId) {
+          console.log(`[SUPABASE BRD] Found project_id=${projectId}`);
+
           // Try to find BRD by project_id
           if (projectId) {
             const { data, error } = await supabase
@@ -613,10 +585,10 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
               .select('*')
               .eq('project_id', projectId)
               .single();
-            
+
             if (!error && data) {
               console.log(`[SUPABASE BRD] ✓ Success! Found BRD by project_id=${projectId}`);
-              
+
               const htmlContent = data.brd_html || data.html || null;
               if (htmlContent) {
                 console.log(`[SUPABASE BRD] ✓ Found HTML content with ${htmlContent.length} characters`);
@@ -628,7 +600,7 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
                   }
                 };
               }
-              
+
               // Return data even without HTML
               return {
                 source: 'supabase',
@@ -639,46 +611,14 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
               };
             }
           }
-          
-          // Try to find BRD by leancanvas_id
-          if (leancanvasId) {
-            const { data, error } = await supabase
-              .from('brd')
-              .select('*')
-              .eq('leancanvas_id', leancanvasId)
-              .single();
-            
-            if (!error && data) {
-              console.log(`[SUPABASE BRD] ✓ Success! Found BRD by leancanvas_id=${leancanvasId}`);
-              
-              const htmlContent = data.brd_html || data.html || null;
-              if (htmlContent) {
-                console.log(`[SUPABASE BRD] ✓ Found HTML content with ${htmlContent.length} characters`);
-                return {
-                  source: 'supabase',
-                  data: {
-                    ...data,
-                    html: htmlContent
-                  }
-                };
-              }
-              
-              // Return data even without HTML
-              return {
-                source: 'supabase',
-                data: {
-                  ...data,
-                  html: ''
-                }
-              };
-            }
-          }
+
+
         }
       }
     } catch (broadError) {
       console.error(`[SUPABASE BRD] Error in broad search:`, broadError);
     }
-    
+
     // If we got here, we didn't find any BRD data
     console.warn(`[SUPABASE BRD] ❌ No BRD data found in Supabase with any method`);
     return null;
@@ -724,9 +664,9 @@ export async function fetchUserIdeas(userId: number, requestingUserId?: number) 
       console.error(`Security violation: User ${requestingUserId} attempted to access ideas of user ${userId}`);
       throw new Error('Forbidden: You can only access your own ideas');
     }
-    
+
     console.log(`Authorized: Fetching ideas for user ${userId} from Supabase`);
-    
+
     // First check if the 'projects' table exists (more likely table name in Supabase)
     let response;
     try {
@@ -744,18 +684,18 @@ export async function fetchUserIdeas(userId: number, requestingUserId?: number) 
         .eq('user_id', userId.toString())
         .order('created_at', { ascending: false });
     }
-    
+
     const { data, error } = response;
-    
+
     if (error) {
       throw error;
     }
-    
+
     if (!data || data.length === 0) {
       console.log(`No ideas/projects found for user ${userId} in Supabase`);
       return [];
     }
-    
+
     // Map the data to match our app's structure
     const mappedData = data.map(item => ({
       id: parseInt(item.id),
@@ -771,7 +711,7 @@ export async function fetchUserIdeas(userId: number, requestingUserId?: number) 
       createdAt: item.created_at,
       updatedAt: item.updated_at || item.created_at
     }));
-    
+
     console.log(`Supabase returned ${mappedData.length} ideas/projects`);
     return mappedData;
   } catch (error) {
