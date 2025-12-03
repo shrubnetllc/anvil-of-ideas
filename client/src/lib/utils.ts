@@ -16,12 +16,12 @@ export function formatDate(date: string | Date) {
  */
 export function jsonToCSV(data: Record<string, any>): string {
   if (!data) return '';
-  
+
   // Extract keys from the object, filtering out html and markdown which are too large for CSV
-  const keys = Object.keys(data).filter(key => 
+  const keys = Object.keys(data).filter(key =>
     key !== 'html' && key !== 'markdown' && key !== 'llmOutput' && key !== 'llmInput'
   );
-  
+
   // Create CSV header row
   const header = keys.map(key => {
     // Convert camelCase to Title Case with spaces
@@ -30,11 +30,11 @@ export function jsonToCSV(data: Record<string, any>): string {
       .replace(/^./, str => str.toUpperCase())
       .trim();
   }).join(',');
-  
+
   // Create CSV data row
   const dataRow = keys.map(key => {
     let value = data[key];
-    
+
     // Handle different data types
     if (value === null || value === undefined) {
       return '';
@@ -45,7 +45,7 @@ export function jsonToCSV(data: Record<string, any>): string {
       return `"${String(value).replace(/"/g, '""')}"`;
     }
   }).join(',');
-  
+
   return `${header}\n${dataRow}`;
 }
 
@@ -56,11 +56,11 @@ export function downloadCSV(csvContent: string, filename: string): void {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  
+
   link.setAttribute('href', url);
   link.setAttribute('download', filename);
   link.style.visibility = 'hidden';
-  
+
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
@@ -88,14 +88,14 @@ export async function copyHtmlToClipboard(elementId: string): Promise<boolean> {
       try {
         const blob = new Blob([htmlContent], { type: 'text/html' });
         const textBlob = new Blob([textContent], { type: 'text/plain' });
-        
+
         const data = [
           new ClipboardItem({
             'text/html': blob,
             'text/plain': textBlob
           })
         ];
-        
+
         await navigator.clipboard.write(data);
         return true;
       } catch (e) {

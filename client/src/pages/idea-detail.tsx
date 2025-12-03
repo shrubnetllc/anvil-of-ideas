@@ -14,6 +14,7 @@ import { BusinessRequirementsTab } from "@/components/idea-detail-tabs/business-
 import { FunctionalRequirementsTab } from "@/components/idea-detail-tabs/functional-requirements-tab";
 import { LeanCanvasTab } from "@/components/idea-detail-tabs/lean-canvas-tab";
 import { DocumentsOverviewTab } from "@/components/idea-detail-tabs/documents-overview-tab";
+import { IdeaDocumentTab } from "@/components/idea-detail-tabs/idea-document-tab";
 import { IdeaDetailsTab } from "@/components/idea-detail-tabs/idea-details-tab";
 
 export default function IdeaDetail() {
@@ -207,22 +208,27 @@ export default function IdeaDetail() {
 
                     {/* Lean Canvas */}
                     <TabsContent value="canvas" className="mt-6">
-                      <LeanCanvasTab ideaId={ideaId} />
+                      <IdeaDocumentTab ideaId={ideaId} documentType='LeanCanvas' />
                     </TabsContent>
-
                     {/* Project Requirements */}
-                    <TabsContent value="requirements" className="mt-6">
-                      <ProjectRequirementsTab ideaId={ideaId} />
+                    <TabsContent value='requirements'>
+                      <IdeaDocumentTab ideaId={ideaId} documentType='ProjectRequirements' />
                     </TabsContent>
 
                     {/* Business Requirements */}
-                    <TabsContent value="business" className="mt-6">
+                    {/* <TabsContent value="business" className="mt-6">
                       <BusinessRequirementsTab ideaId={ideaId} />
+                    </TabsContent> */}
+                    <TabsContent value='business'>
+                      <IdeaDocumentTab ideaId={ideaId} documentType='BusinessRequirements' />
                     </TabsContent>
 
                     {/* Functional Requirements */}
-                    <TabsContent value="functional" className="mt-6">
+                    {/* <TabsContent value="functional" className="mt-6">
                       <FunctionalRequirementsTab ideaId={ideaId} />
+                    </TabsContent> */}
+                    <TabsContent value='functional'>
+                      <IdeaDocumentTab ideaId={ideaId} documentType='FunctionalRequirements' />
                     </TabsContent>
 
                     {/* Idea Details */}

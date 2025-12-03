@@ -32,10 +32,11 @@ export interface IStorage {
   checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number>;
   deleteIdea(id: number): Promise<void>;
 
-  // Lean Canvas
+  // Lean Canvas operations
   getLeanCanvasByIdeaId(ideaId: number, requestingUserId?: number): Promise<LeanCanvas | undefined>;
   createLeanCanvas(canvas: InsertLeanCanvas): Promise<LeanCanvas>;
   updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void>;
+  deleteLeanCanvas(ideaId: number): Promise<void>;
 
   // Project Document operations
   getDocumentsByIdeaId(ideaId: number): Promise<ProjectDocument[]>;
@@ -289,7 +290,7 @@ export class DatabaseStorage implements IStorage {
   async checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number> {
     // Calculate the cutoff time based on timeoutMinutes
     const cutoffTime = new Date();
-    cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
+    cutoffTime.setMinutes(timeoutMinutes);
 
     // Find all ideas that are in Generating status
     const generatingIdeas = await db.select()
@@ -509,6 +510,10 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async deleteLeanCanvas(ideaId: number): Promise<void> {
+    await db.delete(leanCanvas)
+      .where(eq(leanCanvas.ideaId, ideaId));
+  }
   // App Settings operations
   async getSetting(key: string): Promise<string | null> {
     const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
@@ -718,7 +723,7 @@ export class MemStorage implements IStorage {
   async checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number> {
     // Calculate the cutoff time based on timeoutMinutes
     const cutoffTime = new Date();
-    cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
+    cutoffTime.setMinutes(timeoutMinutes);
 
     let updateCount = 0;
 
@@ -768,6 +773,7 @@ export class MemStorage implements IStorage {
       id,
       ideaId: canvas.ideaId,
       projectId: canvas.projectId || null,
+      leancanvasId: canvas.leancanvasId || null,
       problem: canvas.problem || null,
       customerSegments: canvas.customerSegments || null,
       uniqueValueProposition: canvas.uniqueValueProposition || null,
@@ -875,6 +881,12 @@ export class MemStorage implements IStorage {
     }
   }
 
+  async deleteLeanCanvas(ideaId: number): Promise<void> {
+    const canvas = await this.getLeanCanvasByIdeaId(ideaId);
+    if (canvas) {
+      this.canvases.delete(canvas.id);
+    }
+  }
   // App Settings operations
   private settings: Map<string, string> = new Map();
 
@@ -957,14 +969,14 @@ export class MemStorage implements IStorage {
       ideaId: document.ideaId,
       documentType: document.documentType,
       title: document.title,
+      status: (document.status as ProjectStatus) || "Draft",
       content: document.content || null,
       html: document.html || null,
-      status: (document.status as "Draft" | "Generating" | "Completed") || "Draft",
-      generationStartedAt: document.generationStartedAt || null,
       externalId: document.externalId || null,
+      generationStartedAt: document.generationStartedAt ? new Date(document.generationStartedAt) : null,
       version: 1,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     this.documents.set(id, newDocument);
@@ -973,17 +985,15 @@ export class MemStorage implements IStorage {
 
   async updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void> {
     const document = this.documents.get(id);
-    if (!document) {
-      throw new Error(`Document with ID ${id} not found`);
+    if (document) {
+      const updatedDocument: ProjectDocument = {
+        ...document,
+        ...updates,
+        status: (updates.status as ProjectStatus) || document.status,
+        updatedAt: new Date()
+      };
+      this.documents.set(id, updatedDocument);
     }
-
-    const updatedDocument = {
-      ...document,
-      ...updates,
-      updatedAt: new Date()
-    } as ProjectDocument;
-
-    this.documents.set(id, updatedDocument);
   }
 
   async deleteDocument(id: number): Promise<void> {

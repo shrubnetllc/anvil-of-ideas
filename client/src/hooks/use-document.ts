@@ -130,6 +130,12 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
 
             // Determine endpoint and body based on document type
             switch (documentType) {
+                case "LeanCanvas":
+                    url = `/api/ideas/${ideaId}/generate`;
+                    body = {
+                        notes: instructions
+                    };
+                    break;
                 case "ProjectRequirements":
                     url = `/api/webhook/requirements`;
                     body = {
@@ -186,6 +192,26 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
     };
 
     const deleteDoc = async () => {
+        // For LeanCanvas, we don't need a document ID, we delete by type
+        if (documentType === 'LeanCanvas') {
+            try {
+                const response = await fetch(`/api/ideas/${ideaId}/documents/type/LeanCanvas`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    setDocument(null);
+                    setIsGenerating(false);
+                    setIsTimedOut(false);
+                    return true;
+                }
+                return false;
+            } catch (error) {
+                console.error(`Error deleting ${documentType}:`, error);
+                return false;
+            }
+        }
+
         if (!document?.id) return false;
 
         try {
