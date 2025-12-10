@@ -44,11 +44,11 @@ app.use((req, res, next) => {
   function sendError(err: any, req: Request, res: Response, next: NextFunction) {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
-    
+
     console.error('Error caught by server:', err);
     res.status(status).json({ message });
   }
-  
+
   // Global error handler
   app.use(sendError);
 
@@ -68,14 +68,13 @@ app.use((req, res, next) => {
   server.listen({
     port,
     host: "0.0.0.0",
-    reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
-    
+
     // Set up periodic check for timed-out generation tasks
     const TIMEOUT_CHECK_INTERVAL = 30000; // Check every 30 seconds
     const GENERATION_TIMEOUT_MINUTES = 2; // Set timeout to 2 minutes
-    
+
     // Periodic check for timed out generation tasks
     setInterval(async () => {
       try {
@@ -87,7 +86,7 @@ app.use((req, res, next) => {
         console.error("Error checking for timed-out generation tasks:", error);
       }
     }, TIMEOUT_CHECK_INTERVAL);
-    
-    log(`Initialized periodic check for timed-out generation tasks (every ${TIMEOUT_CHECK_INTERVAL/1000}s with ${GENERATION_TIMEOUT_MINUTES}min timeout)`);
+
+    log(`Initialized periodic check for timed-out generation tasks (every ${TIMEOUT_CHECK_INTERVAL / 1000}s with ${GENERATION_TIMEOUT_MINUTES}min timeout)`);
   });
 })();
