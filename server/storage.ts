@@ -1,6 +1,6 @@
-import { 
+import {
   users, ideas, leanCanvas, appSettings, projectDocuments,
-  type User, type InsertUser, 
+  type User, type InsertUser,
   type Idea, type InsertIdea,
   type LeanCanvas, type InsertLeanCanvas, type UpdateLeanCanvas,
   ProjectStatus, DocumentType,
@@ -21,7 +21,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  
+
   // Idea operations
   getIdeasByUser(userId: number): Promise<Idea[]>;
   getIdeaById(id: number, requestingUserId?: number): Promise<Idea | undefined>;
@@ -31,12 +31,12 @@ export interface IStorage {
   startIdeaGeneration(id: number): Promise<void>;
   checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number>;
   deleteIdea(id: number): Promise<void>;
-  
+
   // Lean Canvas operations
   getLeanCanvasByIdeaId(ideaId: number, requestingUserId?: number): Promise<LeanCanvas | undefined>;
   createLeanCanvas(canvas: InsertLeanCanvas): Promise<LeanCanvas>;
   updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void>;
-  
+
   // Project Document operations
   getDocumentsByIdeaId(ideaId: number): Promise<ProjectDocument[]>;
   getDocumentById(id: number): Promise<ProjectDocument | undefined>;
@@ -44,24 +44,24 @@ export interface IStorage {
   createDocument(document: InsertProjectDocument): Promise<ProjectDocument>;
   updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void>;
   deleteDocument(id: number): Promise<void>;
-  
+
   // App Settings operations
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
   getAllSettings(): Promise<Record<string, string>>;
-  
+
   // Email verification
   setVerificationToken(userId: number, token: string, expiryDate: Date): Promise<void>;
   verifyEmail(userId: number, token: string): Promise<boolean>;
   isEmailVerified(userId: number): Promise<boolean>;
-  
+
   // Session store
   sessionStore: any; // Using 'any' type for sessionStore to avoid type errors
 }
 
 export class DatabaseStorage implements IStorage {
   public sessionStore: any;
-  
+
   // Project Document operations
   async getDocumentsByIdeaId(ideaId: number): Promise<ProjectDocument[]> {
     try {
@@ -75,7 +75,7 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
   }
-  
+
   async getDocumentById(id: number): Promise<ProjectDocument | undefined> {
     try {
       const [document] = await db
@@ -88,7 +88,7 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
   }
-  
+
   async getDocumentByType(ideaId: number, documentType: DocumentType): Promise<ProjectDocument | undefined> {
     try {
       const [document] = await db
@@ -104,7 +104,7 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
   }
-  
+
   async createDocument(document: InsertProjectDocument): Promise<ProjectDocument> {
     try {
       const [createdDocument] = await db
@@ -121,7 +121,7 @@ export class DatabaseStorage implements IStorage {
       throw error;
     }
   }
-  
+
   async updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void> {
     try {
       await db
@@ -136,7 +136,7 @@ export class DatabaseStorage implements IStorage {
       throw error;
     }
   }
-  
+
   async deleteDocument(id: number): Promise<void> {
     try {
       await db
@@ -172,7 +172,7 @@ export class DatabaseStorage implements IStorage {
       ...insertUser,
       emailVerified: "false"
     };
-    
+
     const [user] = await db.insert(users).values(userData).returning();
     return user;
   }
@@ -180,22 +180,24 @@ export class DatabaseStorage implements IStorage {
   // Idea operations
   async getIdeasByUser(userId: number): Promise<Idea[]> {
     console.log(`[SECURITY] Getting ideas for user ${userId} with strict filtering`);
-    
+
     try {
       // Apply stronger filtering by explicitly checking the user ID matches
       const userIdeas = await db.select()
         .from(ideas)
         .where(eq(ideas.userId, userId));
-      
+
       // Additional security check: filter the results again to ensure only the user's ideas are returned
       const filteredIdeas = userIdeas.filter(idea => {
-        const isOwner = idea.userId === userId;
+        // Use abstract equality (==) for ID comparison to handle potential string/number mismatches
+        // or explicitly convert to Number before comparing
+        const isOwner = Number(idea.userId) === Number(userId);
         if (!isOwner) {
           console.log(`[CRITICAL SECURITY VIOLATION] Idea ${idea.id} was retrieved but belongs to user ${idea.userId}, not requesting user ${userId}`);
         }
         return isOwner;
       });
-      
+
       console.log(`[SECURITY] Found ${filteredIdeas.length} ideas belonging to user ${userId}`);
       return filteredIdeas;
     } catch (error) {
@@ -208,30 +210,31 @@ export class DatabaseStorage implements IStorage {
   async getIdeaById(id: number, requestingUserId?: number): Promise<Idea | undefined> {
     try {
       console.log(`[SECURITY] Retrieving idea ${id}${requestingUserId ? ` for user ${requestingUserId}` : ''}`);
-      
+
       // First get the idea from the database
       const [idea] = await db.select().from(ideas).where(eq(ideas.id, id));
-      
+
       if (!idea) {
         console.log(`[SECURITY] Idea with ID ${id} not found`);
         return undefined;
       }
-      
+
       // Enhanced security check: if requesting user ID provided, verify ownership
       if (requestingUserId !== undefined) {
-        if (idea.userId !== requestingUserId) {
+        // Ensure both IDs are compared as numbers to avoid string/number mismatch
+        if (Number(idea.userId) !== Number(requestingUserId)) {
           console.log(`[SECURITY] Access violation: User ${requestingUserId} attempted to access idea ${id} owned by user ${idea.userId}`);
           // For additional security, log the stack trace to help identify where unauthorized access attempts originate
-          console.log(`[SECURITY] Access violation stack trace:`, new Error().stack);
+          console.log(`[SECURITY] Access violation stack trace requestUserId type: ${typeof requestingUserId}, idea.userId type: ${typeof idea.userId}`);
           return undefined; // Return undefined for security, simulating "not found"
         }
-        
+
         console.log(`[SECURITY] Authorized: User ${requestingUserId} owns idea ${id}`);
       } else {
         // Warning: This idea is being accessed without a user context, which is a potential security risk
         console.log(`[SECURITY WARNING] Idea ${id} being accessed without user context. This should only happen in admin functions.`);
       }
-      
+
       return idea;
     } catch (error) {
       console.error(`[SECURITY ERROR] Error retrieving idea ${id}:`, error);
@@ -250,7 +253,7 @@ export class DatabaseStorage implements IStorage {
   async updateIdea(id: number, updates: Partial<Idea>): Promise<void> {
     // Remove non-updatable fields
     const { id: _, userId: __, status: ___, createdAt: ____, updatedAt: _____, generationStartedAt: ______, ...validUpdates } = updates;
-    
+
     // Add updated timestamp
     await db.update(ideas)
       .set({
@@ -259,7 +262,7 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(ideas.id, id));
   }
-  
+
   async updateIdeaStatus(id: number, status: ProjectStatus): Promise<void> {
     await db.update(ideas)
       .set({
@@ -268,7 +271,7 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(ideas.id, id));
   }
-  
+
   async startIdeaGeneration(id: number): Promise<void> {
     const now = new Date();
     await db.update(ideas)
@@ -280,32 +283,32 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ideas.id, id));
     console.log(`Started generation for idea ${id} at ${now.toISOString()}`);
   }
-  
+
   async checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number> {
     // Calculate the cutoff time based on timeoutMinutes
     const cutoffTime = new Date();
     cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
-    
+
     // Find all ideas that are in Generating status
     const generatingIdeas = await db.select()
       .from(ideas)
       .where(eq(ideas.status, "Generating"));
-    
+
     // Filter out the ones that should be updated
     const timedOutIdeas = generatingIdeas.filter(idea => {
       // Case 1: Has generationStartedAt timestamp and it's older than cutoff
       if (idea.generationStartedAt && idea.generationStartedAt < cutoffTime) {
         return true;
       }
-      
+
       // Case 2: No generationStartedAt timestamp but updatedAt is older than cutoff
       if (!idea.generationStartedAt && idea.updatedAt < cutoffTime) {
         return true;
       }
-      
+
       return false;
     });
-    
+
     // Update all timed out ideas to "Completed" status
     let updateCount = 0;
     if (timedOutIdeas.length > 0) {
@@ -321,32 +324,32 @@ export class DatabaseStorage implements IStorage {
         console.log(`Auto-updated timed out idea ${idea.id} from "Generating" to "Completed" after ${timeoutMinutes} minutes`);
       }
     }
-    
+
     return updateCount;
   }
 
   async deleteIdea(id: number): Promise<void> {
     try {
       console.log(`Deleting idea ${id} and related data...`);
-      
+
       // Delete related documents using Drizzle delete operation
       const deletedDocuments = await db.delete(projectDocuments)
         .where(eq(projectDocuments.ideaId, id))
         .returning();
       console.log(`Deleted ${deletedDocuments.length} project documents for idea ${id}`);
-      
+
       // Delete related lean canvas using Drizzle
       const deletedCanvas = await db.delete(leanCanvas)
         .where(eq(leanCanvas.ideaId, id))
         .returning();
       console.log(`Deleted ${deletedCanvas.length} lean canvas records for idea ${id}`);
-      
+
       // Finally delete the idea itself
       const deletedIdeas = await db.delete(ideas)
         .where(eq(ideas.id, id))
         .returning();
       console.log(`Deleted ${deletedIdeas.length} idea records with id ${id}`);
-      
+
       if (deletedIdeas.length === 0) {
         throw new Error(`No idea found with id ${id} to delete`);
       }
@@ -365,24 +368,25 @@ export class DatabaseStorage implements IStorage {
         const [idea] = await db.select({ userId: ideas.userId })
           .from(ideas)
           .where(eq(ideas.id, ideaId));
-        
+
         if (!idea) {
           console.log(`[SECURITY] Canvas access denied: Idea ${ideaId} not found`);
           return undefined;
         }
-        
-        if (idea.userId !== requestingUserId) {
+
+        // Ensure both IDs are compared as numbers to avoid string/number mismatch
+        if (Number(idea.userId) !== Number(requestingUserId)) {
           console.log(`[SECURITY] Canvas access denied: User ${requestingUserId} attempted to access canvas for idea ${ideaId} owned by user ${idea.userId}`);
           return undefined; // Return undefined for security, simulating "not found"
         }
-        
+
         console.log(`[SECURITY] Canvas access authorized: User ${requestingUserId} owns idea ${ideaId}`);
       } catch (securityError) {
         console.error(`[SECURITY] Error during canvas ownership check:`, securityError);
         return undefined; // Return undefined on any error for security
       }
     }
-    
+
     // Proceed with retrieving the canvas
     const [canvas] = await db.select().from(leanCanvas).where(eq(leanCanvas.ideaId, ideaId));
     return canvas;
@@ -397,7 +401,7 @@ export class DatabaseStorage implements IStorage {
 
   async updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void> {
     console.log(`Updating lean canvas for idea ${ideaId} with:`, JSON.stringify(updates));
-    
+
     // Update the canvas
     const updateResult = await db.update(leanCanvas)
       .set({
@@ -406,25 +410,25 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(leanCanvas.ideaId, ideaId))
       .returning({ updated: leanCanvas.leancanvasId });
-    
+
     console.log(`Update result:`, JSON.stringify(updateResult));
-    
+
     // Update the related idea's updatedAt timestamp
     await db.update(ideas)
       .set({ updatedAt: new Date() })
       .where(eq(ideas.id, ideaId));
   }
-  
+
   // App Settings operations
   async getSetting(key: string): Promise<string | null> {
     const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
     return setting?.value ?? null;
   }
-  
+
   async setSetting(key: string, value: string): Promise<void> {
     // Try to get the setting first
     const existing = await this.getSetting(key);
-    
+
     if (existing === null) {
       // Create a new setting
       await db.insert(appSettings).values({
@@ -441,20 +445,20 @@ export class DatabaseStorage implements IStorage {
         .where(eq(appSettings.key, key));
     }
   }
-  
+
   async getAllSettings(): Promise<Record<string, string>> {
     const settings = await db.select().from(appSettings);
     const result: Record<string, string> = {};
-    
+
     for (const setting of settings) {
       if (setting.value !== null) {
         result[setting.key] = setting.value;
       }
     }
-    
+
     return result;
   }
-  
+
   // Email verification methods
   async setVerificationToken(userId: number, token: string, expiryDate: Date): Promise<void> {
     await db.update(users)
@@ -464,22 +468,22 @@ export class DatabaseStorage implements IStorage {
       })
       .where(eq(users.id, userId));
   }
-  
+
   async verifyEmail(userId: number, token: string): Promise<boolean> {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
-    
+
     if (!user) {
       return false;
     }
-    
+
     if (user.verificationToken !== token) {
       return false;
     }
-    
+
     if (!user.verificationTokenExpiry || new Date() > new Date(user.verificationTokenExpiry)) {
       return false; // Token expired
     }
-    
+
     // Mark email as verified and clear token
     await db.update(users)
       .set({
@@ -488,10 +492,10 @@ export class DatabaseStorage implements IStorage {
         verificationTokenExpiry: null
       })
       .where(eq(users.id, userId));
-    
+
     return true;
   }
-  
+
   async isEmailVerified(userId: number): Promise<boolean> {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     return user?.emailVerified === "true";
@@ -536,8 +540,8 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.nextUserId++;
-    const user: User = { 
-      ...insertUser, 
+    const user: User = {
+      ...insertUser,
       id,
       // Ensure email is either the provided value or null (not undefined)
       email: insertUser.email || null,
@@ -588,18 +592,18 @@ export class MemStorage implements IStorage {
     if (idea) {
       // Remove non-updatable fields
       const { id: _, userId: __, status: ___, createdAt: ____, updatedAt: _____, generationStartedAt: ______, ...validUpdates } = updates;
-      
+
       // Update the idea with valid fields
       const updatedIdea = {
         ...idea,
         ...validUpdates,
         updatedAt: new Date()
       };
-      
+
       this.ideas.set(id, updatedIdea);
     }
   }
-  
+
   async updateIdeaStatus(id: number, status: ProjectStatus): Promise<void> {
     const idea = this.ideas.get(id);
     if (idea) {
@@ -608,7 +612,7 @@ export class MemStorage implements IStorage {
       this.ideas.set(id, idea);
     }
   }
-  
+
   async startIdeaGeneration(id: number): Promise<void> {
     const idea = this.ideas.get(id);
     if (idea) {
@@ -620,22 +624,22 @@ export class MemStorage implements IStorage {
       console.log(`Started generation for idea ${id} at ${now.toISOString()}`);
     }
   }
-  
+
   async checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number> {
     // Calculate the cutoff time based on timeoutMinutes
     const cutoffTime = new Date();
     cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
-    
+
     let updateCount = 0;
-    
+
     // Check all ideas in the map using Array.from to avoid MapIterator issues
     Array.from(this.ideas.keys()).forEach(id => {
       const idea = this.ideas.get(id);
       if (idea) {
         // If the idea is in Generating status and has a generationStartedAt older than the cutoff
         if (
-          idea.status === "Generating" && 
-          idea.generationStartedAt && 
+          idea.status === "Generating" &&
+          idea.generationStartedAt &&
           idea.generationStartedAt < cutoffTime
         ) {
           // Update to Completed
@@ -647,7 +651,7 @@ export class MemStorage implements IStorage {
         }
       }
     });
-    
+
     return updateCount;
   }
 
@@ -674,6 +678,7 @@ export class MemStorage implements IStorage {
       id,
       ideaId: canvas.ideaId,
       projectId: canvas.projectId || null,
+      leancanvasId: canvas.leancanvasId || null,
       problem: canvas.problem || null,
       customerSegments: canvas.customerSegments || null,
       uniqueValueProposition: canvas.uniqueValueProposition || null,
@@ -700,7 +705,7 @@ export class MemStorage implements IStorage {
         updatedAt: new Date(),
       };
       this.canvases.set(canvas.id, updatedCanvas);
-      
+
       // Also update the related idea's updatedAt timestamp
       const idea = this.ideas.get(ideaId);
       if (idea) {
@@ -709,18 +714,18 @@ export class MemStorage implements IStorage {
       }
     }
   }
-  
+
   // App Settings operations
   private settings: Map<string, string> = new Map();
-  
+
   async getSetting(key: string): Promise<string | null> {
     return this.settings.get(key) || null;
   }
-  
+
   async setSetting(key: string, value: string): Promise<void> {
     this.settings.set(key, value);
   }
-  
+
   async getAllSettings(): Promise<Record<string, string>> {
     const result: Record<string, string> = {};
     this.settings.forEach((value, key) => {
@@ -728,7 +733,7 @@ export class MemStorage implements IStorage {
     });
     return result;
   }
-  
+
   // Email verification methods
   async setVerificationToken(userId: number, token: string, expiryDate: Date): Promise<void> {
     const user = this.users.get(userId);
@@ -738,31 +743,31 @@ export class MemStorage implements IStorage {
       this.users.set(userId, user);
     }
   }
-  
+
   async verifyEmail(userId: number, token: string): Promise<boolean> {
     const user = this.users.get(userId);
-    
+
     if (!user) {
       return false;
     }
-    
+
     if (user.verificationToken !== token) {
       return false;
     }
-    
+
     if (!user.verificationTokenExpiry || new Date() > new Date(user.verificationTokenExpiry)) {
       return false; // Token expired
     }
-    
+
     // Mark email as verified and clear token
     user.emailVerified = "true";
     user.verificationToken = null;
     user.verificationTokenExpiry = null;
     this.users.set(userId, user);
-    
+
     return true;
   }
-  
+
   async isEmailVerified(userId: number): Promise<boolean> {
     const user = this.users.get(userId);
     return user?.emailVerified === "true";
@@ -778,11 +783,11 @@ export class MemStorage implements IStorage {
     }
     return documents;
   }
-  
+
   async getDocumentById(id: number): Promise<ProjectDocument | undefined> {
     return this.documents.get(id);
   }
-  
+
   async getDocumentByType(ideaId: number, documentType: DocumentType): Promise<ProjectDocument | undefined> {
     for (const doc of this.documents.values()) {
       if (doc.ideaId === ideaId && doc.documentType === documentType) {
@@ -791,11 +796,11 @@ export class MemStorage implements IStorage {
     }
     return undefined;
   }
-  
+
   async createDocument(document: InsertProjectDocument): Promise<ProjectDocument> {
     const id = this.nextDocumentId++;
     const now = new Date();
-    
+
     const newDocument: ProjectDocument = {
       id,
       ideaId: document.ideaId,
@@ -810,26 +815,26 @@ export class MemStorage implements IStorage {
       createdAt: now,
       updatedAt: now
     };
-    
+
     this.documents.set(id, newDocument);
     return newDocument;
   }
-  
+
   async updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void> {
     const document = this.documents.get(id);
     if (!document) {
       throw new Error(`Document with ID ${id} not found`);
     }
-    
+
     const updatedDocument = {
       ...document,
       ...updates,
       updatedAt: new Date()
     };
-    
+
     this.documents.set(id, updatedDocument);
   }
-  
+
   async deleteDocument(id: number): Promise<void> {
     this.documents.delete(id);
   }
