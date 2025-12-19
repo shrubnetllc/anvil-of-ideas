@@ -8,6 +8,10 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies (ci ensures exact versions from lockfile)
+RUN npm config set fetch-retries 5 \
+ && npm config set fetch-retry-mintimeout 20000 \
+ && npm config set fetch-retry-maxtimeout 120000 \
+ && npm config set fetch-timeout 600000
 RUN npm ci
 
 # Copy the rest of the application code
