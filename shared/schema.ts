@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, varchar, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -61,10 +61,9 @@ export const ideas = pgTable("ideas", {
 });
 
 export const leanCanvas = pgTable("lean_canvas", {
-  id: serial("id").primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   ideaId: integer("idea_id").notNull().references(() => ideas.id),
-  projectId: text("project_id"),  // Store the project_id returned from n8n
-  leancanvasId: text("leancanvas_id"),  // Store the leancanvas_id returned from n8n (new format)
+  projectId: uuid("project_id"),  // Store the project_id returned from n8n
   problem: text("problem"),
   customerSegments: text("customer_segments"),
   uniqueValueProposition: text("unique_value_proposition"),
@@ -114,19 +113,25 @@ export const insertIdeaSchema = createInsertSchema(ideas).omit({
   id: true,
   userId: true,
   status: true,
-  createdAt: true,
-  updatedAt: true,
 });
 
-export const insertLeanCanvasSchema = createInsertSchema(leanCanvas).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+export const insertLeanCanvasSchema = z.object({
+  ideaId: z.number(),
+  projectId: z.string().nullable().optional(),
+  problem: z.string().nullable().optional(),
+  customerSegments: z.string().nullable().optional(),
+  uniqueValueProposition: z.string().nullable().optional(),
+  solution: z.string().nullable().optional(),
+  channels: z.string().nullable().optional(),
+  revenueStreams: z.string().nullable().optional(),
+  costStructure: z.string().nullable().optional(),
+  keyMetrics: z.string().nullable().optional(),
+  unfairAdvantage: z.string().nullable().optional(),
+  html: z.string().nullable().optional(),
 });
 
 export const updateLeanCanvasSchema = createInsertSchema(leanCanvas).pick({
   projectId: true,
-  leancanvasId: true,
   problem: true,
   customerSegments: true,
   uniqueValueProposition: true,
@@ -142,7 +147,7 @@ export const updateLeanCanvasSchema = createInsertSchema(leanCanvas).pick({
 // Define schemas for project documents
 export const insertProjectDocumentSchema = createInsertSchema(projectDocuments).omit({
   id: true,
-  createdAt: true, 
+  createdAt: true,
   updatedAt: true,
   version: true
 });
@@ -185,9 +190,8 @@ export const webhookResponseSchema = z.object({
   ideaId: z.number().optional(), // Might be part of unique-user-id
   "unique-user-id": z.string().optional(), // Format: user-{userId}-idea-{ideaId}
   project_id: z.string().optional(), // Project ID from n8n response
-  leancanvas_id: z.string().optional(), // New! Lean Canvas ID from n8n response
   projectId: z.string().optional(), // Legacy project ID from n8n response
-  
+
   // Canvas fields - using our internal property names
   problem: z.string().optional(),
   customerSegments: z.string().optional(),
@@ -199,7 +203,7 @@ export const webhookResponseSchema = z.object({
   keyMetrics: z.string().optional(),
   unfairAdvantage: z.string().optional(),
   html: z.string().optional(), // HTML content from Supabase
-  
+
   // Canvas fields - using the n8n-expected naming convention
   lean_canvas: z.object({
     problem: z.string().optional(),
@@ -220,12 +224,12 @@ export const webhookResponseSchema = z.object({
       data.ideaId = parseInt(match[1], 10);
     }
   }
-  
-  // Handle the new response format where project_id and leancanvas_id are provided
+
+  // Handle the new response format where project_id is provided
   if (data.project_id && !data.projectId) {
     data.projectId = data.project_id;
   }
-  
+
   // Map n8n's response format to our format if lean_canvas is present
   if (data.lean_canvas) {
     if (data.lean_canvas.problem) data.problem = data.lean_canvas.problem;
@@ -238,22 +242,18 @@ export const webhookResponseSchema = z.object({
     if (data.lean_canvas.key_metrics) data.keyMetrics = data.lean_canvas.key_metrics;
     if (data.lean_canvas.unfair_advantage) data.unfairAdvantage = data.lean_canvas.unfair_advantage;
   }
-  
-  // If leancanvas_id is provided, store it for reference
-  if (data.leancanvas_id) {
-    console.log(`Received leancanvas_id: ${data.leancanvas_id}`);
-  }
+
+
 
   // Filter out the lean_canvas and unique-user-id properties to avoid DB issues
   // Ensure ideaId is a number and exists (this is a required field for our database)
   if (!data.ideaId) {
     throw new Error("Could not determine ideaId from webhook data");
   }
-  
+
   return {
     ideaId: data.ideaId,
     projectId: data.project_id || data.projectId, // Use project_id from new format if available
-    leancanvasId: data.leancanvas_id, // Include new leancanvas_id if available
     problem: data.problem,
     customerSegments: data.customerSegments,
     uniqueValueProposition: data.uniqueValueProposition,

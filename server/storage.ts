@@ -36,6 +36,7 @@ export interface IStorage {
   getLeanCanvasByIdeaId(ideaId: number, requestingUserId?: number): Promise<LeanCanvas | undefined>;
   createLeanCanvas(canvas: InsertLeanCanvas): Promise<LeanCanvas>;
   updateLeanCanvas(ideaId: number, updates: Partial<UpdateLeanCanvas>): Promise<void>;
+  deleteLeanCanvas(ideaId: number): Promise<void>;
 
   // Project Document operations
   getDocumentsByIdeaId(ideaId: number): Promise<ProjectDocument[]>;
@@ -111,6 +112,7 @@ export class DatabaseStorage implements IStorage {
         .insert(projectDocuments)
         .values({
           ...document,
+          status: document.status as ProjectStatus | undefined,
           createdAt: new Date(),
           updatedAt: new Date()
         })
@@ -128,6 +130,7 @@ export class DatabaseStorage implements IStorage {
         .update(projectDocuments)
         .set({
           ...updates,
+          status: updates.status as ProjectStatus | undefined,
           updatedAt: new Date()
         })
         .where(eq(projectDocuments.id, id));
@@ -287,7 +290,7 @@ export class DatabaseStorage implements IStorage {
   async checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number> {
     // Calculate the cutoff time based on timeoutMinutes
     const cutoffTime = new Date();
-    cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
+    cutoffTime.setMinutes(timeoutMinutes);
 
     // Find all ideas that are in Generating status
     const generatingIdeas = await db.select()
@@ -396,6 +399,41 @@ export class DatabaseStorage implements IStorage {
     console.log(`Creating lean canvas with data:`, JSON.stringify(canvas));
     const [newCanvas] = await db.insert(leanCanvas).values(canvas).returning();
     console.log(`Created new canvas:`, JSON.stringify(newCanvas));
+
+    // Also create a "project document" entry for the Lean Canvas
+    // This allows it to be treated as a regular document
+    try {
+      // Content is stored as meaningful JSON-escaped string
+      const content = JSON.stringify({
+        problem: newCanvas.problem,
+        customerSegments: newCanvas.customerSegments,
+        uniqueValueProposition: newCanvas.uniqueValueProposition,
+        solution: newCanvas.solution,
+        channels: newCanvas.channels,
+        revenueStreams: newCanvas.revenueStreams,
+        costStructure: newCanvas.costStructure,
+        keyMetrics: newCanvas.keyMetrics,
+        unfairAdvantage: newCanvas.unfairAdvantage
+      });
+
+      await db.insert(projectDocuments).values({
+        ideaId: newCanvas.ideaId,
+        documentType: "LeanCanvas",
+        title: "Lean Canvas",
+        status: "Completed", // Canvas is created complete or in-progress but usable
+        content: content,
+        html: newCanvas.html,
+        externalId: newCanvas.projectId,
+        version: 1,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+      console.log(`Synced Lean Canvas to project_documents table`);
+    } catch (docError) {
+      console.error(`Failed to sync Lean Canvas to project_documents:`, docError);
+      // We don't fail the main request if sync fails, but we log it
+    }
+
     return newCanvas;
   }
 
@@ -409,7 +447,9 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date()
       })
       .where(eq(leanCanvas.ideaId, ideaId))
-      .returning({ updated: leanCanvas.leancanvasId });
+      .returning();
+
+    const updatedCanvas = updateResult[0]; // Get the full updated object
 
     console.log(`Update result:`, JSON.stringify(updateResult));
 
@@ -417,8 +457,63 @@ export class DatabaseStorage implements IStorage {
     await db.update(ideas)
       .set({ updatedAt: new Date() })
       .where(eq(ideas.id, ideaId));
+
+    // Sync to project_documents table
+    if (updatedCanvas) {
+      try {
+        // Prepare content JSON
+        const content = JSON.stringify({
+          problem: updatedCanvas.problem,
+          customerSegments: updatedCanvas.customerSegments,
+          uniqueValueProposition: updatedCanvas.uniqueValueProposition,
+          solution: updatedCanvas.solution,
+          channels: updatedCanvas.channels,
+          revenueStreams: updatedCanvas.revenueStreams,
+          costStructure: updatedCanvas.costStructure,
+          keyMetrics: updatedCanvas.keyMetrics,
+          unfairAdvantage: updatedCanvas.unfairAdvantage
+        });
+
+        // Check if document exists
+        const existingDoc = await this.getDocumentByType(ideaId, "LeanCanvas");
+
+        if (existingDoc) {
+          // Update existing document
+          await db.update(projectDocuments)
+            .set({
+              content: content,
+              html: updatedCanvas.html,
+              externalId: updatedCanvas.projectId,
+              updatedAt: new Date()
+            })
+            .where(eq(projectDocuments.id, existingDoc.id));
+          console.log(`Updated Lean Canvas in project_documents table`);
+        } else {
+          // Create new document (for legacy cases where it might be missing)
+          await db.insert(projectDocuments).values({
+            ideaId: ideaId,
+            documentType: "LeanCanvas",
+            title: "Lean Canvas",
+            status: "Completed",
+            content: content,
+            html: updatedCanvas.html,
+            externalId: updatedCanvas.projectId,
+            version: 1,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          });
+          console.log(`Created missing Lean Canvas in project_documents table during update`);
+        }
+      } catch (docError) {
+        console.error(`Failed to sync updated Lean Canvas to project_documents:`, docError);
+      }
+    }
   }
 
+  async deleteLeanCanvas(ideaId: number): Promise<void> {
+    await db.delete(leanCanvas)
+      .where(eq(leanCanvas.ideaId, ideaId));
+  }
   // App Settings operations
   async getSetting(key: string): Promise<string | null> {
     const [setting] = await db.select().from(appSettings).where(eq(appSettings.key, key));
@@ -505,7 +600,7 @@ export class DatabaseStorage implements IStorage {
 export class MemStorage implements IStorage {
   private users: Map<number, User>;
   private ideas: Map<number, Idea>;
-  private canvases: Map<number, LeanCanvas>;
+  private canvases: Map<string, LeanCanvas>; // Changed to string key for UUID
   private documents: Map<number, ProjectDocument>;
   public sessionStore: any;
   private nextUserId: number;
@@ -628,7 +723,7 @@ export class MemStorage implements IStorage {
   async checkAndUpdateTimedOutIdeas(timeoutMinutes: number): Promise<number> {
     // Calculate the cutoff time based on timeoutMinutes
     const cutoffTime = new Date();
-    cutoffTime.setMinutes(cutoffTime.getMinutes() - timeoutMinutes);
+    cutoffTime.setMinutes(timeoutMinutes);
 
     let updateCount = 0;
 
@@ -672,7 +767,7 @@ export class MemStorage implements IStorage {
   }
 
   async createLeanCanvas(canvas: InsertLeanCanvas): Promise<LeanCanvas> {
-    const id = this.nextCanvasId++;
+    const id = "canvas-" + this.nextCanvasId++; // Simulating UUID
     const now = new Date();
     const newCanvas: LeanCanvas = {
       id,
@@ -693,6 +788,38 @@ export class MemStorage implements IStorage {
       updatedAt: now,
     };
     this.canvases.set(id, newCanvas);
+
+    // Sync to documents map
+    // Content is stored as meaningful JSON-escaped string
+    const content = JSON.stringify({
+      problem: newCanvas.problem,
+      customerSegments: newCanvas.customerSegments,
+      uniqueValueProposition: newCanvas.uniqueValueProposition,
+      solution: newCanvas.solution,
+      channels: newCanvas.channels,
+      revenueStreams: newCanvas.revenueStreams,
+      costStructure: newCanvas.costStructure,
+      keyMetrics: newCanvas.keyMetrics,
+      unfairAdvantage: newCanvas.unfairAdvantage
+    });
+
+    const docId = this.nextDocumentId++;
+    const newDoc: ProjectDocument = {
+      id: docId,
+      ideaId: canvas.ideaId,
+      documentType: "LeanCanvas",
+      title: "Lean Canvas",
+      status: "Completed",
+      content: content,
+      html: newCanvas.html,
+      externalId: newCanvas.projectId,
+      generationStartedAt: null,
+      version: 1,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.documents.set(docId, newDoc);
+
     return newCanvas;
   }
 
@@ -712,9 +839,54 @@ export class MemStorage implements IStorage {
         idea.updatedAt = new Date();
         this.ideas.set(ideaId, idea);
       }
+
+      // Sync to documents map
+      const content = JSON.stringify({
+        problem: updatedCanvas.problem,
+        customerSegments: updatedCanvas.customerSegments,
+        uniqueValueProposition: updatedCanvas.uniqueValueProposition,
+        solution: updatedCanvas.solution,
+        channels: updatedCanvas.channels,
+        revenueStreams: updatedCanvas.revenueStreams,
+        costStructure: updatedCanvas.costStructure,
+        keyMetrics: updatedCanvas.keyMetrics,
+        unfairAdvantage: updatedCanvas.unfairAdvantage
+      });
+
+      const existingDoc = await this.getDocumentByType(ideaId, "LeanCanvas");
+      if (existingDoc) {
+        existingDoc.content = content;
+        existingDoc.html = updatedCanvas.html;
+        existingDoc.externalId = updatedCanvas.projectId;
+        existingDoc.updatedAt = new Date();
+        this.documents.set(existingDoc.id, existingDoc);
+      } else {
+        const docId = this.nextDocumentId++;
+        const newDoc: ProjectDocument = {
+          id: docId,
+          ideaId: ideaId,
+          documentType: "LeanCanvas",
+          title: "Lean Canvas",
+          status: "Completed",
+          content: content,
+          html: updatedCanvas.html,
+          externalId: updatedCanvas.projectId,
+          generationStartedAt: null,
+          version: 1,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        this.documents.set(docId, newDoc);
+      }
     }
   }
 
+  async deleteLeanCanvas(ideaId: number): Promise<void> {
+    const canvas = await this.getLeanCanvasByIdeaId(ideaId);
+    if (canvas) {
+      this.canvases.delete(canvas.id);
+    }
+  }
   // App Settings operations
   private settings: Map<string, string> = new Map();
 
@@ -775,26 +947,17 @@ export class MemStorage implements IStorage {
 
   // Project Document operations
   async getDocumentsByIdeaId(ideaId: number): Promise<ProjectDocument[]> {
-    const documents: ProjectDocument[] = [];
-    for (const doc of this.documents.values()) {
-      if (doc.ideaId === ideaId) {
-        documents.push(doc);
-      }
-    }
-    return documents;
+    return Array.from(this.documents.values()).filter(doc => doc.ideaId === ideaId);
   }
 
   async getDocumentById(id: number): Promise<ProjectDocument | undefined> {
     return this.documents.get(id);
   }
 
-  async getDocumentByType(ideaId: number, documentType: DocumentType): Promise<ProjectDocument | undefined> {
-    for (const doc of this.documents.values()) {
-      if (doc.ideaId === ideaId && doc.documentType === documentType) {
-        return doc;
-      }
-    }
-    return undefined;
+  async getDocumentByType(ideaId: number, documentType: DocumentType | string): Promise<ProjectDocument | undefined> {
+    return Array.from(this.documents.values()).find(
+      doc => doc.ideaId === ideaId && doc.documentType === documentType
+    );
   }
 
   async createDocument(document: InsertProjectDocument): Promise<ProjectDocument> {
@@ -806,14 +969,14 @@ export class MemStorage implements IStorage {
       ideaId: document.ideaId,
       documentType: document.documentType,
       title: document.title,
+      status: (document.status as ProjectStatus) || "Draft",
       content: document.content || null,
       html: document.html || null,
-      status: document.status || "Draft",
-      generationStartedAt: document.generationStartedAt || null,
       externalId: document.externalId || null,
-      version: document.version || 1,
+      generationStartedAt: document.generationStartedAt ? new Date(document.generationStartedAt) : null,
+      version: 1,
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     this.documents.set(id, newDocument);
@@ -822,17 +985,15 @@ export class MemStorage implements IStorage {
 
   async updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void> {
     const document = this.documents.get(id);
-    if (!document) {
-      throw new Error(`Document with ID ${id} not found`);
+    if (document) {
+      const updatedDocument: ProjectDocument = {
+        ...document,
+        ...updates,
+        status: (updates.status as ProjectStatus) || document.status,
+        updatedAt: new Date()
+      };
+      this.documents.set(id, updatedDocument);
     }
-
-    const updatedDocument = {
-      ...document,
-      ...updates,
-      updatedAt: new Date()
-    };
-
-    this.documents.set(id, updatedDocument);
   }
 
   async deleteDocument(id: number): Promise<void> {
