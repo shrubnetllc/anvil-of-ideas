@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { DocumentType, ProjectDocument } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { storage } from "server/storage";
 
 export function useDocument(ideaId: number, documentType: DocumentType) {
     const [document, setDocument] = useState<ProjectDocument | null>(null);
@@ -120,7 +121,7 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
         fetchDocument();
     }, [fetchDocument]);
 
-    const generate = async (instructions: string = "", projectId?: string) => {
+    const generate = async (instructions: string = "", projectId?: string, leanCanvasId?: string, prdId?: string, brdId?: string, frdId?: string) => {
         try {
             setIsGenerating(true);
             setIsTimedOut(false);
@@ -138,8 +139,13 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
                     break;
                 case "ProjectRequirements":
                     url = `/api/webhook/requirements`;
+                    console.log("Generating project requirements for idea", ideaId);
+                    console.log("Project ID:", projectId);
+                    console.log("Lean Canvas ID:", leanCanvasId);
+                    console.log("Instructions:", instructions);
                     body = {
                         projectId: projectId || ideaId.toString(),
+                        leanCanvasId: leanCanvasId,
                         instructions: instructions || "Be Brief as possible"
                     };
                     break;

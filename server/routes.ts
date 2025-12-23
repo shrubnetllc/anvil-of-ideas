@@ -1446,10 +1446,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let leancanvasId = null;
       try {
         const { pool } = await import('./db');
-        const result = await pool.query('SELECT leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        const result = await pool.query('SELECT id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
 
-        if (result.rows.length > 0 && result.rows[0].leancanvas_id) {
-          leancanvasId = result.rows[0].leancanvas_id;
+        if (result.rows.length > 0 && result.rows[0].id) {
+          leancanvasId = result.rows[0].id;
           console.log(`Found leancanvas_id ${leancanvasId} for idea ${ideaId} in local database`);
         } else {
           console.log(`No leancanvas_id found for idea ${ideaId} in local database`);
@@ -1470,6 +1470,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // The n8n workflow expects the Supabase UUID format project_id from the Lean Canvas
           project_id: supabaseProjectId,
           // Send user's instructions from the UI form
+          leancanvas_id: leancanvasId,
           instructions: instructions || "Be brief and concise."
         })
       });
