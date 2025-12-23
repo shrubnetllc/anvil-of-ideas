@@ -54,10 +54,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ideas", isAuthenticated, async (req, res, next) => {
     try {
       // Extract and validate the base idea fields
+      console.log("Validating idea data...")
+      console.log(req.body)
       const validatedIdeaData = insertIdeaSchema.parse(req.body);
 
 
       // Create the idea
+      console.log("Creating idea...")
       const idea = await storage.createIdea({
         ...validatedIdeaData,
         userId: req.user!.id,
@@ -65,6 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // Check if lean canvas data was submitted
+      console.log("Checking for lean canvas data...")
       if (req.body.leanCanvas) {
         try {
           // Create the lean canvas
@@ -645,8 +649,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Special handling for Lean Canvas
       if (documentType === "LeanCanvas") {
-        const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
+        const canvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
+        console.log(`[LeanCanvas] Fetched canvas for idea ${ideaId}:`, canvas ? `id=${canvas.id}, html=${canvas.html ? `${canvas.html.length} chars` : 'null'}` : 'null');
+
         if (canvas) {
+          let htmlContent = canvas.html;
+
+          // If local html is null, try to fetch from Supabase
+          if (!htmlContent) {
+            console.log(`[LeanCanvas] Local html is null, fetching from Supabase...`);
+            try {
+              const supabaseCanvas = await fetchLeanCanvasData(ideaId, req.user!.id);
+              if (supabaseCanvas && supabaseCanvas.html) {
+                htmlContent = supabaseCanvas.html;
+                console.log(`[LeanCanvas] Found HTML in Supabase: ${htmlContent?.length || 0} chars`);
+
+                // Optionally sync back to local DB
+                try {
+                  await storage.updateLeanCanvas(ideaId, { html: htmlContent });
+                  console.log(`[LeanCanvas] Synced HTML back to local database`);
+                } catch (syncError) {
+                  console.warn(`[LeanCanvas] Failed to sync HTML to local DB:`, syncError);
+                }
+              } else {
+                console.log(`[LeanCanvas] No HTML found in Supabase either`);
+              }
+            } catch (supabaseError) {
+              console.warn(`[LeanCanvas] Error fetching from Supabase:`, supabaseError);
+            }
+          }
+
           // Convert Lean Canvas to ProjectDocument format
           const document: any = {
             id: canvas.id, // This is the canvas ID, not a document ID, but serves the purpose
@@ -655,7 +687,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             title: "Lean Canvas",
             status: "Completed", // Canvas is always considered completed if it exists
             content: null, // Store raw data as content
-            html: canvas.html,//TODO: Figure out why the HTML isn't being passed into this endpoint
+            html: htmlContent,
             createdAt: canvas.createdAt,
             updatedAt: canvas.updatedAt,
             version: 1
@@ -1503,7 +1535,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      if (idea.userId !== req.user!.id) {
+      if (Number(idea.userId) !== Number(req.user!.id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -1628,6 +1660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (projectId) {
           try {
             // Check if lean canvas already exists for this idea
+            // TODO: This function needs to get the LeanCanvas in Supabase rather than create a new record
             const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
 
 

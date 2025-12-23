@@ -33,8 +33,8 @@ export async function fetchProjectRequirements(prdId: string, ideaId: number, re
           return null;
         }
 
-        const ownerId = parseInt(securityCheck.rows[0].user_id);
-        if (ownerId !== requestingUserId) {
+        const ownerId = Number(securityCheck.rows[0].user_id);
+        if (ownerId !== Number(requestingUserId)) {
           console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
           return null;
         }
@@ -103,8 +103,8 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
           return null;
         }
 
-        const ownerId = parseInt(securityCheck.rows[0].user_id);
-        if (ownerId !== requestingUserId) {
+        const ownerId = Number(securityCheck.rows[0].user_id);
+        if (ownerId !== Number(requestingUserId)) {
           console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
           return null;
         }
@@ -224,8 +224,8 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
           return { error: 'Unauthorized access', data: null };
         }
 
-        const ownerId = parseInt(securityCheck.rows[0].user_id);
-        if (ownerId !== requestingUserId) {
+        const ownerId = Number(securityCheck.rows[0].user_id);
+        if (ownerId !== Number(requestingUserId)) {
           console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
           return { error: 'Unauthorized access', data: null };
         }
@@ -371,8 +371,8 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
           return null;
         }
 
-        const ownerId = parseInt(securityCheck.rows[0].user_id);
-        if (ownerId !== requestingUserId) {
+        const ownerId = Number(securityCheck.rows[0].user_id);
+        if (ownerId !== Number(requestingUserId)) {
           console.log(`[SECURITY VIOLATION] User ${requestingUserId} attempted to access idea ${ideaId} owned by user ${ownerId}`);
           return null;
         }
