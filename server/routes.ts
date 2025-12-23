@@ -54,10 +54,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ideas", isAuthenticated, async (req, res, next) => {
     try {
       // Extract and validate the base idea fields
+      console.log("Validating idea data...")
+      console.log(req.body)
       const validatedIdeaData = insertIdeaSchema.parse(req.body);
 
 
       // Create the idea
+      console.log("Creating idea...")
       const idea = await storage.createIdea({
         ...validatedIdeaData,
         userId: req.user!.id,
@@ -65,6 +68,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // Check if lean canvas data was submitted
+      console.log("Checking for lean canvas data...")
       if (req.body.leanCanvas) {
         try {
           // Create the lean canvas
@@ -213,6 +217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let prdId = null;
       let brdId = null;
       let projectId = null;
+      let leanCanvasId = null;
 
 
       // Get the lean canvas ID
@@ -220,6 +225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
         if (canvas && canvas.projectId) {
           projectId = canvas.projectId;
+          leanCanvasId = canvas.id;
           console.log(`Found project ID: ${projectId}`);
         }
       } catch (canvasError) {
@@ -233,6 +239,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (prdDoc && prdDoc.externalId) {
           prdId = prdDoc.externalId;
           console.log(`Found PRD ID: ${prdId}`);
+        } else {
+          console.log(`PRD externalId missing locally, trying one-time fallback lookup`);
+          const { fetchProjectRequirements } = await import('./supabase');
+          const prdRes = await fetchProjectRequirements('', ideaId, userId);
+          if (prdRes && prdRes.id) {
+            prdId = prdRes.id;
+            console.log(`Found PRD ID via fallback lookup: ${prdId}`);
+            // Update local database if record exists
+            if (prdDoc) {
+              await storage.updateDocument(prdDoc.id, { externalId: prdId });
+            }
+          }
         }
       } catch (prdError) {
         console.error("Error getting PRD ID:", prdError);
@@ -245,6 +263,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (brdDoc && brdDoc.externalId) {
           brdId = brdDoc.externalId;
           console.log(`Found BRD ID: ${brdId}`);
+        } else {
+          // If not in database, try a one-time lookup in Supabase
+          console.log(`BRD externalId missing locally, trying one-time fallback lookup`);
+          const { fetchBusinessRequirements } = await import('./supabase');
+          const brdRes = await fetchBusinessRequirements('', ideaId, req.user!.id);
+          if (brdRes && brdRes.data && brdRes.data.id) {
+            brdId = brdRes.data.id;
+            console.log(`Found BRD ID via fallback lookup: ${brdId}`);
+            // Proactively update our database if we have a document record
+            const existingBrd = await storage.getDocumentByType(ideaId, 'BusinessRequirements');
+            if (existingBrd) {
+              await storage.updateDocument(existingBrd.id, {
+                externalId: brdId,
+                html: brdRes.data.html || existingBrd.html,
+                status: (brdRes.data.html && brdRes.data.html.length > 0) ? 'Completed' : existingBrd.status
+              });
+            }
+          }
         }
       } catch (brdError) {
         console.error("Error getting BRD ID:", brdError);
@@ -263,6 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const webhookBody = {
         ideaId,
+        leancanvas_id: leanCanvasId,
         documentId: document.id,
         prd_id: prdId,
         project_id: projectId,
@@ -443,9 +480,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get data from lean canvas
       let projectId;
+      let leanCanvasId;
       try {
         const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
         if (canvas) {
+          leanCanvasId = canvas.id;
           projectId = canvas.projectId;
           console.log(`Found projectId ${projectId} for idea ${ideaId}`);
         }
@@ -458,9 +497,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let prdId;
       try {
         const prdDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
-        if (prdDocument) {
+        if (prdDocument && prdDocument.externalId) {
           prdId = prdDocument.externalId;
           console.log(`Found PRD with externalId ${prdId} for idea ${ideaId}`);
+        } else {
+          // If not in database, try fallback lookup
+          console.log(`PRD externalId missing locally, trying fallback lookup`);
+          const { fetchProjectRequirements } = await import('./supabase');
+          const prdRes = await fetchProjectRequirements('', ideaId, req.user!.id);
+          if (prdRes && prdRes.id) {
+            prdId = prdRes.id;
+            console.log(`Found PRD ID via fallback lookup: ${prdId}`);
+            if (prdDocument) {
+              await storage.updateDocument(prdDocument.id, { externalId: prdId });
+            }
+          }
         }
       } catch (error: any) {
         console.error('Error getting PRD document:', error);
@@ -491,6 +542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const webhookPayload = {
         ideaId,
         project_id: projectId,
+        leancanvas_id: leanCanvasId,
         prd_id: prdId,
         instructions: instructions || "Be comprehensive and detailed."
       };
@@ -633,6 +685,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get a specific document by type
   app.get("/api/ideas/:id/documents/:type", isAuthenticated, async (req, res, next) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
+
       const ideaId = parseInt(req.params.id);
 
       const documentType = req.params.type as DocumentType;
@@ -645,8 +702,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Special handling for Lean Canvas
       if (documentType === "LeanCanvas") {
-        const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
+        const canvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
+        console.log(`[LeanCanvas] Fetched canvas for idea ${ideaId}:`, canvas ? `id=${canvas.id}, html=${canvas.html ? `${canvas.html.length} chars` : 'null'}` : 'null');
+
         if (canvas) {
+          let htmlContent = canvas.html;
+
+          // If local html is null, try to fetch from Supabase
+          if (!htmlContent) {
+            console.log(`[LeanCanvas] Local html is null, fetching from Supabase...`);
+            try {
+              const { fetchLeanCanvasData } = await import('./supabase');
+              const supabaseCanvas = await fetchLeanCanvasData(ideaId, req.user!.id);
+              if (supabaseCanvas && supabaseCanvas.html) {
+                htmlContent = supabaseCanvas.html;
+                console.log(`[LeanCanvas] Found HTML in Supabase: ${htmlContent?.length || 0} chars`);
+
+                // Sync back to local DB
+                try {
+                  await storage.updateLeanCanvas(ideaId, { html: htmlContent });
+                  console.log(`[LeanCanvas] Synced HTML back to local database`);
+                } catch (syncError) {
+                  console.warn(`[LeanCanvas] Failed to sync HTML to local DB:`, syncError);
+                }
+              }
+            } catch (supabaseError) {
+              console.warn(`[LeanCanvas] Error fetching from Supabase:`, supabaseError);
+            }
+          }
+
           // Convert Lean Canvas to ProjectDocument format
           const document: any = {
             id: canvas.id, // This is the canvas ID, not a document ID, but serves the purpose
@@ -655,7 +739,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             title: "Lean Canvas",
             status: "Completed", // Canvas is always considered completed if it exists
             content: null, // Store raw data as content
-            html: canvas.html,//TODO: Figure out why the HTML isn't being passed into this endpoint
+            html: htmlContent,
             createdAt: canvas.createdAt,
             updatedAt: canvas.updatedAt,
             version: 1
@@ -672,6 +756,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!document) {
         return res.status(200).json(null); // Return null instead of 404 to handle case where document doesn't exist yet
       }
+
+      console.log(`[DOC FETCH] Idea ${ideaId}, Type ${documentType}, Status ${document.status}, externalId: ${document.externalId || 'MISSING'}`);
 
 
       // Special handling for Project Requirements if they're in Generating state with an externalId
@@ -729,8 +815,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      // Special handling for Business Requirements document with an externalId
-      if (documentType === "BusinessRequirements" && document.externalId) {
+      // Special handling for Business Requirements document
+      // We also check if externalId is missing because fetchBusinessRequirements has fallback logic
+      if (documentType === "BusinessRequirements") {
         try {
           console.log(`BRD Handler: Checking Business Requirements document with externalId ${document.externalId}`);
 
@@ -740,30 +827,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const shouldFetchContent =
             (document.status === "Completed" && (!document.html || document.html.length === 0)) ||
             (document.status === "Generating" && document.generationStartedAt &&
-              ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10));
+              ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10)) ||
+            (document.status === "Generating" && !document.externalId); // Also try if externalId is missing
 
 
           if (shouldFetchContent) {
-            console.log(`BRD Handler: Attempting direct Supabase lookup for BRD ID ${document.externalId}`);
+            console.log(`BRD Handler: Attempting robust Supabase lookup for ideaId ${ideaId} (externalId: ${document.externalId || 'none'})`);
 
 
-            // Direct lookup using our known working method
-            const { supabase } = await import('./supabase');
-            const { data, error } = await supabase
-              .from('brd')
-              .select('*')
-              .eq('id', document.externalId)
-              .single();
+            // Use robust helper method instead of direct query
+            const { fetchBusinessRequirements } = await import('./supabase');
+            const brdResponse = await fetchBusinessRequirements(document.externalId || '', ideaId, req.user!.id);
 
 
-            if (!error && data && data.brd_html) {
-              console.log(`BRD Handler: Found HTML content (${data.brd_html.length} chars)`);
+            if (brdResponse && brdResponse.data && brdResponse.data.html) {
+              console.log(`BRD Handler: Found HTML content in Supabase (${brdResponse.data.html.length} chars)`);
 
 
-              // Update document with the retrieved HTML
+              // Update document with the retrieved HTML and the found externalId
               await storage.updateDocument(document.id, {
-                html: data.brd_html,
+                html: brdResponse.data.html,
                 status: "Completed",
+                externalId: brdResponse.data.id, // Persist the ID found via fallback
                 updatedAt: new Date()
               });
 
@@ -773,9 +858,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`BRD Handler: Returning updated document with HTML content`);
               return res.status(200).json(updatedDocument);
             } else {
-              console.log(error ?
-                `BRD Handler: Supabase error: ${error.message}` :
-                `BRD Handler: No HTML content found in Supabase data`);
+              console.log(`BRD Handler: No HTML content found via fetchBusinessRequirements`);
             }
           }
         } catch (brdError) {
@@ -784,16 +867,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
 
-        // Check if generation has timed out (2 minutes)
-        if (document.status === "Generating" && document.generationStartedAt) {
-          const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-          if (new Date(document.generationStartedAt) < twoMinutesAgo) {
-            console.log(`Business Requirements generation timed out for document ${document.id}`);
-            // Still return the document as is - client will display retry button
+      }
+
+
+      // Special handling for Functional Requirements document
+      if (documentType === "FunctionalRequirements") {
+        try {
+          console.log(`FRD Handler: Checking Functional Requirements document with externalId ${document.externalId}`);
+
+          const shouldFetchContent =
+            (document.status === "Completed" && (!document.html || document.html.length === 0)) ||
+            (document.status === "Generating" && document.generationStartedAt &&
+              ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10)) ||
+            (document.status === "Generating" && !document.externalId); // Also try if externalId is missing
+
+          if (shouldFetchContent) {
+            console.log(`FRD Handler: Attempting robust Supabase lookup for ideaId ${ideaId} (externalId: ${document.externalId || 'none'})`);
+            const { fetchFunctionalRequirements } = await import('./supabase');
+            const frdResponse = await fetchFunctionalRequirements(document.externalId || '', ideaId, req.user!.id);
+
+            if (frdResponse && frdResponse.data && frdResponse.data.html) {
+              console.log(`FRD Handler: Found HTML content in Supabase (${frdResponse.data.html.length} chars)`);
+
+              await storage.updateDocument(document.id, {
+                html: frdResponse.data.html,
+                status: "Completed",
+                externalId: frdResponse.data.id, // Persist the ID found via fallback
+                updatedAt: new Date()
+              });
+
+              const updatedDocument = await storage.getDocumentById(document.id);
+              console.log(`FRD Handler: Returning updated document with HTML content`);
+              return res.status(200).json(updatedDocument);
+            } else {
+              console.log(`FRD Handler: No HTML content found via fetchFunctionalRequirements`);
+            }
           }
+        } catch (frdError) {
+          console.error(`Error fetching Functional Requirements from Supabase:`, frdError);
         }
       }
 
+
+      // Check if generation has timed out (2 minutes)
+      if (document.status === "Generating" && document.generationStartedAt) {
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+        if (new Date(document.generationStartedAt) < twoMinutesAgo) {
+          console.log(`${documentType} generation timed out for document ${document.id}`);
+        }
+      }
 
       res.status(200).json(document);
     } catch (error: any) {
@@ -1414,10 +1536,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let leancanvasId = null;
       try {
         const { pool } = await import('./db');
-        const result = await pool.query('SELECT leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        const result = await pool.query('SELECT id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
 
-        if (result.rows.length > 0 && result.rows[0].leancanvas_id) {
-          leancanvasId = result.rows[0].leancanvas_id;
+        if (result.rows.length > 0 && result.rows[0].id) {
+          leancanvasId = result.rows[0].id;
           console.log(`Found leancanvas_id ${leancanvasId} for idea ${ideaId} in local database`);
         } else {
           console.log(`No leancanvas_id found for idea ${ideaId} in local database`);
@@ -1438,6 +1560,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // The n8n workflow expects the Supabase UUID format project_id from the Lean Canvas
           project_id: supabaseProjectId,
           // Send user's instructions from the UI form
+          leancanvas_id: leancanvasId,
           instructions: instructions || "Be brief and concise."
         })
       });
@@ -1503,7 +1626,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      if (idea.userId !== req.user!.id) {
+      if (Number(idea.userId) !== Number(req.user!.id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -1628,6 +1751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (projectId) {
           try {
             // Check if lean canvas already exists for this idea
+            // TODO: This function needs to get the LeanCanvas in Supabase rather than create a new record
             const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
 
 
@@ -2628,15 +2752,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`✓ Document found with ID ${document.id}, status ${document.status}, externalId: ${document.externalId || 'none'}`);
 
 
-      // If document is still generating, return early
-      if (document.status === 'Generating') {
-        console.log(`⏳ Document is still in generating state, returning as-is`);
-        return res.json({
-          source: "local",
-          data: document,
-          message: "Document is still generating"
-        });
-      }
+      // If document is generating, we still attempt to fetch from Supabase
+      // below, especially if some time has passed.
 
 
       // Use the external ID from the query if provided, otherwise use the one from the document
