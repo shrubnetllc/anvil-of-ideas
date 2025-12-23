@@ -48,38 +48,67 @@ export async function fetchProjectRequirements(prdId: string, ideaId: number, re
 
     // Query the Supabase PRD table with the provided PRD ID
     try {
-      console.log(`Querying Supabase for PRD ID ${prdId}`);
-      const { data, error } = await supabase
-        .from('prd')
-        .select('*')
-        .eq('id', prdId)
-        .single();
+      if (prdId && prdId !== 'null' && prdId !== 'undefined') {
+        console.log(`Querying Supabase for PRD ID ${prdId}`);
+        const { data, error } = await supabase
+          .from('prd')
+          .select('*')
+          .eq('id', prdId)
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-      if (error) {
-        console.warn(`Error querying Supabase PRD table with id=${prdId}:`, error);
-        return null;
+        if (data && data.length > 0 && !error) {
+          const prdData = data[0];
+          console.log(`Supabase returned data for PRD ID ${prdId}`);
+          return {
+            id: prdData.id,
+            ideaId: ideaId,
+            projectReqHtml: prdData.project_req_html || '',
+            createdAt: prdData.created_at,
+            updatedAt: prdData.updated_at
+          };
+        }
       }
 
-      if (data) {
-        console.log(`Supabase returned data for PRD ID ${prdId}`);
-        // Map and return the PRD data with the HTML content
-        return {
-          id: data.id,
-          ideaId: ideaId,
-          projectReqHtml: data.project_req_html || '',
-          createdAt: data.created_at,
-          updatedAt: data.updated_at
-        };
+      // Fallback: search by project_id
+      console.log(`PRD ID ${prdId} not found or invalid, searching by project_id for idea ${ideaId}`);
+      try {
+        const { pool } = await import('./db');
+        const canvasResult = await pool.query('SELECT project_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        if (canvasResult.rows.length > 0 && canvasResult.rows[0].project_id) {
+          const pId = canvasResult.rows[0].project_id;
+          console.log(`Found project_id ${pId}, searching PRD table...`);
+          const { data, error } = await supabase
+            .from('prd')
+            .select('*')
+            .eq('project_id', pId)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+          if (data && data.length > 0 && !error) {
+            const prdData = data[0];
+            console.log(`✓ Success! Found PRD via project_id ${pId}`);
+            return {
+              id: prdData.id,
+              ideaId: ideaId,
+              projectReqHtml: prdData.project_req_html || '',
+              createdAt: prdData.created_at,
+              updatedAt: prdData.updated_at
+            };
+          }
+        }
+      } catch (fallbackError) {
+        console.error(`Error in PRD fallback search:`, fallbackError);
       }
     } catch (supabaseError) {
-      console.warn(`Error with Supabase query for PRD ID ${prdId}:`, supabaseError);
+      console.warn(`Error with Supabase query for PRD:`, supabaseError);
     }
 
-    console.log(`No data found in Supabase for PRD ID ${prdId}`);
+    console.log(`No data found in Supabase for PRD`);
     return null;
   } catch (error) {
     console.error('Error fetching project requirements from Supabase:', error);
-    throw error;
+    return null;
   }
 }
 
@@ -144,11 +173,12 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
         .from('lean_canvas')
         .select('*')
         .eq('idea_id', ideaId) // Try direct mapping first
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      if (!ideaError && ideaData) {
+      if (!ideaError && ideaData && ideaData.length > 0) {
         console.log(`Supabase returned data for exact idea_id match: ${ideaId}`);
-        return mapSupabaseData(ideaData, ideaId, ideaData.project_id || projectId);
+        return mapSupabaseData(ideaData[0], ideaId, ideaData[0].project_id || projectId);
       }
 
       // Fallback: Query using project_id if we have it locally
@@ -158,11 +188,12 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
           .from('lean_canvas')
           .select('*')
           .eq('project_id', projectId)
-          .single();
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-        if (!projectError && projectData) {
+        if (!projectError && projectData && projectData.length > 0) {
           console.log(`Supabase returned data for project_id match: ${projectId}`);
-          return mapSupabaseData(projectData, ideaId, projectId);
+          return mapSupabaseData(projectData[0], ideaId, projectId);
         }
       }
     } catch (supabaseError) {
@@ -176,13 +207,15 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
         .from('lean_canvas')
         .select('*')
         .eq('project_id', ideaId.toString())
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (error) {
         console.warn(`Error querying Supabase with project_id=${ideaId}:`, error);
-      } else if (data) {
-        console.log(`Supabase returned data for project_id ${ideaId}:`, data);
-        return mapSupabaseData(data, ideaId, data.id.toString());
+      } else if (data && data.length > 0) {
+        const canvasData = data[0];
+        console.log(`Supabase returned data for project_id ${ideaId}:`, canvasData);
+        return mapSupabaseData(canvasData, ideaId, canvasData.id.toString());
       }
     } catch (finalError) {
       console.warn(`Final Supabase query attempt failed:`, finalError);
@@ -213,28 +246,7 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
   try {
     console.log(`[SUPABASE FUNCTIONAL] START: Fetching Functional Requirements ID ${functionalId} for idea ${ideaId}`);
 
-    // Check if functionalId is valid
-    if (!functionalId || functionalId === 'null' || functionalId === 'undefined') {
-      console.warn(`[SUPABASE FUNCTIONAL] Invalid FRD ID provided: ${functionalId}`);
-
-      // Try to fetch it from our database
-      try {
-        const { pool } = await import('./db');
-        const docQuery = await pool.query(
-          'SELECT external_id FROM project_documents WHERE idea_id = $1 AND document_type = $2',
-          [ideaId, 'FunctionalRequirements']
-        );
-
-        if (docQuery.rows.length > 0 && docQuery.rows[0].external_id) {
-          functionalId = docQuery.rows[0].external_id;
-          console.log(`[SUPABASE FUNCTIONAL] Found stored FRD ID in database: ${functionalId}`);
-        }
-      } catch (dbError) {
-        console.error(`[SUPABASE FUNCTIONAL] Error fetching stored FRD ID:`, dbError);
-      }
-    }
-
-    // Security check: If requesting user ID is provided, verify ownership
+    // Security check: Verify the requesting user owns the idea
     if (requestingUserId !== undefined) {
       try {
         const { pool } = await import('./db');
@@ -258,77 +270,60 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
       }
     }
 
-    // Query Supabase for the functional requirements document
-    console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase Functional Requirements table`);
+    // Check if functionalId is valid
+    if (!functionalId || functionalId === 'null' || functionalId === 'undefined') {
+      console.warn(`[SUPABASE FUNCTIONAL] Invalid FRD ID provided: ${functionalId}`);
 
-    // First try direct query using the ID from the 'frd' table (correct table for functional requirements)
-    console.log(`[SUPABASE FUNCTIONAL] Direct query using ID=${functionalId} in frd table`);
-    const { data, error } = await supabase
-      .from('frd')
-      .select('*')
-      .eq('id', functionalId)
-      .single();
+      // Try to fetch it from our database
+      try {
+        const { pool } = await import('./db');
+        const docQuery = await pool.query(
+          'SELECT external_id FROM project_documents WHERE idea_id = $1 AND document_type = $2',
+          [ideaId, 'FunctionalRequirements']
+        );
 
-    if (error) {
-      console.log(`[SUPABASE FUNCTIONAL] Error with direct ID query in frd table: ${error.message}`);
+        if (docQuery.rows.length > 0 && docQuery.rows[0].external_id) {
+          functionalId = docQuery.rows[0].external_id;
+          console.log(`[SUPABASE FUNCTIONAL] Found stored FRD ID in database: ${functionalId}`);
+        }
+      } catch (dbError) {
+        console.error(`[SUPABASE FUNCTIONAL] Error fetching stored FRD ID:`, dbError);
+      }
+    }
 
-      // Try fallback query using ID as project_id in frd table
-      console.log(`[SUPABASE FUNCTIONAL] Trying fallback with project_id=${functionalId} in frd table`);
-      const fallbackResponse = await supabase
-        .from('frd')
-        .select('*')
-        .eq('project_id', functionalId)
-        .single();
+    if (functionalId && functionalId !== 'null' && functionalId !== 'undefined') {
+      console.log(`[SUPABASE FUNCTIONAL] Using ID=${functionalId} to query Supabase Functional Requirements table`);
 
-      if (fallbackResponse.error) {
-        console.log(`[SUPABASE FUNCTIONAL] Fallback query failed: ${fallbackResponse.error.message}`);
-
-        // Try the original 'functional_requirements' table as last resort
-        console.log(`[SUPABASE FUNCTIONAL] Trying original functional_requirements table with ID=${functionalId}`);
-        const originalTableResponse = await supabase
-          .from('functional_requirements')
+      // First try direct query using the ID from the 'frd' table
+      try {
+        console.log(`[SUPABASE FUNCTIONAL] Direct query using ID=${functionalId} in frd table`);
+        const { data, error } = await supabase
+          .from('frd')
           .select('*')
           .eq('id', functionalId)
           .order('created_at', { ascending: false })
           .limit(1);
 
-        if (originalTableResponse.error) {
-          console.log(`[SUPABASE FUNCTIONAL] Original table query failed: ${originalTableResponse.error.message}`);
-        } else if (originalTableResponse.data && originalTableResponse.data.length > 0) {
-          const frData = originalTableResponse.data[0];
-          console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record in original table`);
-
-          const originalHtmlContent = frData.html || frData.func_html || null;
+        if (!error && data && data.length > 0) {
+          const frData = data[0];
+          console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record directly in frd table`);
+          const htmlContent = frData.frd_html || frData.html || frData.func_html || null;
           return {
             source: 'supabase',
             error: null,
-            data: { ...frData, html: originalHtmlContent }
+            data: { ...frData, html: htmlContent }
           };
+        } else {
+          console.log(`[SUPABASE FUNCTIONAL] Direct ID query in frd table failed: ${error?.message || 'No data'}`);
         }
-      } else if (fallbackResponse.data && fallbackResponse.data.length > 0) {
-        const frData = fallbackResponse.data[0];
-        console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record in frd table with project_id=${functionalId}`);
-        const htmlContent = frData.frd_html || frData.html || null;
-        return {
-          source: 'supabase',
-          error: null,
-          data: { ...frData, html: htmlContent }
-        };
+      } catch (directError) {
+        console.error(`[SUPABASE FUNCTIONAL] Exception during direct lookup:`, directError);
       }
     }
 
-    if (data && data.length > 0) {
-      const frData = data[0];
-      console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record directly in frd table`);
-      const htmlContent = frData.frd_html || frData.html || frData.func_html || null;
-      return {
-        source: 'supabase',
-        error: null,
-        data: { ...frData, html: htmlContent }
-      };
-    }
+    // Broad search fallback
+    console.log(`[SUPABASE FUNCTIONAL] Trying alternative lookup strategies...`);
 
-    // Last resort: find by project_id or prd_id
     try {
       console.log(`[SUPABASE FUNCTIONAL] Last resort: Trying to find matching FRD for idea ${ideaId}`);
       const { pool } = await import('./db');
@@ -349,15 +344,22 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
       console.log(`[SUPABASE FUNCTIONAL] Fallback identifiers: project_id=${pId || 'none'}, prd_id=${prdId || 'none'}`);
 
       if (pId) {
+        console.log(`[SUPABASE FUNCTIONAL] Trying fallback by project_id=${pId}`);
         const { data, error } = await supabase
           .from('frd')
           .select('*')
           .eq('project_id', pId)
-          .single();
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
+          const frData = data[0];
           console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found FRD by project_id=${pId}`);
-          return { source: 'supabase', error: null, data: { ...data, html: data.frd_html || data.html || '' } };
+          return {
+            source: 'supabase',
+            error: null,
+            data: { ...frData, html: frData.frd_html || frData.html || '' }
+          };
         }
       }
 
@@ -367,13 +369,41 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
           .from('frd')
           .select('*')
           .eq('prd_id', prdId)
-          .single();
+          .order('created_at', { ascending: false })
+          .limit(1);
 
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
+          const frData = data[0];
           console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found FRD by prd_id=${prdId}`);
-          return { source: 'supabase', error: null, data: { ...data, html: data.frd_html || data.html || '' } };
+          return {
+            source: 'supabase',
+            error: null,
+            data: { ...frData, html: frData.frd_html || frData.html || '' }
+          };
         }
       }
+
+      // Try original functional_requirements table as absolute last resort
+      if (functionalId) {
+        console.log(`[SUPABASE FUNCTIONAL] Trying absolute last resort: functional_requirements table with ID=${functionalId}`);
+        const { data, error } = await supabase
+          .from('functional_requirements')
+          .select('*')
+          .eq('id', functionalId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!error && data && data.length > 0) {
+          const frData = data[0];
+          console.log(`[SUPABASE FUNCTIONAL] ✓ Success! Found record in original table`);
+          return {
+            source: 'supabase',
+            error: null,
+            data: { ...frData, html: frData.html || frData.func_html || '' }
+          };
+        }
+      }
+
     } catch (broadError) {
       console.error(`[SUPABASE FUNCTIONAL] Error in broad search:`, broadError);
     }
@@ -497,21 +527,23 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
             .from('brd')
             .select('*')
             .eq(match.field, brdId)
-            .single();
+            .order('created_at', { ascending: false })
+            .limit(1);
 
-          if (!error && data) {
+          if (!error && data && data.length > 0) {
+            const brData = data[0];
             console.log(`[SUPABASE BRD] ✓ Success! Found record with ${match.name}=${brdId}`);
 
             // Find HTML content in the response
-            const htmlContent = data.brd_html || data.html || null;
+            const htmlContent = brData.brd_html || brData.html || null;
 
             if (htmlContent) {
               return {
                 source: 'supabase',
                 data: {
-                  ...data,
+                  ...brData,
                   html: htmlContent,
-                  brd_html: data.brd_html || null
+                  brd_html: brData.brd_html || null
                 }
               };
             }

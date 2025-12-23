@@ -217,6 +217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let prdId = null;
       let brdId = null;
       let projectId = null;
+      let leanCanvasId = null;
 
 
       // Get the lean canvas ID
@@ -224,6 +225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
         if (canvas && canvas.projectId) {
           projectId = canvas.projectId;
+          leanCanvasId = canvas.id;
           console.log(`Found project ID: ${projectId}`);
         }
       } catch (canvasError) {
@@ -237,6 +239,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (prdDoc && prdDoc.externalId) {
           prdId = prdDoc.externalId;
           console.log(`Found PRD ID: ${prdId}`);
+        } else {
+          console.log(`PRD externalId missing locally, trying one-time fallback lookup`);
+          const { fetchProjectRequirements } = await import('./supabase');
+          const prdRes = await fetchProjectRequirements('', ideaId, userId);
+          if (prdRes && prdRes.id) {
+            prdId = prdRes.id;
+            console.log(`Found PRD ID via fallback lookup: ${prdId}`);
+            // Update local database if record exists
+            if (prdDoc) {
+              await storage.updateDocument(prdDoc.id, { externalId: prdId });
+            }
+          }
         }
       } catch (prdError) {
         console.error("Error getting PRD ID:", prdError);
@@ -249,6 +263,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (brdDoc && brdDoc.externalId) {
           brdId = brdDoc.externalId;
           console.log(`Found BRD ID: ${brdId}`);
+        } else {
+          // If not in database, try a one-time lookup in Supabase
+          console.log(`BRD externalId missing locally, trying one-time fallback lookup`);
+          const { fetchBusinessRequirements } = await import('./supabase');
+          const brdRes = await fetchBusinessRequirements('', ideaId, req.user!.id);
+          if (brdRes && brdRes.data && brdRes.data.id) {
+            brdId = brdRes.data.id;
+            console.log(`Found BRD ID via fallback lookup: ${brdId}`);
+            // Proactively update our database if we have a document record
+            const existingBrd = await storage.getDocumentByType(ideaId, 'BusinessRequirements');
+            if (existingBrd) {
+              await storage.updateDocument(existingBrd.id, {
+                externalId: brdId,
+                html: brdRes.data.html || existingBrd.html,
+                status: (brdRes.data.html && brdRes.data.html.length > 0) ? 'Completed' : existingBrd.status
+              });
+            }
+          }
         }
       } catch (brdError) {
         console.error("Error getting BRD ID:", brdError);
@@ -267,6 +299,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const webhookBody = {
         ideaId,
+        leancanvas_id: leanCanvasId,
         documentId: document.id,
         prd_id: prdId,
         project_id: projectId,
@@ -464,9 +497,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let prdId;
       try {
         const prdDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
-        if (prdDocument) {
+        if (prdDocument && prdDocument.externalId) {
           prdId = prdDocument.externalId;
           console.log(`Found PRD with externalId ${prdId} for idea ${ideaId}`);
+        } else {
+          // If not in database, try fallback lookup
+          console.log(`PRD externalId missing locally, trying fallback lookup`);
+          const { fetchProjectRequirements } = await import('./supabase');
+          const prdRes = await fetchProjectRequirements('', ideaId, req.user!.id);
+          if (prdRes && prdRes.id) {
+            prdId = prdRes.id;
+            console.log(`Found PRD ID via fallback lookup: ${prdId}`);
+            if (prdDocument) {
+              await storage.updateDocument(prdDocument.id, { externalId: prdId });
+            }
+          }
         }
       } catch (error: any) {
         console.error('Error getting PRD document:', error);
@@ -799,10 +844,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`BRD Handler: Found HTML content in Supabase (${brdResponse.data.html.length} chars)`);
 
 
-              // Update document with the retrieved HTML
+              // Update document with the retrieved HTML and the found externalId
               await storage.updateDocument(document.id, {
                 html: brdResponse.data.html,
                 status: "Completed",
+                externalId: brdResponse.data.id, // Persist the ID found via fallback
                 updatedAt: new Date()
               });
 
@@ -846,6 +892,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               await storage.updateDocument(document.id, {
                 html: frdResponse.data.html,
                 status: "Completed",
+                externalId: frdResponse.data.id, // Persist the ID found via fallback
                 updatedAt: new Date()
               });
 
