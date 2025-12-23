@@ -38,13 +38,12 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
 
                 // Auto-fix logic: If we have HTML but status is not Completed
                 if (data.html && data.status !== 'Completed') {
-                    console.log(`[${documentType}] Found HTML but status is ${data.status} - fixing...`);
+                    console.log(`[${documentType}] Auto-fixing status: Found HTML but status is ${data.status}`);
                     await updateStatus(data.id, 'Completed');
-                    // Refetch to get clean state
-                    const retryResponse = await fetch(`/api/ideas/${ideaId}/documents/${documentType}`);
-                    if (retryResponse.ok) {
-                        setDocument(await retryResponse.json());
-                    }
+                    // Update local state immediately to avoid UI flicker
+                    setDocument(prev => prev ? { ...prev, status: 'Completed' as any } : null);
+                    setIsGenerating(false);
+                    setIsTimedOut(false);
                 }
             } else {
                 setDocument(null);
@@ -58,7 +57,7 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
 
     const updateStatus = async (docId: number, status: string) => {
         try {
-            await fetch(`/api/ideas/${ideaId}/documents/${documentType}`, {
+            await fetch(`/api/ideas/${ideaId}/documents/${docId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status })

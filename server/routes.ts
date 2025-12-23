@@ -447,9 +447,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get data from lean canvas
       let projectId;
+      let leanCanvasId;
       try {
         const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
         if (canvas) {
+          leanCanvasId = canvas.id;
           projectId = canvas.projectId;
           console.log(`Found projectId ${projectId} for idea ${ideaId}`);
         }
@@ -495,6 +497,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const webhookPayload = {
         ideaId,
         project_id: projectId,
+        leancanvas_id: leanCanvasId,
         prd_id: prdId,
         instructions: instructions || "Be comprehensive and detailed."
       };
@@ -637,6 +640,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get a specific document by type
   app.get("/api/ideas/:id/documents/:type", isAuthenticated, async (req, res, next) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+      res.setHeader('Surrogate-Control', 'no-store');
+
       const ideaId = parseInt(req.params.id);
 
       const documentType = req.params.type as DocumentType;
@@ -659,20 +667,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           if (!htmlContent) {
             console.log(`[LeanCanvas] Local html is null, fetching from Supabase...`);
             try {
+              const { fetchLeanCanvasData } = await import('./supabase');
               const supabaseCanvas = await fetchLeanCanvasData(ideaId, req.user!.id);
               if (supabaseCanvas && supabaseCanvas.html) {
                 htmlContent = supabaseCanvas.html;
                 console.log(`[LeanCanvas] Found HTML in Supabase: ${htmlContent?.length || 0} chars`);
 
-                // Optionally sync back to local DB
+                // Sync back to local DB
                 try {
                   await storage.updateLeanCanvas(ideaId, { html: htmlContent });
                   console.log(`[LeanCanvas] Synced HTML back to local database`);
                 } catch (syncError) {
                   console.warn(`[LeanCanvas] Failed to sync HTML to local DB:`, syncError);
                 }
-              } else {
-                console.log(`[LeanCanvas] No HTML found in Supabase either`);
               }
             } catch (supabaseError) {
               console.warn(`[LeanCanvas] Error fetching from Supabase:`, supabaseError);
@@ -704,6 +711,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!document) {
         return res.status(200).json(null); // Return null instead of 404 to handle case where document doesn't exist yet
       }
+
+      console.log(`[DOC FETCH] Idea ${ideaId}, Type ${documentType}, Status ${document.status}, externalId: ${document.externalId || 'MISSING'}`);
 
 
       // Special handling for Project Requirements if they're in Generating state with an externalId
@@ -761,8 +770,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      // Special handling for Business Requirements document with an externalId
-      if (documentType === "BusinessRequirements" && document.externalId) {
+      // Special handling for Business Requirements document
+      // We also check if externalId is missing because fetchBusinessRequirements has fallback logic
+      if (documentType === "BusinessRequirements") {
         try {
           console.log(`BRD Handler: Checking Business Requirements document with externalId ${document.externalId}`);
 
@@ -772,29 +782,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const shouldFetchContent =
             (document.status === "Completed" && (!document.html || document.html.length === 0)) ||
             (document.status === "Generating" && document.generationStartedAt &&
-              ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10));
+              ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10)) ||
+            (document.status === "Generating" && !document.externalId); // Also try if externalId is missing
 
 
           if (shouldFetchContent) {
-            console.log(`BRD Handler: Attempting direct Supabase lookup for BRD ID ${document.externalId}`);
+            console.log(`BRD Handler: Attempting robust Supabase lookup for ideaId ${ideaId} (externalId: ${document.externalId || 'none'})`);
 
 
-            // Direct lookup using our known working method
-            const { supabase } = await import('./supabase');
-            const { data, error } = await supabase
-              .from('brd')
-              .select('*')
-              .eq('id', document.externalId)
-              .single();
+            // Use robust helper method instead of direct query
+            const { fetchBusinessRequirements } = await import('./supabase');
+            const brdResponse = await fetchBusinessRequirements(document.externalId || '', ideaId, req.user!.id);
 
 
-            if (!error && data && data.brd_html) {
-              console.log(`BRD Handler: Found HTML content (${data.brd_html.length} chars)`);
+            if (brdResponse && brdResponse.data && brdResponse.data.html) {
+              console.log(`BRD Handler: Found HTML content in Supabase (${brdResponse.data.html.length} chars)`);
 
 
               // Update document with the retrieved HTML
               await storage.updateDocument(document.id, {
-                html: data.brd_html,
+                html: brdResponse.data.html,
                 status: "Completed",
                 updatedAt: new Date()
               });
@@ -805,9 +812,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`BRD Handler: Returning updated document with HTML content`);
               return res.status(200).json(updatedDocument);
             } else {
-              console.log(error ?
-                `BRD Handler: Supabase error: ${error.message}` :
-                `BRD Handler: No HTML content found in Supabase data`);
+              console.log(`BRD Handler: No HTML content found via fetchBusinessRequirements`);
             }
           }
         } catch (brdError) {
@@ -816,16 +821,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
 
-        // Check if generation has timed out (2 minutes)
-        if (document.status === "Generating" && document.generationStartedAt) {
-          const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-          if (new Date(document.generationStartedAt) < twoMinutesAgo) {
-            console.log(`Business Requirements generation timed out for document ${document.id}`);
-            // Still return the document as is - client will display retry button
+      }
+
+
+      // Special handling for Functional Requirements document
+      if (documentType === "FunctionalRequirements") {
+        try {
+          console.log(`FRD Handler: Checking Functional Requirements document with externalId ${document.externalId}`);
+
+          const shouldFetchContent =
+            (document.status === "Completed" && (!document.html || document.html.length === 0)) ||
+            (document.status === "Generating" && document.generationStartedAt &&
+              ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10)) ||
+            (document.status === "Generating" && !document.externalId); // Also try if externalId is missing
+
+          if (shouldFetchContent) {
+            console.log(`FRD Handler: Attempting robust Supabase lookup for ideaId ${ideaId} (externalId: ${document.externalId || 'none'})`);
+            const { fetchFunctionalRequirements } = await import('./supabase');
+            const frdResponse = await fetchFunctionalRequirements(document.externalId || '', ideaId, req.user!.id);
+
+            if (frdResponse && frdResponse.data && frdResponse.data.html) {
+              console.log(`FRD Handler: Found HTML content in Supabase (${frdResponse.data.html.length} chars)`);
+
+              await storage.updateDocument(document.id, {
+                html: frdResponse.data.html,
+                status: "Completed",
+                updatedAt: new Date()
+              });
+
+              const updatedDocument = await storage.getDocumentById(document.id);
+              console.log(`FRD Handler: Returning updated document with HTML content`);
+              return res.status(200).json(updatedDocument);
+            } else {
+              console.log(`FRD Handler: No HTML content found via fetchFunctionalRequirements`);
+            }
           }
+        } catch (frdError) {
+          console.error(`Error fetching Functional Requirements from Supabase:`, frdError);
         }
       }
 
+
+      // Check if generation has timed out (2 minutes)
+      if (document.status === "Generating" && document.generationStartedAt) {
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+        if (new Date(document.generationStartedAt) < twoMinutesAgo) {
+          console.log(`${documentType} generation timed out for document ${document.id}`);
+        }
+      }
 
       res.status(200).json(document);
     } catch (error: any) {
@@ -2662,15 +2705,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`✓ Document found with ID ${document.id}, status ${document.status}, externalId: ${document.externalId || 'none'}`);
 
 
-      // If document is still generating, return early
-      if (document.status === 'Generating') {
-        console.log(`⏳ Document is still in generating state, returning as-is`);
-        return res.json({
-          source: "local",
-          data: document,
-          message: "Document is still generating"
-        });
-      }
+      // If document is generating, we still attempt to fetch from Supabase
+      // below, especially if some time has passed.
 
 
       // Use the external ID from the query if provided, otherwise use the one from the document
