@@ -2182,6 +2182,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/ideas/:id/generate-ultimate-website", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+
+      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+
+      const project_id = leanCanvas?.projectId;
+      const leancanvas_id = leanCanvas?.id;
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      if (Number(idea.userId) !== Number(req.user!.id)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      // TODO: Implement this once the database is updated
+      //const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
+
+      //if (ultimateWebsite) {
+      //  return res.status(400).json({ message: "Ultimate website already exists" });
+      //}
+
+      const ultimateWebsiteWebhookURL: string = process.env.ULTIMATE_WEBSITE_WEBHOOK_URL || "";
+
+      const response = await fetch(ultimateWebsiteWebhookURL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ "project_id": project_id, "leancanvas_id": leancanvas_id }),
+      });
+
+      const responseText = await response.text();
+      let data;
+      try {
+        data = responseText ? JSON.parse(responseText) : {};
+      } catch (parseError) {
+        console.error("Error parsing webhook response:", parseError);
+        // Fallback or explicit error handling
+        return res.status(502).json({ message: "Invalid response from webhook", rawResponse: responseText });
+      }
+
+      console.log(data);
+      return res.status(200).json(data);
+
+      // TODO: I need to call the ultimate website generator and wait for a response. The response will get a task id.
+      //       The website is hosted on 192.168.1.65:8008/demo/{task_id}
+      //       The task_id will be stored in the database
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  app.get("/api/ideas/:id/ultimate-website", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      // TODO: I need to call the ultimate website generator and wait for a response. The response will get a task id.
+      //       The website is hosted on 192.168.1.65:8008/demo/{task_id}
+      //       The task_id will be stored in the database
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
 
   // Direct BRD viewer endpoint with HTML embedded for visualization
   app.get("/api/debug/brd-viewer/:external_id", isAuthenticated, async (req, res) => {
