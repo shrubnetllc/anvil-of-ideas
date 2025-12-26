@@ -2246,13 +2246,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Idea not found" });
       }
 
-      if (idea.userId !== req.user!.id) {
+      if (Number(idea.userId) !== Number(req.user!.id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      // TODO: I need to call the ultimate website generator and wait for a response. The response will get a task id.
-      //       The website is hosted on 192.168.1.65:8008/demo/{task_id}
-      //       The task_id will be stored in the database
+      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
+      if (!ultimateWebsite) {
+        return res.status(404).json({ message: "Ultimate website not found" });
+      }
+      return res.status(200).json(ultimateWebsite);
     } catch (error: any) {
       next(error);
     }

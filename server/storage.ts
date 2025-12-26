@@ -56,6 +56,9 @@ export interface IStorage {
   verifyEmail(userId: number, token: string): Promise<boolean>;
   isEmailVerified(userId: number): Promise<boolean>;
 
+  //Ultimate Website operations
+  getUltimateWebsiteByIdeaId(ideaId: number): Promise<string | undefined>;
+
   // Session store
   sessionStore: any; // Using 'any' type for sessionStore to avoid type errors
 }
@@ -595,6 +598,18 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(eq(users.id, userId));
     return user?.emailVerified === "true";
   }
+  async getUltimateWebsiteByIdeaId(ideaId: number): Promise<string | undefined> {
+    try {
+      const [data] = await db.select()
+        .from(ideas)
+        .where(eq(ideas.id, ideaId));
+
+      return data?.websiteUrl || undefined;
+    } catch (error) {
+      console.error("Error fetching ultimate website:", error);
+      return undefined;
+    }
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -998,6 +1013,11 @@ export class MemStorage implements IStorage {
 
   async deleteDocument(id: number): Promise<void> {
     this.documents.delete(id);
+  }
+
+  async getUltimateWebsiteByIdeaId(ideaId: number): Promise<string | undefined> {
+    const idea = this.ideas.get(ideaId);
+    return idea?.websiteUrl || undefined;
   }
 }
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,23 @@ export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
     const [isLoading, setIsLoading] = useState(false);
     const [iframeUrl, setIframeUrl] = useState<string | null>(null);
 
+    useEffect(() => {
+        async function fetchUltimateWebsite() {
+            try {
+                const response = await fetch(`/api/ideas/${ideaId}/ultimate-website`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data) {
+                        setIframeUrl(`${import.meta.env.VITE_ULTIMATE_WEBSITE_GENERATOR_URL || 'http://localhost:8008'}/demo/${data}`);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching ultimate website:", error);
+            }
+        }
+        fetchUltimateWebsite();
+    }, [ideaId]);
+
     async function generateUltimateWebsite() {
         try {
             setIsLoading(true);
@@ -21,7 +38,7 @@ export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
                 method: "POST",
             });
             const data = await response.json();
-            setIframeUrl(`${process.env.ULTIMATE_WEBSITE_GENERATOR_URL}/demo/${data.task_id}`);
+            setIframeUrl(`${import.meta.env.VITE_ULTIMATE_WEBSITE_GENERATOR_URL || 'http://localhost:8008'}/demo/${data.task_id}`);
         } catch (error) {
             console.error("Error generating ultimate website:", error);
         } finally {
