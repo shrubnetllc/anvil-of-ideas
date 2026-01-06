@@ -2199,40 +2199,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (Number(idea.userId) !== Number(req.user!.id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
-      // TODO: Implement this once the database is updated
-      //const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
 
-      //if (ultimateWebsite) {
-      //  return res.status(400).json({ message: "Ultimate website already exists" });
-      //}
+      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
+
+      if (ultimateWebsite) {
+        return res.status(400).json({ message: "Ultimate website already exists" });
+      }
 
       const ultimateWebsiteWebhookURL: string = process.env.ULTIMATE_WEBSITE_WEBHOOK_URL || "";
 
+      // Call the webhook which now handles the entire process including DB updates
+      // The webhook is expected to respond immediately to acknowledge receipt
       const response = await fetch(ultimateWebsiteWebhookURL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ "project_id": project_id, "leancanvas_id": leancanvas_id }),
+        // idea_id added so webhook knows which idea to update
+        body: JSON.stringify({ "project_id": project_id, "leancanvas_id": leancanvas_id, "idea_id": ideaId }),
       });
 
-      const responseText = await response.text();
-      let data;
-      try {
-        data = responseText ? JSON.parse(responseText) : {};
-      } catch (parseError) {
-        console.error("Error parsing webhook response:", parseError);
-        // Fallback or explicit error handling
-        return res.status(502).json({ message: "Invalid response from webhook", rawResponse: responseText });
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(`Webhook failed with status ${response.status}: ${text.substring(0, 200)}`);
+        return res.status(response.status).json({
+          message: "Failed to trigger generation workflow",
+          details: text.substring(0, 200)
+        });
       }
 
-      console.log(data);
-      return res.status(200).json(data);
-
-      // TODO: I need to call the ultimate website generator and wait for a response. The response will get a task id.
-      //       The website is hosted on 192.168.1.65:8008/demo/{task_id}
-      //       The task_id will be stored in the database
+      // Success - the webhook is running and will update the DB when done
+      return res.status(200).json({ message: "Ultimate website generation started" });
     } catch (error: any) {
+      console.error("Error triggering ultimate website generation:", error);
       next(error);
     }
   });
