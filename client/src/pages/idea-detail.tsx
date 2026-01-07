@@ -16,6 +16,7 @@ import { LeanCanvasTab } from "@/components/idea-detail-tabs/lean-canvas-tab";
 import { DocumentsOverviewTab } from "@/components/idea-detail-tabs/documents-overview-tab";
 import { IdeaDocumentTab } from "@/components/idea-detail-tabs/idea-document-tab";
 import { IdeaDetailsTab } from "@/components/idea-detail-tabs/idea-details-tab";
+import { UltimateWebsiteTab } from "@/components/idea-detail-tabs/ultimate-website-tab";
 
 export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();
@@ -193,6 +194,7 @@ export default function IdeaDetail() {
                       <TabsTrigger value="marketing" className="text-sm">Marketing</TabsTrigger>
                       <TabsTrigger value="pitchdeck" className="text-sm">Pitch Deck</TabsTrigger>
                       <TabsTrigger value="estimate" className="text-sm">Estimate</TabsTrigger>
+                      <TabsTrigger value="ultimate-website" className="text-sm">Ultimate Website</TabsTrigger>
                       <TabsTrigger value="details" className="text-sm">
                         <div className="flex items-center">
                           <Info className="h-4 w-4 mr-1" />
@@ -272,6 +274,9 @@ export default function IdeaDetail() {
                         <h3 className="text-lg font-bold text-neutral-900 mb-2">Cost Estimate</h3>
                         <p className="text-neutral-600">Coming soon...</p>
                       </div>
+                    </TabsContent>
+                    <TabsContent value="ultimate-website" className="mt-6">
+                      <UltimateWebsiteTab ideaId={ideaId} />
                     </TabsContent>
                   </Tabs>
                 </div>

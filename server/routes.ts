@@ -2182,6 +2182,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/ideas/:id/generate-ultimate-website", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+
+      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+
+      const project_id = leanCanvas?.projectId;
+      const leancanvas_id = leanCanvas?.id;
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      if (Number(idea.userId) !== Number(req.user!.id)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
+
+      if (ultimateWebsite) {
+        return res.status(400).json({ message: "Ultimate website already exists" });
+      }
+
+      const ultimateWebsiteWebhookURL: string = process.env.ULTIMATE_WEBSITE_WEBHOOK_URL || "";
+
+      // Call the webhook which now handles the entire process including DB updates
+      // The webhook is expected to respond immediately to acknowledge receipt
+      const response = await fetch(ultimateWebsiteWebhookURL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        // idea_id added so webhook knows which idea to update
+        body: JSON.stringify({ "project_id": project_id, "leancanvas_id": leancanvas_id, "idea_id": ideaId }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(`Webhook failed with status ${response.status}: ${text.substring(0, 200)}`);
+        return res.status(response.status).json({
+          message: "Failed to trigger generation workflow",
+          details: text.substring(0, 200)
+        });
+      }
+
+      // Success - the webhook is running and will update the DB when done
+      return res.status(200).json({ message: "Ultimate website generation started" });
+    } catch (error: any) {
+      console.error("Error triggering ultimate website generation:", error);
+      next(error);
+    }
+  });
+
+  app.get("/api/ideas/:id/ultimate-website", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const idea = await storage.getIdeaById(ideaId);
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      if (Number(idea.userId) !== Number(req.user!.id)) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+
+      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
+      if (!ultimateWebsite) {
+        return res.status(404).json({ message: "Ultimate website not found" });
+      }
+      return res.status(200).json(ultimateWebsite);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
 
   // Direct BRD viewer endpoint with HTML embedded for visualization
   app.get("/api/debug/brd-viewer/:external_id", isAuthenticated, async (req, res) => {
