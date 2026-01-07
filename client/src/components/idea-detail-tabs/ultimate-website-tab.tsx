@@ -1,50 +1,65 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, Copy, FileText, Hammer, Flame, AlertTriangle, RotateCcw } from "lucide-react";
-import { formatDate, copyHtmlToClipboard } from "@/lib/utils";
+import { Hammer, Flame } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 interface UltimateWebsiteTabProps {
     ideaId: number;
 }
 
 export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
-    const [isLoading, setIsLoading] = useState(false);
-    const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+    const queryClient = useQueryClient();
+    // This state tracks if we are actively waiting for the webhook to finish
+    const [isWaitingForWebhook, setIsWaitingForWebhook] = useState(false);
 
-    useEffect(() => {
-        async function fetchUltimateWebsite() {
+    // Fetch the ultimate website URL
+    const { data: websiteUrl, isError, error } = useQuery({
+        queryKey: [`/api/ideas/${ideaId}/ultimate-website`],
+        queryFn: async () => {
             try {
-                const response = await fetch(`/api/ideas/${ideaId}/ultimate-website`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data) {
-                        setIframeUrl(`${import.meta.env.VITE_ULTIMATE_WEBSITE_GENERATOR_URL || 'http://localhost:8008'}/demo/${data}`);
-                    }
-                }
-            } catch (error) {
-                console.error("Error fetching ultimate website:", error);
+                const res = await fetch(`/api/ideas/${ideaId}/ultimate-website`);
+                if (res.status === 404) return null; // Not found yet is expected
+                if (!res.ok) throw new Error("Failed to fetch");
+                return await res.json();
+            } catch (e) {
+                // treating 404 as null
+                return null;
             }
-        }
-        fetchUltimateWebsite();
-    }, [ideaId]);
+        },
+        // Poll every 30 seconds if we are waiting for the webhook
+        refetchInterval: isWaitingForWebhook ? 30000 : false,
+        // Stop polling if we got a result or if there's a hard error
+        enabled: true
+    });
 
-    async function generateUltimateWebsite() {
-        try {
-            setIsLoading(true);
-            const response = await fetch(`/api/ideas/${ideaId}/generate-ultimate-website`, {
-                method: "POST",
-            });
-            const data = await response.json();
-            setIframeUrl(`${import.meta.env.VITE_ULTIMATE_WEBSITE_GENERATOR_URL || 'http://localhost:8008'}/demo/${data.task_id}`);
-        } catch (error) {
-            console.error("Error generating ultimate website:", error);
-        } finally {
-            setIsLoading(false);
+    // Effect to stop waiting once we get a URL
+    useEffect(() => {
+        if (websiteUrl) {
+            setIsWaitingForWebhook(false);
         }
-    }
+    }, [websiteUrl]);
+
+    const generateMutation = useMutation({
+        mutationFn: async () => {
+            const res = await apiRequest("POST", `/api/ideas/${ideaId}/generate-ultimate-website`);
+            return res.json();
+        },
+        onSuccess: () => {
+            // Start waiting/polling
+            setIsWaitingForWebhook(true);
+            // Invalidate to trigger an immediate check
+            queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}/ultimate-website`] });
+        },
+        onError: (err) => {
+            console.error("Error generating ultimate website:", err);
+            setIsWaitingForWebhook(false);
+        }
+    });
+
+    const isLoading = generateMutation.isPending || isWaitingForWebhook;
+
+    const iframeUrl = `${import.meta.env.VITE_ULTIMATE_WEBSITE_GENERATOR_URL || 'http://localhost:8008'}/demo/${websiteUrl}`;
 
     return (
         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
@@ -52,17 +67,23 @@ export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
                 <h3 className="text-lg font-bold text-neutral-900">Ultimate Website</h3>
                 <Button
                     variant="outline" size="sm"
-                    onClick={generateUltimateWebsite}
-                    disabled={isLoading}
+                    onClick={() => generateMutation.mutate()}
+                    disabled={isLoading || !!iframeUrl}
                 >
-                    <Hammer className="mr-2 h-4 w-4" /> Generate Ultimate Website </Button>
+                    <Hammer className="mr-2 h-4 w-4" />
+                    {!!iframeUrl ? "Regenerate Website" : "Generate Ultimate Website"}
+                </Button>
             </div>
-            <div className="flex items-center justify-between mb-4">
-                <p>Your Website will be generated here</p>
-            </div>
-            <div className="flex items-center justify-between mb-4">
-                {isLoading && (
-                    <div className="text-center py-8">
+
+            <div className="flex flex-col min-h-[200px]">
+                {!iframeUrl && !isLoading && (
+                    <div className="flex flex-col items-center justify-center text-neutral-500 py-12">
+                        <p>Your Website will be generated here</p>
+                    </div>
+                )}
+
+                {isLoading && !iframeUrl && (
+                    <div className="flex flex-col items-center justify-center py-12">
                         <div className="mb-4 mx-auto relative w-16 h-16">
                             <div className="absolute inset-0 flex items-center justify-center animate-pulse">
                                 <Flame className="h-14 w-14 text-amber-400" />
@@ -74,7 +95,7 @@ export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
                         <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
                             Forging Your Ultimate Website
                         </h4>
-                        <p className="text-neutral-600 mb-2">
+                        <p className="text-neutral-600 mb-2 text-center">
                             Please wait while we hammer out the Ultimate Website for your idea...
                         </p>
                         <p className="text-neutral-500 text-sm italic">
@@ -82,16 +103,15 @@ export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
                         </p>
                     </div>
                 )}
-            </div>
-            <div className="flex items-center justify-between mb-4">
+
                 {iframeUrl && (
                     <iframe
                         src={iframeUrl}
-                        style={{ width: "100%", height: "100vh", border: "none" }}
+                        className="w-full h-[800px] border-0 rounded-md shadow-sm"
                         loading="lazy"
                         referrerPolicy="no-referrer"
                         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-downloads"
-                    ></iframe>
+                    />
                 )}
             </div>
         </div>
