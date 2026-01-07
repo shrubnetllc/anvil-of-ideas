@@ -4,6 +4,9 @@ import ws from "ws";
 import 'dotenv/config';
 import * as schema from "@shared/schema";
 
+// Configure WebSocket for Node.js environment (required when running in Docker/server)                                                            
+neonConfig.webSocketConstructor = ws;
+
 if (!process.env.DATABASE_URL) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
