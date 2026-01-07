@@ -13,6 +13,7 @@ import { ProjectRequirementsTab } from "@/components/idea-detail-tabs/project-re
 import { BusinessRequirementsTab } from "@/components/idea-detail-tabs/business-requirements-tab";
 import { FunctionalRequirementsTab } from "@/components/idea-detail-tabs/functional-requirements-tab";
 import { LeanCanvasTab } from "@/components/idea-detail-tabs/lean-canvas-tab";
+import { WorkflowsTab } from "@/components/idea-detail-tabs/workflows-tab";
 import { DocumentsOverviewTab } from "@/components/idea-detail-tabs/documents-overview-tab";
 import { IdeaDocumentTab } from "@/components/idea-detail-tabs/idea-document-tab";
 import { IdeaDetailsTab } from "@/components/idea-detail-tabs/idea-details-tab";
@@ -240,10 +241,7 @@ export default function IdeaDetail() {
 
                     {/* Placeholders for other tabs */}
                     <TabsContent value="workflows" className="mt-6">
-                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
-                        <h3 className="text-lg font-bold text-neutral-900 mb-2">Workflows</h3>
-                        <p className="text-neutral-600">Coming soon...</p>
-                      </div>
+                      <WorkflowsTab ideaId={ideaId} />
                     </TabsContent>
                     <TabsContent value="frontend" className="mt-6">
                       <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">

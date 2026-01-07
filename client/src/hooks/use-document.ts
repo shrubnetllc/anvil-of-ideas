@@ -160,6 +160,12 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
                     url = `/api/ideas/${ideaId}/generate-functional-requirements`;
                     body = instructions ? { instructions } : {};
                     break;
+                case "Workflows":
+                    url = `/api/ideas/${ideaId}/workflows`;
+                    body = {
+                        projectId
+                    };
+                    break;
                 default:
                     throw new Error(`Generation not implemented for ${documentType}`);
             }

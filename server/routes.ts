@@ -7,6 +7,7 @@ import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema, insert
 import { fetchLeanCanvasData, fetchUserIdeas, fetchBusinessRequirements, fetchFunctionalRequirements } from "./supabase";
 import { emailService } from "./email";
 import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
+import { uuid } from "drizzle-orm/pg-core";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
@@ -617,6 +618,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error starting business requirements generation:", error);
+      next(error);
+    }
+  });
+
+  // Workflow routes
+  app.post("/api/ideas/:id/workflows", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const userId = req.user!.id;
+      const { workflowType, title } = req.body;
+
+
+      // Validate required fields
+      if (!workflowType || !title) {
+        return res.status(400).json({ message: "Missing required fields: workflowType, title" });
+      }
+
+
+      // Check if the user has permission to access this idea
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      // Create the workflow
+      //TODO: This is going to call the n8n workflows webhook which will return a response immediately.
+      //      Afterwards we will generate a jobId and store it in the database. 
+      //      The jobId will be used to track the progress of the workflow generation.
+      //      This function will return the jobId to the client.
+
+      const workflowsWebhookUrl: string = process.env.N8N_WF_VECTOR_WEBHOOK_URL || "";
+      const projectId: string | null | undefined = (await storage.getLeanCanvasByIdeaId(ideaId))?.projectId;
+
+      if (!projectId) {
+        return res.status(404).json({ message: "Lean Canvas not found" });
+      }
+
+      const username = process.env.N8N_AUTH_USERNAME;
+      const password = process.env.N8N_AUTH_PASSWORD;
+      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+
+      const response = await fetch(workflowsWebhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": authHeader
+        },
+        body: JSON.stringify({
+          "project_id": projectId
+        })
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).json({ message: "Failed to create workflow" });
+      }
+
+      const job = await storage.addWorkflowJobId(ideaId, userId, projectId, "Started");
+
+      // Return the created workflow
+      return res.status(201).json({
+        message: "Workflow generation started",
+        jobId: job.id
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  app.get("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const jobId = req.params.id;
+      const job = await storage.getWorkflowJobById(jobId);
+      return res.status(200).json(job);
+    } catch (error: any) {
       next(error);
     }
   });
