@@ -48,6 +48,8 @@ export interface IStorage {
   updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void>;
   deleteDocument(id: number): Promise<void>;
   addWorkflowJobId(ideaId: number, userId: number, projectId: string, status: string): Promise<any>;
+  getWorkflowJobById(id: string): Promise<any>;
+  getLatestWorkflowJob(ideaId: number): Promise<any>;
 
   // App Settings operations
   getSetting(key: string): Promise<string | null>;
@@ -623,12 +625,27 @@ export class DatabaseStorage implements IStorage {
       return null;
     }
   }
+
   async getWorkflowJobById(id: string): Promise<any> {
     try {
-      const [data] = await db.select().from(jobs).where(eq(jobs.id, id));
-      return data;
+      // id is uuid from schema
+      const result = await db.select().from(jobs).where(eq(jobs.id, id));
+      return result[0] || null;
     } catch (error) {
-      console.error("Error fetching workflow job by ID:", error);
+      console.error("Error getting workflow job by ID:", error);
+      return null;
+    }
+  }
+
+  async getLatestWorkflowJob(ideaId: number): Promise<any> {
+    try {
+      const result = await db.select().from(jobs)
+        .where(eq(jobs.ideaId, ideaId))
+        .orderBy(desc(jobs.createdAt))
+        .limit(1);
+      return result[0] || null;
+    } catch (error) {
+      console.error("Error getting latest workflow job:", error);
       return null;
     }
   }
@@ -1058,6 +1075,18 @@ export class MemStorage implements IStorage {
     this.jobs.set(job.id, job);
     return job;
   }
+
+  async getWorkflowJobById(id: string): Promise<any> {
+    return this.jobs.get(id) || null;
+  }
+
+  async getLatestWorkflowJob(ideaId: number): Promise<any> {
+    const jobs = Array.from(this.jobs.values())
+      .filter(j => j.ideaId === ideaId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return jobs[0] || null;
+  }
+
 
 }
 

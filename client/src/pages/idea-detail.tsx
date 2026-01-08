@@ -18,6 +18,9 @@ import { DocumentsOverviewTab } from "@/components/idea-detail-tabs/documents-ov
 import { IdeaDocumentTab } from "@/components/idea-detail-tabs/idea-document-tab";
 import { IdeaDetailsTab } from "@/components/idea-detail-tabs/idea-details-tab";
 import { UltimateWebsiteTab } from "@/components/idea-detail-tabs/ultimate-website-tab";
+import { FrontendTab } from "@/components/idea-detail-tabs/frontend-tab";
+import { BackendTab } from "@/components/idea-detail-tabs/backend-tab";
+import { EstimateTab } from "@/components/idea-detail-tabs/estimate-tab";
 
 export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();
@@ -244,16 +247,10 @@ export default function IdeaDetail() {
                       <WorkflowsTab ideaId={ideaId} />
                     </TabsContent>
                     <TabsContent value="frontend" className="mt-6">
-                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
-                        <h3 className="text-lg font-bold text-neutral-900 mb-2">Front End Specification</h3>
-                        <p className="text-neutral-600">Coming soon...</p>
-                      </div>
+                      <FrontendTab ideaId={ideaId} />
                     </TabsContent>
                     <TabsContent value="backend" className="mt-6">
-                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
-                        <h3 className="text-lg font-bold text-neutral-900 mb-2">Back End Specification</h3>
-                        <p className="text-neutral-600">Coming soon...</p>
-                      </div>
+                      <BackendTab ideaId={ideaId} />
                     </TabsContent>
                     <TabsContent value="marketing" className="mt-6">
                       <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
@@ -268,10 +265,7 @@ export default function IdeaDetail() {
                       </div>
                     </TabsContent>
                     <TabsContent value="estimate" className="mt-6">
-                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
-                        <h3 className="text-lg font-bold text-neutral-900 mb-2">Cost Estimate</h3>
-                        <p className="text-neutral-600">Coming soon...</p>
-                      </div>
+                      <EstimateTab ideaId={ideaId} />
                     </TabsContent>
                     <TabsContent value="ultimate-website" className="mt-6">
                       <UltimateWebsiteTab ideaId={ideaId} />

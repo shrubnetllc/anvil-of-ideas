@@ -722,3 +722,65 @@ export async function fetchUserIdeas(userId: number, requestingUserId?: number) 
     throw error;
   }
 }
+
+/**
+ * Fetch project workflows data from Supabase
+ * @param projectId The project ID to fetch workflows for
+ */
+export async function fetchProjectWorkflows(projectId: string) {
+  try {
+    console.log(`Fetching project workflows for project ID ${projectId} from Supabase`);
+
+    const { data, error } = await supabase
+      .from('project_workflows')
+      .select('step_name, backend, workflow_step, step_number')
+      .eq('project_id', projectId)
+      .order('step_number', { ascending: true });
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      console.log(`No workflows found for project ${projectId} in Supabase`);
+      return [];
+    }
+
+    console.log(`Supabase returned ${data.length} workflow steps`);
+    return data;
+  } catch (error) {
+    console.error('Error fetching project workflows from Supabase:', error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch project estimate data from Supabase
+ * @param projectId The project ID to fetch estimate for
+ */
+export async function fetchProjectEstimate(projectId: string) {
+  try {
+    console.log(`Fetching project estimate for project ID ${projectId} from Supabase`);
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('estimate, estimate_md, est_json')
+      .eq('id', projectId)
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      console.log(`No project found for ID ${projectId} in Supabase`);
+      return null;
+    }
+
+    console.log(`Supabase returned estimate for project ${projectId}`);
+    return data;
+  } catch (error) {
+    console.error('Error fetching project estimate from Supabase:', error);
+    throw error;
+  }
+}

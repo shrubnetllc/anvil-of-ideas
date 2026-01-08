@@ -61,11 +61,11 @@ export const ideas = pgTable("ideas", {
 });
 
 export const jobs = pgTable("jobs", {
-  id: serial("id").primaryKey(),
-  ideaId: integer("idea_id").notNull().references(() => ideas.id),
+  id: uuid("id").primaryKey().defaultRandom(),
+  ideaId: integer("idea_id").references(() => ideas.id), // Nullable based on SQL schema
   userId: integer("user_id").notNull().references(() => users.id),
   projectId: uuid("project_id").notNull(),
-  status: text("status").notNull().default("Pending"),
+  status: text("status").notNull().default(""), // SQL says default ''::text
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

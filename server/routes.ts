@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { z } from "zod";
 import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema, insertProjectDocumentSchema, updateProjectDocumentSchema, DocumentType } from "@shared/schema";
-import { fetchLeanCanvasData, fetchUserIdeas, fetchBusinessRequirements, fetchFunctionalRequirements } from "./supabase";
+import { fetchLeanCanvasData, fetchUserIdeas, fetchBusinessRequirements, fetchFunctionalRequirements, fetchProjectWorkflows, fetchProjectEstimate } from "./supabase";
 import { emailService } from "./email";
 import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
 import { uuid } from "drizzle-orm/pg-core";
@@ -695,6 +695,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
+
+  app.get("/api/ideas/:id/current-workflow-job", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const job = await storage.getLatestWorkflowJob(ideaId);
+      if (!job) {
+        return res.json(null); // No job found
+      }
+      return res.status(200).json(job);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  app.get("/api/ideas/:id/project-workflows", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      let projectId = leanCanvas?.projectId;
+
+      if (!projectId) {
+        return res.status(404).json({ message: "Project ID not found for this idea" });
+      }
+
+      const workflows = await fetchProjectWorkflows(projectId);
+      return res.status(200).json(workflows);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  app.get("/api/ideas/:id/project-estimate", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = parseInt(req.params.id);
+
+      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      let projectId = leanCanvas?.projectId;
+
+      if (!projectId) {
+        return res.status(404).json({ message: "Project ID not found for this idea" });
+      }
+
+      const estimate = await fetchProjectEstimate(projectId);
+      return res.status(200).json(estimate);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
 
 
   // Document management routes
