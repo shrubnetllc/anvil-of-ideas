@@ -5,13 +5,15 @@ import {
   type LeanCanvas, type InsertLeanCanvas, type UpdateLeanCanvas,
   ProjectStatus, DocumentType,
   type AppSetting, type InsertAppSetting,
-  type ProjectDocument, type InsertProjectDocument, type UpdateProjectDocument
+  type ProjectDocument, type InsertProjectDocument, type UpdateProjectDocument,
+  jobs
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import connectPg from "connect-pg-simple";
 import { eq, and, ne, lt, desc, isNull } from "drizzle-orm";
 import { db, pool } from "./db";
+import { v4 as uuidv4 } from "uuid";
 
 const MemoryStore = createMemoryStore(session);
 const PostgresSessionStore = connectPg(session);
@@ -45,6 +47,9 @@ export interface IStorage {
   createDocument(document: InsertProjectDocument): Promise<ProjectDocument>;
   updateDocument(id: number, updates: Partial<UpdateProjectDocument>): Promise<void>;
   deleteDocument(id: number): Promise<void>;
+  addWorkflowJobId(ideaId: number, userId: number, projectId: string, status: string): Promise<any>;
+  getWorkflowJobById(id: string): Promise<any>;
+  getLatestWorkflowJob(ideaId: number): Promise<any>;
 
   // App Settings operations
   getSetting(key: string): Promise<string | null>;
@@ -610,6 +615,40 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
   }
+  async addWorkflowJobId(ideaId: number, userId: number, projectId: string, status: string): Promise<any> {
+    try {
+      const [job] = await db.insert(jobs).values({ ideaId, userId, projectId, status }).returning();
+
+      return job;
+    } catch (error) {
+      console.error("Error adding workflow job ID:", error);
+      return null;
+    }
+  }
+
+  async getWorkflowJobById(id: string): Promise<any> {
+    try {
+      // id is uuid from schema
+      const result = await db.select().from(jobs).where(eq(jobs.id, id));
+      return result[0] || null;
+    } catch (error) {
+      console.error("Error getting workflow job by ID:", error);
+      return null;
+    }
+  }
+
+  async getLatestWorkflowJob(ideaId: number): Promise<any> {
+    try {
+      const result = await db.select().from(jobs)
+        .where(eq(jobs.ideaId, ideaId))
+        .orderBy(desc(jobs.createdAt))
+        .limit(1);
+      return result[0] || null;
+    } catch (error) {
+      console.error("Error getting latest workflow job:", error);
+      return null;
+    }
+  }
 }
 
 export class MemStorage implements IStorage {
@@ -617,20 +656,24 @@ export class MemStorage implements IStorage {
   private ideas: Map<number, Idea>;
   private canvases: Map<string, LeanCanvas>; // Changed to string key for UUID
   private documents: Map<number, ProjectDocument>;
+  private jobs: Map<string, any>;
   public sessionStore: any;
   private nextUserId: number;
   private nextIdeaId: number;
   private nextCanvasId: number;
   private nextDocumentId: number;
 
+
   constructor() {
     this.users = new Map();
     this.ideas = new Map();
     this.canvases = new Map();
     this.documents = new Map();
+    this.jobs = new Map();
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
     });
+
     this.nextUserId = 1;
     this.nextIdeaId = 1;
     this.nextCanvasId = 1;
@@ -788,7 +831,7 @@ export class MemStorage implements IStorage {
       id,
       ideaId: canvas.ideaId,
       projectId: canvas.projectId || null,
-      leancanvasId: canvas.leancanvasId || null,
+      leancanvasId: canvas.leancanvasId || null,//TODO: This has been here for a while, but I don't know if removing it will break anything
       problem: canvas.problem || null,
       customerSegments: canvas.customerSegments || null,
       uniqueValueProposition: canvas.uniqueValueProposition || null,
@@ -1019,7 +1062,34 @@ export class MemStorage implements IStorage {
     const idea = this.ideas.get(ideaId);
     return idea?.websiteUrl || undefined;
   }
+
+  async addWorkflowJobId(ideaId: number, userId: number, status: string): Promise<any> {
+    const job = {
+      id: uuidv4(),
+      ideaId,
+      userId,
+      status,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.jobs.set(job.id, job);
+    return job;
+  }
+
+  async getWorkflowJobById(id: string): Promise<any> {
+    return this.jobs.get(id) || null;
+  }
+
+  async getLatestWorkflowJob(ideaId: number): Promise<any> {
+    const jobs = Array.from(this.jobs.values())
+      .filter(j => j.ideaId === ideaId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return jobs[0] || null;
+  }
+
+
 }
+
 
 // Use the database storage implementation
 export const storage = new DatabaseStorage();

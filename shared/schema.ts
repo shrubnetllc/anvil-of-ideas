@@ -60,6 +60,16 @@ export const ideas = pgTable("ideas", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const jobs = pgTable("jobs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ideaId: integer("idea_id").references(() => ideas.id), // Nullable based on SQL schema
+  userId: integer("user_id").notNull().references(() => users.id),
+  projectId: uuid("project_id").notNull(),
+  status: text("status").notNull().default(""), // SQL says default ''::text
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 export const leanCanvas = pgTable("lean_canvas", {
   id: uuid("id").primaryKey().defaultRandom(),
   ideaId: integer("idea_id").notNull().references(() => ideas.id),
