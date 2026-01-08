@@ -643,11 +643,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Create the workflow
-      //TODO: This is going to call the n8n workflows webhook which will return a response immediately.
-      //      Afterwards we will generate a jobId and store it in the database. 
-      //      The jobId will be used to track the progress of the workflow generation.
-      //      This function will return the jobId to the client.
-
       const workflowsWebhookUrl: string = process.env.N8N_WF_VECTOR_WEBHOOK_URL || "";
       const projectId: string | null | undefined = (await storage.getLeanCanvasByIdeaId(ideaId))?.projectId;
 
