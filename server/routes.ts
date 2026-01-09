@@ -2318,14 +2318,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (Number(idea.userId) !== Number(req.user!.id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
+      const generateUltimateWebsiteSchema = z.object({
+        businessName: z.string().min(1).max(100),
+        industry: z.string().min(1).max(100),
+        targetAudience: z.string().min(1).max(100),
+      });
+      const validatedData = generateUltimateWebsiteSchema.parse(req.body);
 
+      if (!validatedData) {
+        return res.status(400).json({ message: "Invalid data" });
+      }
       const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
 
       if (ultimateWebsite) {
-        return res.status(400).json({ message: "Ultimate website already exists" });
+        return res.status(409).json({ message: "Ultimate website already exists" });
       }
 
       const ultimateWebsiteWebhookURL: string = process.env.ULTIMATE_WEBSITE_WEBHOOK_URL || "";
+
+      // Build the body for the webhook
+      const body = {
+        "project_id": project_id,
+        "leancanvas_id": leancanvas_id,
+        "idea_id": ideaId,
+        "business_name": validatedData.businessName,
+        "industry": validatedData.industry,
+        "target_audience": validatedData.targetAudience,
+      };
 
       // Call the webhook which now handles the entire process including DB updates
       // The webhook is expected to respond immediately to acknowledge receipt
@@ -2335,7 +2354,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Content-Type": "application/json",
         },
         // idea_id added so webhook knows which idea to update
-        body: JSON.stringify({ "project_id": project_id, "leancanvas_id": leancanvas_id, "idea_id": ideaId }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
@@ -2372,7 +2391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!ultimateWebsite) {
         return res.status(404).json({ message: "Ultimate website not found" });
       }
-      return res.status(200).json(ultimateWebsite);
+      return res.status(200).json({ "task_id": ultimateWebsite });
     } catch (error: any) {
       next(error);
     }
