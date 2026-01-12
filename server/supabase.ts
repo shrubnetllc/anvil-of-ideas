@@ -733,7 +733,7 @@ export async function fetchProjectWorkflows(projectId: string) {
 
     const { data, error } = await supabase
       .from('project_workflows')
-      .select('step_name, backend, workflow_step, step_number')
+      .select('step_name, backend, workflow_step, step_number, mermaid_code')
       .eq('project_id', projectId)
       .order('step_number', { ascending: true });
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Workflow, CheckCircle, Clock } from "lucide-react";
 
@@ -12,35 +13,73 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
     const [jobId, setJobId] = useState<string | null>(null);
     const [jobStatus, setJobStatus] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
+    const [steps, setSteps] = useState<any[]>([]);
+    const [isMermaidOpen, setIsMermaidOpen] = useState(false);
+    const [selectedMermaidCode, setSelectedMermaidCode] = useState("");
+    const [selectedStepName, setSelectedStepName] = useState("");
+
+    const checkStatus = async () => {
+        try {
+            const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job`);
+            if (res.ok) {
+                const data = await res.json();
+                setJobId(data.id);
+                setJobStatus(data.status);
+
+                if (data.status === 'Done' || data.status === 'Completed') {
+                    toast({
+                        title: "Workflows Generated",
+                        description: "The workflow generation is complete."
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("Error polling job status", e);
+        }
+    };
+
+    async function getSteps() {
+        //When a job is completed, we will query the project workflows table and get the steps which will be rendered as bootstrap cards
+        try {
+            const res = await fetch(`/api/ideas/${ideaId}/project-workflows`);
+            if (res.ok) {
+                const data = await res.json();
+                //Parse steps by taking the workflow_step field and parsing it as json
+                const stepsString = data[0].workflow_step;
+                const parsedSteps = JSON.parse(stepsString);
+                const steps = parsedSteps.map((step: any) => { return step.output; });
+
+                //Get mermaid code
+                const mermaidString = data[0].mermaid_code;
+                const parsedMermaidString = JSON.parse(mermaidString);
+                steps.forEach((item: any, idx: number) => {
+                    if (parsedMermaidString[idx]) {
+                        item.mermaid_code = parsedMermaidString[idx].mermaid_text;
+                    }
+                });
+                setSteps(steps);
+            }
+        } catch (e) {
+            console.error("Error getting steps", e);
+        }
+    }
 
     // Poll for status every minute
     useEffect(() => {
-        if (!jobId || jobStatus === 'Done' || jobStatus === 'Completed') return;
+        //Check status
+        checkStatus();
 
-        const checkStatus = async () => {
-            try {
-                const res = await fetch(`/api/jobs/${jobId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setJobStatus(data.status);
-
-                    if (data.status === 'Done' || data.status === 'Completed') {
-                        toast({
-                            title: "Workflows Generated",
-                            description: "The workflow generation is complete."
-                        });
-                    }
-                }
-            } catch (e) {
-                console.error("Error polling job status", e);
-            }
-        };
+        //If job is done, stop polling
+        if (!jobId) {
+            return;
+        }
+        if (jobStatus === 'Done' || jobStatus === 'Completed') {
+            getSteps();
+            return;
+        }
 
         // Poll every 60 seconds (1 minute)
         const intervalId = setInterval(checkStatus, 60000);
-
-        // Also check immediately to verify it started correctly
-        checkStatus();
 
         return () => clearInterval(intervalId);
     }, [jobId, jobStatus, toast]);
@@ -138,32 +177,62 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                         </p>
                     </div>
                 ) : (
-                    <div className="text-center">
-                        <div className="mb-4 mx-auto w-16 h-16 flex items-center justify-center rounded-full bg-green-100 text-green-600">
-                            <CheckCircle className="h-8 w-8" />
+                    steps.length === 0 ? (
+                        <p className="text-neutral-500">No workflows found.</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {steps.map((step, idx) => (
+                                <div key={idx} className="bg-white border rounded-lg p-6 shadow-sm">
+                                    <div className="mb-4 flex items-center justify-between">
+                                        <div className="flex gap-2">
+                                            <span className="bg-neutral-100 text-neutral-600 text-sm font-mono px-2 py-1 rounded inline-block">
+                                                Step {step.step_number}
+                                            </span>
+                                            <span className="bg-neutral-100 text-neutral-600 text-sm font-mono px-2 py-1 rounded inline-block">
+                                                {step.step_name}
+                                            </span>
+                                        </div>
+                                        <Button variant="outline"
+                                            onClick={() => {
+                                                setSelectedMermaidCode(step.mermaid_code);
+                                                setSelectedStepName(step.step_name);
+                                                setIsMermaidOpen(true);
+                                            }}
+                                            size="sm">
+                                            View Mermaid
+                                        </Button>
+                                    </div>
+                                    <div className="mb-4">
+                                        {step.substeps && Array.isArray(step.substeps) && (
+                                            <div className="mt-4">
+                                                <h5 className="text-sm font-bold text-neutral-700 mb-2">Substeps:</h5>
+                                                <ol className="list-decimal pl-5 space-y-1">
+                                                    {step.substeps.map((substep: any, sIdx: number) => (
+                                                        <li key={sIdx} className="text-sm text-neutral-600">
+                                                            <span className="font-medium mr-1">{substep.substep_number}.</span>
+                                                            {substep.substep_description}
+                                                        </li>
+                                                    ))}
+                                                </ol>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="pl-0 prose max-w-none text-neutral-600">
+                                        {step.workflow_step}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <h4 className="text-lg font-bold text-neutral-900 mb-2">
-                            Workflows Generated
-                        </h4>
-                        <p className="text-neutral-600 mb-4">
-                            The workflow generation job is complete.
-                        </p>
-                        <p className="text-sm text-neutral-500 italic max-w-sm mx-auto">
-                            (More details to come later)
-                        </p>
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setJobId(null);
-                                setJobStatus(null);
-                            }}
-                            className="mt-4"
-                        >
-                            Start New Generation
-                        </Button>
-                    </div>
+                    )
                 )}
             </div>
+
+            <MermaidDiagram
+                code={selectedMermaidCode}
+                open={isMermaidOpen}
+                onOpenChange={setIsMermaidOpen}
+                title={selectedStepName ? `Workflow Diagram: ${selectedStepName}` : "Workflow Diagram"}
+            />
         </div>
     );
 }
