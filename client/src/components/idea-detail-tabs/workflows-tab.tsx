@@ -12,6 +12,7 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
     const [jobId, setJobId] = useState<string | null>(null);
     const [jobStatus, setJobStatus] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
+    const [steps, setSteps] = useState<any[]>([]);
 
     const checkStatus = async () => {
         try {
@@ -33,13 +34,36 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
         }
     };
 
+    async function getSteps() {
+        //When a job is completed, we will query the project workflows table and get the steps which will be rendered as bootstrap cards
+        try {
+            const res = await fetch(`/api/ideas/${ideaId}/project-workflows`);
+            if (res.ok) {
+                const data = await res.json();
+                //Parse steps by taking the workflow_step field and parsing it as json
+                const stepsString = data[0].workflow_step;
+                const parsedSteps = JSON.parse(stepsString);
+                const steps = parsedSteps.map((step: any) => { return step.output; });
+                setSteps(steps);
+            }
+        } catch (e) {
+            console.error("Error getting steps", e);
+        }
+    }
+
     // Poll for status every minute
     useEffect(() => {
         //Check status
         checkStatus();
 
         //If job is done, stop polling
-        if (!jobId || jobStatus === 'Done' || jobStatus === 'Completed') return;
+        if (!jobId) {
+            return;
+        }
+        if (jobStatus === 'Done' || jobStatus === 'Completed') {
+            getSteps();
+            return;
+        }
 
         // Poll every 60 seconds (1 minute)
         const intervalId = setInterval(checkStatus, 60000);
@@ -140,30 +164,40 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                         </p>
                     </div>
                 ) : (
-                    <div className="text-center">
-                        <div className="mb-4 mx-auto w-16 h-16 flex items-center justify-center rounded-full bg-green-100 text-green-600">
-                            <CheckCircle className="h-8 w-8" />
+                    steps.length === 0 ? (
+                        <p className="text-neutral-500">No workflows found.</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {steps.map((step, idx) => (
+                                <div key={idx} className="bg-white border rounded-lg p-6 shadow-sm">
+                                    <div className="mb-4">
+                                        <span className="bg-neutral-100 text-neutral-600 text-sm font-mono px-2 py-1 rounded inline-block">
+                                            Step {step.step_number}
+                                        </span>
+                                        <span className="bg-neutral-100 text-neutral-600 text-sm font-mono px-2 py-1 rounded inline-block">
+                                            {step.step_name}
+                                        </span>
+                                        {step.substeps && Array.isArray(step.substeps) && (
+                                            <div className="mt-4">
+                                                <h5 className="text-sm font-bold text-neutral-700 mb-2">Substeps:</h5>
+                                                <ol className="list-decimal pl-5 space-y-1">
+                                                    {step.substeps.map((substep: any, sIdx: number) => (
+                                                        <li key={sIdx} className="text-sm text-neutral-600">
+                                                            <span className="font-medium mr-1">{substep.substep_number}.</span>
+                                                            {substep.substep_description}
+                                                        </li>
+                                                    ))}
+                                                </ol>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="pl-0 prose max-w-none text-neutral-600">
+                                        {step.workflow_step}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                        <h4 className="text-lg font-bold text-neutral-900 mb-2">
-                            Workflows Generated
-                        </h4>
-                        <p className="text-neutral-600 mb-4">
-                            The workflow generation job is complete.
-                        </p>
-                        <p className="text-sm text-neutral-500 italic max-w-sm mx-auto">
-                            (More details to come later)
-                        </p>
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setJobId(null);
-                                setJobStatus(null);
-                            }}
-                            className="mt-4"
-                        >
-                            Start New Generation
-                        </Button>
-                    </div>
+                    )
                 )}
             </div>
         </div>
