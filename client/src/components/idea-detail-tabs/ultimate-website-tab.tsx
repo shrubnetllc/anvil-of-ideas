@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Hammer, Flame } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -9,12 +10,16 @@ interface UltimateWebsiteTabProps {
 }
 
 export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
+    const baseGeneratorUrl = `${import.meta.env.VITE_ULTIMATE_WEBSITE_GENERATOR_URL || 'http://localhost:8008'}`;
     const queryClient = useQueryClient();
-    // This state tracks if we are actively waiting for the webhook to finish
     const [isWaitingForWebhook, setIsWaitingForWebhook] = useState(false);
+    const [businessName, setBusinessName] = useState("");
+    const [industry, setIndustry] = useState("");
+    const [targetAudience, setTargetAudience] = useState("");
+    const [iframeUrl, setIframeUrl] = useState<string | null>(null);
 
     // Fetch the ultimate website URL
-    const { data: websiteUrl, isError, error } = useQuery({
+    const { data: response, isError, error } = useQuery({
         queryKey: [`/api/ideas/${ideaId}/ultimate-website`],
         queryFn: async () => {
             try {
@@ -35,14 +40,19 @@ export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
 
     // Effect to stop waiting once we get a URL
     useEffect(() => {
-        if (websiteUrl) {
+        if (response?.task_id) {
             setIsWaitingForWebhook(false);
+            setIframeUrl(`${baseGeneratorUrl}/demo/${response.task_id}`);
         }
-    }, [websiteUrl]);
+    }, [response]);
 
     const generateMutation = useMutation({
         mutationFn: async () => {
-            const res = await apiRequest("POST", `/api/ideas/${ideaId}/generate-ultimate-website`);
+            const res = await apiRequest("POST", `/api/ideas/${ideaId}/generate-ultimate-website`, {
+                businessName,
+                industry,
+                targetAudience
+            });
             return res.json();
         },
         onSuccess: () => {
@@ -58,8 +68,6 @@ export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
     });
 
     const isLoading = generateMutation.isPending || isWaitingForWebhook;
-
-    const iframeUrl = `${import.meta.env.VITE_ULTIMATE_WEBSITE_GENERATOR_URL || 'http://localhost:8008'}/demo/${websiteUrl}`;
 
     return (
         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
@@ -77,8 +85,28 @@ export function UltimateWebsiteTab({ ideaId }: UltimateWebsiteTabProps) {
 
             <div className="flex flex-col min-h-[200px]">
                 {!iframeUrl && !isLoading && (
-                    <div className="flex flex-col items-center justify-center text-neutral-500 py-12">
-                        <p>Your Website will be generated here</p>
+                    <div className="flex flex-col items-left justify-left text-black py-12 space-y-4">
+                        <h2>Business Name</h2>
+                        <Input
+                            type="text"
+                            placeholder="Enter your business name"
+                            value={businessName}
+                            onChange={(e) => setBusinessName(e.target.value)}
+                        />
+                        <h2>Industry</h2>
+                        <Input
+                            type="text"
+                            placeholder="Enter your industry"
+                            value={industry}
+                            onChange={(e) => setIndustry(e.target.value)}
+                        />
+                        <h2>Target Audience</h2>
+                        <Input
+                            type="text"
+                            placeholder="Enter your target audience"
+                            value={targetAudience}
+                            onChange={(e) => setTargetAudience(e.target.value)}
+                        />
                     </div>
                 )}
 
