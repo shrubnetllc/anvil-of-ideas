@@ -13,34 +13,36 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
     const [jobStatus, setJobStatus] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
 
+    const checkStatus = async () => {
+        try {
+            const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job`);
+            if (res.ok) {
+                const data = await res.json();
+                setJobId(data.id);
+                setJobStatus(data.status);
+
+                if (data.status === 'Done' || data.status === 'Completed') {
+                    toast({
+                        title: "Workflows Generated",
+                        description: "The workflow generation is complete."
+                    });
+                }
+            }
+        } catch (e) {
+            console.error("Error polling job status", e);
+        }
+    };
+
     // Poll for status every minute
     useEffect(() => {
+        //Check status
+        checkStatus();
+
+        //If job is done, stop polling
         if (!jobId || jobStatus === 'Done' || jobStatus === 'Completed') return;
-
-        const checkStatus = async () => {
-            try {
-                const res = await fetch(`/api/jobs/${jobId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    setJobStatus(data.status);
-
-                    if (data.status === 'Done' || data.status === 'Completed') {
-                        toast({
-                            title: "Workflows Generated",
-                            description: "The workflow generation is complete."
-                        });
-                    }
-                }
-            } catch (e) {
-                console.error("Error polling job status", e);
-            }
-        };
 
         // Poll every 60 seconds (1 minute)
         const intervalId = setInterval(checkStatus, 60000);
-
-        // Also check immediately to verify it started correctly
-        checkStatus();
 
         return () => clearInterval(intervalId);
     }, [jobId, jobStatus, toast]);
