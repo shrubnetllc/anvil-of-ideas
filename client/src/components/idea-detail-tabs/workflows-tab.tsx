@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Workflow, CheckCircle, Clock } from "lucide-react";
 
@@ -13,6 +14,9 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
     const [jobStatus, setJobStatus] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
     const [steps, setSteps] = useState<any[]>([]);
+    const [isMermaidOpen, setIsMermaidOpen] = useState(false);
+    const [selectedMermaidCode, setSelectedMermaidCode] = useState("");
+    const [selectedStepName, setSelectedStepName] = useState("");
 
     const checkStatus = async () => {
         try {
@@ -44,6 +48,15 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                 const stepsString = data[0].workflow_step;
                 const parsedSteps = JSON.parse(stepsString);
                 const steps = parsedSteps.map((step: any) => { return step.output; });
+
+                //Get mermaid code
+                const mermaidString = data[0].mermaid_code;
+                const parsedMermaidString = JSON.parse(mermaidString);
+                steps.forEach((item: any, idx: number) => {
+                    if (parsedMermaidString[idx]) {
+                        item.mermaid_code = parsedMermaidString[idx].mermaid_text;
+                    }
+                });
                 setSteps(steps);
             }
         } catch (e) {
@@ -170,13 +183,26 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                         <div className="space-y-4">
                             {steps.map((step, idx) => (
                                 <div key={idx} className="bg-white border rounded-lg p-6 shadow-sm">
+                                    <div className="mb-4 flex items-center justify-between">
+                                        <div className="flex gap-2">
+                                            <span className="bg-neutral-100 text-neutral-600 text-sm font-mono px-2 py-1 rounded inline-block">
+                                                Step {step.step_number}
+                                            </span>
+                                            <span className="bg-neutral-100 text-neutral-600 text-sm font-mono px-2 py-1 rounded inline-block">
+                                                {step.step_name}
+                                            </span>
+                                        </div>
+                                        <Button variant="outline"
+                                            onClick={() => {
+                                                setSelectedMermaidCode(step.mermaid_code);
+                                                setSelectedStepName(step.step_name);
+                                                setIsMermaidOpen(true);
+                                            }}
+                                            size="sm">
+                                            View Mermaid
+                                        </Button>
+                                    </div>
                                     <div className="mb-4">
-                                        <span className="bg-neutral-100 text-neutral-600 text-sm font-mono px-2 py-1 rounded inline-block">
-                                            Step {step.step_number}
-                                        </span>
-                                        <span className="bg-neutral-100 text-neutral-600 text-sm font-mono px-2 py-1 rounded inline-block">
-                                            {step.step_name}
-                                        </span>
                                         {step.substeps && Array.isArray(step.substeps) && (
                                             <div className="mt-4">
                                                 <h5 className="text-sm font-bold text-neutral-700 mb-2">Substeps:</h5>
@@ -200,6 +226,13 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                     )
                 )}
             </div>
+
+            <MermaidDiagram
+                code={selectedMermaidCode}
+                open={isMermaidOpen}
+                onOpenChange={setIsMermaidOpen}
+                title={selectedStepName ? `Workflow Diagram: ${selectedStepName}` : "Workflow Diagram"}
+            />
         </div>
     );
 }
