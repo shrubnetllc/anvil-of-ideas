@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { signSupabaseToken } from './db-security';
 
 // Initialize Supabase client with environment variables
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -9,6 +10,23 @@ if (!supabaseUrl || !supabaseKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
+
+function getAuthenticatedSupabase(userId?: number) {
+  if (!userId) return supabase;
+
+  // Use the ANON key if available, otherwise fall back to the provided API key
+  // This ensures we don't accidentally use a service role key which might bypass RLS
+  const anonKey = process.env.SUPABASE_ANON_KEY || supabaseKey;
+  const token = signSupabaseToken(userId);
+
+  return createClient(supabaseUrl!, anonKey!, {
+    global: {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    }
+  });
+}
 
 // Helper functions for interacting with Supabase tables
 
@@ -50,7 +68,8 @@ export async function fetchProjectRequirements(prdId: string, ideaId: number, re
     try {
       if (prdId && prdId !== 'null' && prdId !== 'undefined') {
         console.log(`Querying Supabase for PRD ID ${prdId}`);
-        const { data, error } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data, error } = await client
           .from('prd')
           .select('*')
           .eq('id', prdId)
@@ -78,7 +97,8 @@ export async function fetchProjectRequirements(prdId: string, ideaId: number, re
         if (canvasResult.rows.length > 0 && canvasResult.rows[0].project_id) {
           const pId = canvasResult.rows[0].project_id;
           console.log(`Found project_id ${pId}, searching PRD table...`);
-          const { data, error } = await supabase
+          const client = getAuthenticatedSupabase(requestingUserId);
+          const { data, error } = await client
             .from('prd')
             .select('*')
             .eq('project_id', pId)
@@ -169,7 +189,8 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
       console.log(`Querying Supabase with idea_id=${ideaId}`);
 
       // Try querying by idea_id first (assuming column exists as requested)
-      const { data: ideaData, error: ideaError } = await supabase
+      const client = getAuthenticatedSupabase(requestingUserId);
+      const { data: ideaData, error: ideaError } = await client
         .from('lean_canvas')
         .select('*')
         .eq('idea_id', ideaId) // Try direct mapping first
@@ -184,7 +205,8 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
       // Fallback: Query using project_id if we have it locally
       if (projectId) {
         console.log(`Querying Supabase with project_id=${projectId}`);
-        const { data: projectData, error: projectError } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data: projectData, error: projectError } = await client
           .from('lean_canvas')
           .select('*')
           .eq('project_id', projectId)
@@ -203,7 +225,8 @@ export async function fetchLeanCanvasData(ideaId: number, requestingUserId?: num
     // Step 3: Fallback to using the idea_id as a direct lookup
     console.log(`Trying direct lookup with project_id=${ideaId} in Supabase`);
     try {
-      const { data, error } = await supabase
+      const client = getAuthenticatedSupabase(requestingUserId);
+      const { data, error } = await client
         .from('lean_canvas')
         .select('*')
         .eq('project_id', ideaId.toString())
@@ -297,7 +320,8 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
       // First try direct query using the ID from the 'frd' table
       try {
         console.log(`[SUPABASE FUNCTIONAL] Direct query using ID=${functionalId} in frd table`);
-        const { data, error } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data, error } = await client
           .from('frd')
           .select('*')
           .eq('id', functionalId)
@@ -345,7 +369,8 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
 
       if (pId) {
         console.log(`[SUPABASE FUNCTIONAL] Trying fallback by project_id=${pId}`);
-        const { data, error } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data, error } = await client
           .from('frd')
           .select('*')
           .eq('project_id', pId)
@@ -365,7 +390,8 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
 
       if (prdId) {
         console.log(`[SUPABASE FUNCTIONAL] Trying fallback by prd_id=${prdId}`);
-        const { data, error } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data, error } = await client
           .from('frd')
           .select('*')
           .eq('prd_id', prdId)
@@ -386,7 +412,8 @@ export async function fetchFunctionalRequirements(functionalId: string, ideaId: 
       // Try original functional_requirements table as absolute last resort
       if (functionalId) {
         console.log(`[SUPABASE FUNCTIONAL] Trying absolute last resort: functional_requirements table with ID=${functionalId}`);
-        const { data, error } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data, error } = await client
           .from('functional_requirements')
           .select('*')
           .eq('id', functionalId)
@@ -481,7 +508,8 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
       // We'll make a direct attempt first for the BRD document
       try {
         console.log(`[SUPABASE BRD] Direct query using ID=${brdId}`);
-        const { data, error } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data, error } = await client
           .from('brd')
           .select('*')
           .eq('id', brdId)
@@ -523,7 +551,8 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
       for (const match of fieldMatches) {
         try {
           console.log(`[SUPABASE BRD] Trying ${match.name}=${brdId}`);
-          const { data, error } = await supabase
+          const client = getAuthenticatedSupabase(requestingUserId);
+          const { data, error } = await client
             .from('brd')
             .select('*')
             .eq(match.field, brdId)
@@ -577,7 +606,8 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
       // Try by project_id first
       if (pId) {
         console.log(`[SUPABASE BRD] Trying fallback by project_id=${pId}`);
-        const { data, error } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data, error } = await client
           .from('brd')
           .select('*')
           .eq('project_id', pId)
@@ -600,7 +630,8 @@ export async function fetchBusinessRequirements(brdId: string, ideaId: number, r
       // Try by prd_id next
       if (prdId) {
         console.log(`[SUPABASE BRD] Trying fallback by prd_id=${prdId}`);
-        const { data, error } = await supabase
+        const client = getAuthenticatedSupabase(requestingUserId);
+        const { data, error } = await client
           .from('brd')
           .select('*')
           .eq('prd_id', prdId)
@@ -673,7 +704,7 @@ export async function fetchUserIdeas(userId: number, requestingUserId?: number) 
     // First check if the 'projects' table exists (more likely table name in Supabase)
     let response;
     try {
-      response = await supabase
+      response = await getAuthenticatedSupabase(requestingUserId)
         .from('projects')
         .select('*')
         .eq('user_id', userId.toString())
@@ -681,7 +712,7 @@ export async function fetchUserIdeas(userId: number, requestingUserId?: number) 
     } catch (e) {
       console.log('Error querying projects table, falling back to ideas table:', e);
       // Fallback to ideas table if projects doesn't exist
-      response = await supabase
+      response = await getAuthenticatedSupabase(requestingUserId)
         .from('ideas')
         .select('*')
         .eq('user_id', userId.toString())
