@@ -839,7 +839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
                 // Sync back to local DB
                 try {
-                  await storage.updateLeanCanvas(ideaId, { html: htmlContent });
+                  await storage.updateLeanCanvas(ideaId, { html: htmlContent }, req.user!.id);
                   console.log(`[LeanCanvas] Synced HTML back to local database`);
                 } catch (syncError) {
                   console.warn(`[LeanCanvas] Failed to sync HTML to local DB:`, syncError);
@@ -870,7 +870,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      const document = await storage.getDocumentByType(ideaId, documentType);
+      const document = await storage.getDocumentByType(ideaId, documentType, req.user!.id);
 
       if (!document) {
         return res.status(200).json(null); // Return null instead of 404 to handle case where document doesn't exist yet
@@ -908,11 +908,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   html: prdData.projectReqHtml,
                   status: "Completed",
                   updatedAt: new Date()
-                });
+                }, req.user!.id);
 
 
                 // Return the updated document with the HTML content
-                const updatedDocument = await storage.getDocumentById(document.id);
+                const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
                 return res.status(200).json(updatedDocument);
               }
             }
@@ -969,11 +969,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 status: "Completed",
                 externalId: brdResponse.data.id, // Persist the ID found via fallback
                 updatedAt: new Date()
-              });
+              }, req.user!.id);
 
 
               // Return the updated document
-              const updatedDocument = await storage.getDocumentById(document.id);
+              const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
               console.log(`BRD Handler: Returning updated document with HTML content`);
               return res.status(200).json(updatedDocument);
             } else {
@@ -1013,9 +1013,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 status: "Completed",
                 externalId: frdResponse.data.id, // Persist the ID found via fallback
                 updatedAt: new Date()
-              });
+              }, req.user!.id);
 
-              const updatedDocument = await storage.getDocumentById(document.id);
+              const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
               console.log(`FRD Handler: Returning updated document with HTML content`);
               return res.status(200).json(updatedDocument);
             } else {
@@ -1058,7 +1058,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Special handling for Lean Canvas
       if (documentType === "LeanCanvas") {
-        const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
+        const canvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
         if (canvas) {
           // We don't have a direct deleteLeanCanvas method exposed in IStorage that takes an ID,
           // but we can implement a deleteLeanCanvasByIdeaId or similar.
@@ -1074,19 +1074,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // It DOES NOT have `deleteLeanCanvas`.
           // We need to add `deleteLeanCanvas` to `IStorage` and `DatabaseStorage`/`MemStorage`.
           // For now, I will assume I will add it in the next step.
-          await storage.deleteLeanCanvas(ideaId);
+          await storage.deleteLeanCanvas(ideaId, req.user!.id);
           return res.status(200).json({ message: "Lean Canvas deleted successfully" });
         }
         return res.status(404).json({ message: "Lean Canvas not found" });
       }
 
-      const document = await storage.getDocumentByType(ideaId, documentType);
+      const document = await storage.getDocumentByType(ideaId, documentType, req.user!.id);
 
       if (!document) {
         return res.status(404).json({ message: "Document not found" });
       }
 
-      await storage.deleteDocument(document.id);
+      await storage.deleteDocument(document.id, req.user!.id);
       res.status(200).json({ message: "Document deleted successfully" });
     } catch (error) {
       console.error(`Error deleting ${req.params.type} document:`, error);
@@ -1107,7 +1107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      const documents = await storage.getDocumentsByIdeaId(ideaId);
+      const documents = await storage.getDocumentsByIdeaId(ideaId, req.user!.id);
 
 
       res.status(200).json(documents);
@@ -1133,14 +1133,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // Get the document and verify it belongs to this idea
-      const document = await storage.getDocumentById(documentId);
+      const document = await storage.getDocumentById(documentId, req.user!.id);
       if (!document || document.ideaId !== ideaId) {
         return res.status(404).json({ message: "Document not found or doesn't belong to this idea" });
       }
 
 
-      await storage.updateDocument(documentId, req.body);
-      const updatedDocument = await storage.getDocumentById(documentId);
+      await storage.updateDocument(documentId, req.body, req.user!.id);
+      const updatedDocument = await storage.getDocumentById(documentId, req.user!.id);
 
 
       res.status(200).json(updatedDocument);
@@ -1166,13 +1166,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // Get the document and verify it belongs to this idea
-      const document = await storage.getDocumentById(documentId);
+      const document = await storage.getDocumentById(documentId, req.user!.id);
       if (!document || document.ideaId !== ideaId) {
         return res.status(404).json({ message: "Document not found or doesn't belong to this idea" });
       }
 
 
-      await storage.deleteDocument(documentId);
+      await storage.deleteDocument(documentId, req.user!.id);
 
 
       res.status(200).json({ message: "Document deleted successfully" });
@@ -1207,14 +1207,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         // First manually delete all related project documents for this idea
-        const documents = await storage.getDocumentsByIdeaId(ideaId);
+        const documents = await storage.getDocumentsByIdeaId(ideaId, req.user!.id);
         console.log(`Found ${documents.length} documents to delete for idea ${ideaId}`);
 
 
         for (const doc of documents) {
           try {
             console.log(`Deleting document ${doc.id} of type ${doc.documentType} for idea ${ideaId}`);
-            await storage.deleteDocument(doc.id);
+            await storage.deleteDocument(doc.id, req.user!.id);
           } catch (docError) {
             console.error(`Error deleting document ${doc.id}:`, docError);
             // Continue with other documents even if one fails
@@ -1223,7 +1223,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
         // Now try to delete the idea itself
-        await storage.deleteIdea(ideaId);
+        await storage.deleteIdea(ideaId, req.user!.id);
         return res.status(200).json({ message: "Idea deleted successfully" });
       } catch (deleteError: any) {
         console.error(`Error during deletion process for idea ${ideaId}:`, deleteError);
@@ -1346,7 +1346,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!canvasData) {
               // If no result, try getting the idea first to get its project_id
               // Note: projectId is stored on lean_canvas table, not ideas table
-              const localCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+              const localCanvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
               if (localCanvas) {
                 supabaseProjectId = localCanvas.projectId;
                 console.log(`Found project_id ${supabaseProjectId} from local canvas for idea ${ideaId}`);
@@ -1396,7 +1396,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Create a document record before calling N8N
       let document;
-      const existingDocument = await storage.getDocumentByType(ideaId, "BusinessRequirements");
+      const existingDocument = await storage.getDocumentByType(ideaId, "BusinessRequirements", req.user!.id);
 
 
       if (existingDocument) {
@@ -1404,8 +1404,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateDocument(existingDocument.id, {
           status: "Generating",
           generationStartedAt: new Date()
-        });
-        document = await storage.getDocumentById(existingDocument.id);
+        }, req.user!.id);
+        document = await storage.getDocumentById(existingDocument.id, req.user!.id);
         console.log(`Updated existing document ${existingDocument.id} for business requirements`);
       } else {
         // Create a new document
@@ -1415,7 +1415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           title: "Business Requirements Document",
           status: "Generating",
           generationStartedAt: new Date()
-        });
+        }, req.user!.id);
         console.log(`Created new document ${document.id} for business requirements`);
       }
 
@@ -1423,7 +1423,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get prd_id if available from documents
       let prdId = null;
       try {
-        const prdDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
+        const prdDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements", req.user!.id);
         if (prdDocument) {
           prdId = prdDocument.externalId;
           console.log(`Found existing PRD document with external ID: ${prdId}`);
@@ -1503,11 +1503,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log(`Storing BRD ID with document: ${brdId}`);
           await storage.updateDocument(document.id, {
             externalId: brdId
-          });
+          }, req.user!.id);
 
 
           // Get the updated document to include in the response
-          const updatedDocument = await storage.getDocumentById(document.id);
+          const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
           document = updatedDocument;
 
 
@@ -1636,8 +1636,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await storage.updateDocument(existingDocument.id, {
           status: "Generating",
           generationStartedAt: new Date()
-        });
-        document = await storage.getDocumentById(existingDocument.id);
+        }, req.user!.id);
+        document = await storage.getDocumentById(existingDocument.id, req.user!.id);
         console.log(`Updated existing document ${existingDocument.id} for requirements generation`);
       } else {
         // Create a new document
@@ -1647,7 +1647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           title: "Project Requirements",
           status: "Generating",
           generationStartedAt: new Date()
-        });
+        }, req.user!.id);
         console.log(`Created new document ${document.id} for requirements generation`);
       }
 
@@ -1715,11 +1715,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update the document with the external ID
       await storage.updateDocument(document.id, {
         externalId: responseData.trim()
-      });
+      }, req.user!.id);
       console.log(`Updated document ${document.id} with external ID ${responseData.trim()}`);
 
       // Get the updated document to return
-      const updatedDocument = await storage.getDocumentById(document.id);
+      const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
 
       res.status(200).json({
         message: "Requirements generation started",
@@ -1737,7 +1737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ideas/:id/generate", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
-      const idea = await storage.getIdeaById(ideaId);
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
 
 
       if (!idea) {
@@ -1751,7 +1751,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // Start idea generation with timestamp
-      await storage.startIdeaGeneration(ideaId);
+      await storage.startIdeaGeneration(ideaId, req.user!.id);
 
 
       // Trigger the webhook to n8n
@@ -1871,7 +1871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             // Check if lean canvas already exists for this idea
             // TODO: This function needs to get the LeanCanvas in Supabase rather than create a new record
-            const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+            const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
 
 
             if (existingCanvas) {
@@ -1879,7 +1879,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               await storage.updateLeanCanvas(ideaId, {
                 projectId,
                 leancanvasId
-              });
+              }, req.user!.id);
               console.log(`Updated existing canvas with project_id: ${projectId}`);
             } else {
               // Create a new canvas with the project_id and leancanvas_id
@@ -1896,7 +1896,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 keyMetrics: null,
                 unfairAdvantage: null,
                 html: null
-              });
+              }, req.user!.id);
               console.log(`Created new canvas with project_id: ${projectId}`);
             }
           } catch (dbError) {
@@ -1912,7 +1912,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       } catch (error: any) {
         console.error("Error triggering webhook:", error);
-        await storage.updateIdeaStatus(ideaId, "Draft");
+        await storage.updateIdeaStatus(ideaId, "Draft", req.user!.id);
         throw new Error("Failed to start canvas generation");
       }
     } catch (error: any) {
@@ -2269,7 +2269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/ideas/:id/canvas", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
-      const idea = await storage.getIdeaById(ideaId);
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
 
 
       if (!idea) {
@@ -2282,7 +2282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      const canvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
 
 
       if (!canvas) {
@@ -2291,10 +2291,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       const validatedData = updateLeanCanvasSchema.partial().parse(req.body);
-      await storage.updateLeanCanvas(ideaId, validatedData);
+      await storage.updateLeanCanvas(ideaId, validatedData, req.user!.id);
 
 
-      const updatedCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      const updatedCanvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
       res.json(updatedCanvas);
     } catch (error: any) {
       next(error);
@@ -2304,9 +2304,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ideas/:id/generate-ultimate-website", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
-      const idea = await storage.getIdeaById(ideaId);
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
 
-      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
+      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
 
       const project_id = leanCanvas?.projectId;
       const leancanvas_id = leanCanvas?.id;
@@ -2328,7 +2328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validatedData) {
         return res.status(400).json({ message: "Invalid data" });
       }
-      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
+      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId, req.user!.id);
 
       if (ultimateWebsite) {
         return res.status(409).json({ message: "Ultimate website already exists" });
@@ -2377,7 +2377,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/ideas/:id/ultimate-website", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
-      const idea = await storage.getIdeaById(ideaId);
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
 
       if (!idea) {
         return res.status(404).json({ message: "Idea not found" });
@@ -2387,7 +2387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Forbidden" });
       }
 
-      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId);
+      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId, req.user!.id);
       if (!ultimateWebsite) {
         return res.status(404).json({ message: "Ultimate website not found" });
       }
@@ -2821,7 +2821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // First check if we have the document in our database
-      const document = await storage.getDocumentByType(parseInt(ideaId), 'FunctionalRequirements');
+      const document = await storage.getDocumentByType(parseInt(ideaId), 'FunctionalRequirements', userId);
 
 
       if (!document || !document.externalId) {
@@ -2892,7 +2892,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             html: htmlContent,
             status: 'Completed',
             updatedAt: new Date()
-          });
+          }, userId);
 
 
           console.log(`✓ Successfully updated document status to Completed and added HTML content`);
@@ -2920,7 +2920,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             await storage.updateDocument(document.id, {
               status: 'Completed',
               updatedAt: new Date()
-            });
+            }, userId);
             console.log(`✓ Successfully updated timed-out document status to Completed`);
           } catch (updateError) {
             console.error('Error updating document status:', updateError);
@@ -2955,7 +2955,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // First get the document from our database to get the external ID if not provided
-      const document = await storage.getDocumentByType(ideaId, "BusinessRequirements");
+      const document = await storage.getDocumentByType(ideaId, "BusinessRequirements", userId);
 
 
       if (!document) {
@@ -3022,7 +3022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               await storage.updateDocument(document.id, {
                 html: brdData.data.html,
                 status: "Completed" // Ensure status is completed since we have the content
-              });
+              }, userId);
               console.log(`✓ Successfully updated local document with HTML content`);
             } catch (updateError) {
               console.error(`⚠️ ERROR: Failed to update local document with HTML:`, updateError);
