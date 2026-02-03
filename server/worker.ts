@@ -14,25 +14,8 @@ export async function startWorker() {
             if (content.type === "generate_document") {
                 await handleGenerateDocument(content.payload);
             } else if (content.type === "workflow_generation") {
-                // Add workflow generation handling if needed, 
-                // or if it was just a trigger.
-                // For now, focusing on the n8n webhook calls.
                 await handleWorkflowGeneration(content.payload);
             }
-
-            // We should ack the message here if we had the channel access, 
-            // but our consumeTasks helper currently auto-acks or doesn't expose ack?
-            // Checking rabbitmq.ts: 
-            // It uses `noAck: false` which means manual ack is REQUIRED. 
-            // But my `consumeTasks` implementation in `server/rabbitmq.ts` took a handler 
-            // and didn't pass the channel to ack. 
-            // WAIT. `server/rabbitmq.ts` consumeTasks calls `ch.consume(..., handler, { noAck: false })`.
-            // The handler receives `msg`. The handler is responsible for acking?
-            // But the handler defined in `verify-rabbitmq.ts` didn't ack.
-            // If I use `noAck: false`, I MUST ack. 
-            // I should update `server/rabbitmq.ts` to allow acking or handle it.
-            // For now, let's assume I need to fix rabbitmq.ts or just handle logic here.
-
         } catch (err) {
             console.error("[Worker] Error processing task:", err);
         }
@@ -112,21 +95,6 @@ async function handleGenerateDocument(payload: any) {
 }
 
 async function handleWorkflowGeneration(payload: any) {
-    // Placeholder for workflow generation logic if needed
-    // The route `POST /api/ideas/:id/workflows` logic was:
-    // 1. Call n8n webhook with project_id
-    // 2. Create job
-    // It seems the ONLY thing that happened "outside" the DB op was the fetch.
-    // So if the route now pushes to queue, we must do the fetch here.
-
-    // BUT! In `routes.ts` I removed the fetch and just pushed to queue. 
-    // Wait, let me check my routes.ts changes again.
-    // Yes, I replaced the entire block.
-    // So I need to implement `handleWorkflowGeneration` to call the workflow webhook.
-
-    // I need the webhook URL. It was `process.env.N8N_WF_VECTOR_WEBHOOK_URL`.
-    // It wasn't passed in payload in my previous `routes.ts` edit.
-    // I should probably pass it in payload or access ENV here. ENV is better if accessible.
 
     const { jobId, projectId } = payload; // payload has ideaId, projectId, workflowType, title
     const webhookUrl = process.env.N8N_WF_VECTOR_WEBHOOK_URL;

@@ -84,9 +84,6 @@ export async function consumeTasks(handler: (msg: ConsumeMessage | null) => Prom
                     ch.ack(msg);
                 } catch (error) {
                     console.error('Error processing message:', error);
-                    // ch.nack(msg); // Optional: nack on failure? For now maybe just log and ack to avoid loop?
-                    // Better to nack with requeue=false or just ack to clear it if it's a bad message.
-                    // For safety in this POC, let's ack even on error to prevent stuck queues.
                     ch.ack(msg);
                 }
             }
