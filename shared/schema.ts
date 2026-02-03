@@ -65,6 +65,8 @@ export const jobs = pgTable("jobs", {
   ideaId: integer("idea_id").references(() => ideas.id), // Nullable based on SQL schema
   userId: integer("user_id").notNull().references(() => users.id),
   projectId: uuid("project_id").notNull(),
+  documentType: text("document_type"), // Type of document being generated
+  description: text("description"), // Current task description for progress
   status: text("status").notNull().default(""), // SQL says default ''::text
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -187,6 +189,11 @@ export type UpdateLeanCanvas = z.infer<typeof updateLeanCanvasSchema>;
 export type ProjectDocument = typeof projectDocuments.$inferSelect;
 export type InsertProjectDocument = z.infer<typeof insertProjectDocumentSchema>;
 export type UpdateProjectDocument = z.infer<typeof updateProjectDocumentSchema>;
+
+export const insertJobSchema = createInsertSchema(jobs);
+export type Job = typeof jobs.$inferSelect;
+export type InsertJob = z.infer<typeof insertJobSchema>;
+export type UpdateJob = Partial<InsertJob>;
 
 export const insertAppSettingSchema = createInsertSchema(appSettings).pick({
   key: true,
