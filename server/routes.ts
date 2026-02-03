@@ -19,6 +19,29 @@ function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ message: "Unauthorized" });
 }
 
+// Middleware that accepts either session auth OR API key auth (for n8n callbacks)
+function isAuthenticatedOrApiKey(req: Request, res: Response, next: NextFunction) {
+  // First, check for session-based authentication
+  if (req.isAuthenticated()) {
+    return next();
+  }
+
+  // Check for API key in Authorization header (Bearer token)
+  const authHeader = req.headers.authorization;
+  const callbackSecret = process.env.N8N_CALLBACK_SECRET;
+
+  if (authHeader && callbackSecret) {
+    const [scheme, token] = authHeader.split(' ');
+    if (scheme === 'Bearer' && token === callbackSecret) {
+      // Mark this request as service-authenticated (no user session)
+      (req as any).isServiceAuth = true;
+      return next();
+    }
+  }
+
+  res.status(401).json({ message: "Unauthorized" });
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // sets up /api/register, /api/login, /api/logout, /api/user
   setupAuth(app);
@@ -597,7 +620,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Check authorization (optional, depending on requirements, usually user who created the job)
-      if (job.userId !== req.user!.id) {
+      if (Number(job.userId) !== Number(req.user!.id)) {
         // Allow if admin or same user? For now assume strict ownership
         return res.status(403).json({ message: "Unauthorized" });
       }
@@ -637,33 +660,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       next(error);
     }
   });
-  //TODO: Implement progress updates
-  // app.post("/api/jobs/:id/progress", isAuthenticated, async (req, res, next) => {
-  //   try {
-  //     const jobId = req.params.id;
-  //     const { progress } = req.body;
 
-  //     const job = await storage.getWorkflowJobById(jobId);
-  //     if (!job) {
-  //       return res.status(404).json({ message: "Job not found" });
-  //     }
+  // Job progress endpoint - accepts both session auth and API key auth (for n8n callbacks)
+  app.post("/api/jobs/:id/progress", isAuthenticatedOrApiKey, async (req, res, next) => {
+    try {
+      const jobId = req.params.id;
+      const { progress } = req.body;
 
-  //     if (job.userId !== req.user!.id) {
-  //       return res.status(403).json({ message: "Unauthorized" });
-  //     }
+      const job = await storage.getWorkflowJobById(jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
 
-  //     const updates: Partial<UpdateJob> = {};
-  //     if (progress) updates.description = progress.description;
-  //     if (progress) updates.status = progress.status;
+      // Skip user ownership check if this is a service-authenticated request (n8n callback)
+      if (!(req as any).isServiceAuth) {
+        if (Number(job.userId) !== Number(req.user!.id)) {
+          return res.status(403).json({ message: "Unauthorized" });
+        }
+      }
 
-  //     await storage.updateJob(jobId, updates);
+      console.log("Building job progress", jobId, progress);
+      const updates: Partial<UpdateJob> = {};
+      if (progress) updates.description = progress.description;
+      if (progress) updates.status = progress.status;
 
-  //     const updatedJob = await storage.getWorkflowJobById(jobId);
-  //     return res.status(200).json(updatedJob);
-  //   } catch (error: any) {
-  //     next(error);
-  //   }
-  // });
+      console.log("Updating job progress", jobId, updates);
+      await storage.updateJob(jobId, updates);
+
+      const updatedJob = await storage.getWorkflowJobById(jobId);
+      console.log("Updated job progress", jobId, updatedJob);
+      return res.status(200).json(updatedJob);
+    } catch (error: any) {
+      next(error);
+    }
+  });
 
   app.get("/api/ideas/:id/project-workflows", isAuthenticated, async (req, res, next) => {
     try {
