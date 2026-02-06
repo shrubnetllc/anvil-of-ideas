@@ -33,6 +33,7 @@ async function handleGenerateDocument(payload: any) {
     try {
         // Prepare webhook body
         const webhookBody = {
+            job_id: jobId, // Add snake_case alias for n8n compatibility
             ideaId,
             leancanvas_id,
             documentId,
@@ -46,6 +47,7 @@ async function handleGenerateDocument(payload: any) {
         const authHeader = `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString('base64')}`;
 
         console.log(`[Worker] Calling webhook: ${webhookUrl}`);
+        console.log(`[Worker] Webhook Payload:`, JSON.stringify(webhookBody, null, 2));
         const response = await fetch(webhookUrl, {
             method: "POST",
             headers: {
@@ -82,7 +84,7 @@ async function handleGenerateDocument(payload: any) {
         if (externalId) {
             console.log(`[Worker] Found external ID: ${externalId}`);
             await storage.updateDocument(documentId, { externalId });
-            await storage.updateJob(jobId, { status: "completed", description: "Generation started successfully." });
+            await storage.updateJob(jobId, { status: "processing", description: "Generation request sent to AI agent..." });
         } else {
             console.warn(`[Worker] No external ID found in response.`);
             await storage.updateJob(jobId, { status: "completed", description: "Generation started, but no ID returned." });
@@ -119,7 +121,8 @@ async function handleWorkflowGeneration(payload: any) {
                 "Authorization": authHeader
             },
             body: JSON.stringify({
-                "project_id": projectId
+                "project_id": projectId,
+                "job_id": jobId
             })
         });
 

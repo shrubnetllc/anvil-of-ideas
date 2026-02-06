@@ -641,17 +641,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
     try {
       const jobId = req.params.id;
+
       const job = await storage.getWorkflowJobById(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+
+      if (Number(job.userId) !== Number(req.user!.id)) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
       return res.status(200).json(job);
     } catch (error: any) {
       next(error);
     }
   });
 
+
   app.get("/api/ideas/:id/current-workflow-job", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
-      const job = await storage.getLatestWorkflowJob(ideaId);
+      const documentType = req.query.documentType as string;
+      const job = await storage.getLatestWorkflowJob(ideaId, undefined, documentType);
       if (!job) {
         return res.json(null); // No job found
       }

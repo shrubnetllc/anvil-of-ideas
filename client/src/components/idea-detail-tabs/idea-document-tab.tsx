@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDocument } from "@/hooks/use-document";
+import { useJobPolling } from "@/hooks/use-job-polling";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +17,7 @@ interface IdeaDocumentTabProps {
 export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) {
     const { toast } = useToast();
     const [tabNotes, setTabNotes] = useState('');
+    const [jobId, setJobId] = useState<string | null>(null);
 
     const {
         document: document,
@@ -26,6 +28,50 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
         deleteDoc: deleteDocument,
         fetchDocument: fetchDocument
     } = useDocument(ideaId, documentType);
+
+    // Poll for job updates if we have a job ID
+    const { status: jobStatus, description: jobDescription } = useJobPolling({
+        jobId,
+        pollInterval: 3000,
+        onComplete: () => {
+            // Refresh document when job completes
+            fetchDocument();
+        }
+    });
+
+    // Fetch any existing/running job on mount
+    useEffect(() => {
+        async function fetchCurrentJob() {
+            try {
+                const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job?documentType=${documentType}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.status !== 'completed' && data.status !== 'failed') {
+                        console.log(`[IdeaDocumentTab] Found active job for ${documentType}:`, data);
+                        setJobId(data.id);
+                    }
+                }
+            } catch (e) {
+                console.error("Error fetching current job:", e);
+            }
+        }
+        fetchCurrentJob();
+    }, [ideaId, documentType]);
+
+    // Stop polling if document is completed
+    useEffect(() => {
+        if (document?.status === 'Completed') {
+            setJobId(null);
+        }
+    }, [document?.status]);
+
+    const handleGenerate = async (notes: string) => {
+        const result = await generateDocument(notes);
+        if (result && result.jobId) {
+            console.log(`[IdeaDocumentTab] Started generation, tracking job: ${result.jobId}`);
+            setJobId(result.jobId);
+        }
+    };
 
     const formatDocumentType = (type: DocumentType) => {
         return type.replace(/([A-Z])/g, ' $1').trim();
@@ -39,7 +85,7 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => generateDocument(tabNotes)}
+                        onClick={() => handleGenerate(tabNotes)}
                         disabled={documentGenerating}
                     >
                         <Hammer className="mr-2 h-4 w-4" />
@@ -67,10 +113,10 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                         Forging Your {formatDocumentType(documentType)}
                     </h4>
                     <p className="text-neutral-600 mb-2">
-                        Please wait while we hammer out the {formatDocumentType(documentType).toLowerCase()} for your idea...
+                        {jobDescription || `Please wait while we hammer out the ${formatDocumentType(documentType).toLowerCase()} for your idea...`}
                     </p>
                     <p className="text-neutral-500 text-sm italic">
-                        This process usually takes 1-2 minutes.
+                        {jobStatus ? `Status: ${jobStatus}` : "This process usually takes 1-2 minutes."}
                     </p>
                 </div>
             ) : documentTimedOut ? (
@@ -87,7 +133,7 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                             </p>
                             <div className="flex items-center space-x-3">
                                 <Button
-                                    onClick={() => generateDocument(tabNotes)}
+                                    onClick={() => handleGenerate(tabNotes)}
                                     disabled={documentGenerating}
                                     className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
                                 >
@@ -211,7 +257,7 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                                     onClick={async () => {
                                         if (document?.id) {
                                             await deleteDocument();
-                                            generateDocument(tabNotes);
+                                            handleGenerate(tabNotes);
                                         }
                                     }}
                                     disabled={documentGenerating}
@@ -240,7 +286,7 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                     </div>
                     <div className="flex justify-center">
                         <Button
-                            onClick={() => generateDocument(tabNotes)}
+                            onClick={() => handleGenerate(tabNotes)}
                             disabled={documentGenerating}
                             className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
                         >

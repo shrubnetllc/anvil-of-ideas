@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { useToast } from "@/hooks/use-toast";
+import { useJobPolling } from "@/hooks/use-job-polling";
 import { Loader2, Workflow, CheckCircle, Clock } from "lucide-react";
 
 interface WorkflowsTabProps {
@@ -11,45 +12,21 @@ interface WorkflowsTabProps {
 export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
     const { toast } = useToast();
     const [jobId, setJobId] = useState<string | null>(null);
-    const [jobStatus, setJobStatus] = useState<string | null>(null);
     const [isStarting, setIsStarting] = useState(false);
     const [steps, setSteps] = useState<any[]>([]);
     const [isMermaidOpen, setIsMermaidOpen] = useState(false);
     const [selectedMermaidCode, setSelectedMermaidCode] = useState("");
     const [selectedStepName, setSelectedStepName] = useState("");
 
-    const checkStatus = async () => {
-        try {
-            const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job`);
-            if (res.ok) {
-                const data = await res.json();
-                setJobId(data.id);
-                setJobStatus(data.status);
-
-                if (data.status === 'Done' || data.status === 'Completed') {
-                    toast({
-                        title: "Workflows Generated",
-                        description: "The workflow generation is complete."
-                    });
-                }
-            }
-        } catch (e) {
-            console.error("Error polling job status", e);
-        }
-    };
-
-    async function getSteps() {
-        //When a job is completed, we will query the project workflows table and get the steps which will be rendered as bootstrap cards
+    const getSteps = useCallback(async () => {
         try {
             const res = await fetch(`/api/ideas/${ideaId}/project-workflows`);
             if (res.ok) {
                 const data = await res.json();
-                //Parse steps by taking the workflow_step field and parsing it as json
                 const stepsString = data[0].workflow_step;
                 const parsedSteps = JSON.parse(stepsString);
                 const steps = parsedSteps.map((step: any) => { return step.output; });
 
-                //Get mermaid code
                 const mermaidString = data[0].mermaid_code;
                 const parsedMermaidString = JSON.parse(mermaidString);
                 steps.forEach((item: any, idx: number) => {
@@ -62,27 +39,42 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
         } catch (e) {
             console.error("Error getting steps", e);
         }
-    }
+    }, [ideaId]);
 
-    // Poll for status every minute
-    useEffect(() => {
-        //Check status
-        checkStatus();
-
-        //If job is done, stop polling
-        if (!jobId) {
-            return;
-        }
-        if (jobStatus === 'Done' || jobStatus === 'Completed') {
+    // Use the job polling hook for status updates
+    const { status: jobStatus, description: jobDescription, isComplete } = useJobPolling({
+        jobId,
+        pollInterval: 10000, // Poll every 10 seconds for more responsive updates
+        onComplete: (job) => {
+            toast({
+                title: "Workflows Generated",
+                description: "The workflow generation is complete."
+            });
             getSteps();
-            return;
         }
+    });
 
-        // Poll every 60 seconds (1 minute)
-        const intervalId = setInterval(checkStatus, 60000);
-
-        return () => clearInterval(intervalId);
-    }, [jobId, jobStatus, toast]);
+    // Fetch current job on mount
+    useEffect(() => {
+        async function fetchCurrentJob() {
+            try {
+                const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data?.id) {
+                        setJobId(data.id);
+                        // If already complete, fetch steps immediately
+                        if (data.status === 'Done' || data.status === 'Completed') {
+                            getSteps();
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Error fetching current job", e);
+            }
+        }
+        fetchCurrentJob();
+    }, [ideaId, getSteps]);
 
     async function generateWorkflows() {
         setIsStarting(true);
@@ -103,7 +95,6 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
 
             const data = await res.json();
             setJobId(data.jobId);
-            setJobStatus("Started");
 
             toast({
                 title: "Generation Started",
@@ -170,10 +161,15 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                         </h4>
                         <div className="flex items-center justify-center space-x-2 text-neutral-600 mb-2">
                             <Clock className="h-4 w-4" />
-                            <span>Status: {jobStatus || "Started"}</span>
+                            <span>Status: {jobStatus || "Starting..."}</span>
                         </div>
+                        {jobDescription && (
+                            <p className="text-neutral-600 text-sm font-medium mb-2">
+                                {jobDescription}
+                            </p>
+                        )}
                         <p className="text-neutral-500 text-sm italic">
-                            This process takes 10-15 minutes. We'll check the status every minute.
+                            This process takes 10-15 minutes. Status updates every 10 seconds.
                         </p>
                     </div>
                 ) : (
