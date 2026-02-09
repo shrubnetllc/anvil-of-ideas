@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useDocument } from "@/hooks/use-document";
 import { useJobPolling } from "@/hooks/use-job-polling";
+import { useJobSocket } from "@/hooks/use-job-socket";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +38,12 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
             // Refresh document when job completes
             fetchDocument();
         }
+    });
+
+    // Real-time updates via WebSocket (falls back to polling above)
+    const { message: socketMessage, eventType: socketEventType } = useJobSocket({
+        jobId,
+        onDone: () => fetchDocument(),
     });
 
     // Fetch any existing/running job on mount
@@ -113,10 +120,10 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                         Forging Your {formatDocumentType(documentType)}
                     </h4>
                     <p className="text-neutral-600 mb-2">
-                        {jobDescription || `Please wait while we hammer out the ${formatDocumentType(documentType).toLowerCase()} for your idea...`}
+                        {socketMessage || jobDescription || `Please wait while we hammer out the ${formatDocumentType(documentType).toLowerCase()} for your idea...`}
                     </p>
                     <p className="text-neutral-500 text-sm italic">
-                        {jobStatus ? `Status: ${jobStatus}` : "This process usually takes 1-2 minutes."}
+                        {socketEventType ? `Status: ${socketEventType}` : jobStatus ? `Status: ${jobStatus}` : "This process usually takes 1-2 minutes."}
                     </p>
                 </div>
             ) : documentTimedOut ? (

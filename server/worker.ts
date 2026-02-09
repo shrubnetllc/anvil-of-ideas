@@ -1,5 +1,6 @@
 import { consumeTasks } from "./rabbitmq";
 import { storage } from "./storage";
+import { publishJobEvent } from "./socket";
 
 export async function startWorker() {
     console.log("Starting RabbitMQ Worker...");
@@ -29,6 +30,7 @@ async function handleGenerateDocument(payload: any) {
 
     // Update job status
     await storage.updateJob(jobId, { status: "processing", description: "Calling external generation service..." });
+    publishJobEvent(jobId, "progress", { message: "Calling external generation service..." });
 
     try {
         // Prepare webhook body
@@ -85,14 +87,17 @@ async function handleGenerateDocument(payload: any) {
             console.log(`[Worker] Found external ID: ${externalId}`);
             await storage.updateDocument(documentId, { externalId });
             await storage.updateJob(jobId, { status: "processing", description: "Generation request sent to AI agent..." });
+            publishJobEvent(jobId, "progress", { message: "Generation request sent to AI agent..." });
         } else {
             console.warn(`[Worker] No external ID found in response.`);
             await storage.updateJob(jobId, { status: "completed", description: "Generation started, but no ID returned." });
+            publishJobEvent(jobId, "done", { message: "Generation complete." });
         }
 
     } catch (error: any) {
         console.error(`[Worker] Job ${jobId} failed:`, error);
         await storage.updateJob(jobId, { status: "failed", description: `Error: ${error.message}` });
+        publishJobEvent(jobId, "error", { message: error.message });
     }
 }
 
@@ -113,6 +118,7 @@ async function handleWorkflowGeneration(payload: any) {
 
     try {
         await storage.updateJob(jobId, { status: "processing", description: "Initiating workflow generation..." });
+        publishJobEvent(jobId, "progress", { message: "Initiating workflow generation..." });
 
         const response = await fetch(webhookUrl, {
             method: "POST",
@@ -131,9 +137,11 @@ async function handleWorkflowGeneration(payload: any) {
         }
 
         await storage.updateJob(jobId, { status: "completed", description: "Workflow generation initiated." });
+        publishJobEvent(jobId, "done", { message: "Workflow generation initiated." });
 
     } catch (error: any) {
         console.error(`[Worker] Workflow job ${jobId} failed:`, error);
         await storage.updateJob(jobId, { status: "failed", description: `Error: ${error.message}` });
+        publishJobEvent(jobId, "error", { message: error.message });
     }
 }

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { useToast } from "@/hooks/use-toast";
 import { useJobPolling } from "@/hooks/use-job-polling";
+import { useJobSocket } from "@/hooks/use-job-socket";
 import { Loader2, Workflow, CheckCircle, Clock } from "lucide-react";
 
 interface WorkflowsTabProps {
@@ -44,7 +45,7 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
     // Use the job polling hook for status updates
     const { status: jobStatus, description: jobDescription, isComplete } = useJobPolling({
         jobId,
-        pollInterval: 10000, // Poll every 10 seconds for more responsive updates
+        pollInterval: 10000,
         onComplete: (job) => {
             toast({
                 title: "Workflows Generated",
@@ -54,18 +55,33 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
         }
     });
 
+    // Real-time updates via WebSocket (falls back to polling above)
+    const { message: socketMessage, eventType: socketEventType } = useJobSocket({
+        jobId,
+        onDone: () => getSteps(),
+    });
+
+    // Fetch steps on mount
+    useEffect(() => {
+        getSteps();
+    }, [getSteps]);
+
     // Fetch current job on mount
     useEffect(() => {
         async function fetchCurrentJob() {
             try {
-                const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job`);
+                const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job?documentType=Workflows`);
                 if (res.ok) {
                     const data = await res.json();
                     if (data?.id) {
-                        setJobId(data.id);
-                        // If already complete, fetch steps immediately
-                        if (data.status === 'Done' || data.status === 'Completed') {
+                        const doneStatuses = ['Done', 'Completed', 'completed', 'complete'];
+                        const failedStatuses = ['Failed', 'failed', 'Error', 'error'];
+                        if (doneStatuses.includes(data.status)) {
+                            // Job already finished, just fetch steps
                             getSteps();
+                        } else if (!failedStatuses.includes(data.status)) {
+                            // Job is still running, track it
+                            setJobId(data.id);
                         }
                     }
                 }
@@ -122,34 +138,7 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
             </div>
 
             <div className="flex flex-col items-center justify-center py-12">
-                {!jobId ? (
-                    <div className="text-center">
-                        <div className="mb-4 mx-auto w-16 h-16 flex items-center justify-center rounded-full bg-neutral-100">
-                            <Workflow className="h-8 w-8 text-neutral-500" />
-                        </div>
-                        <h4 className="text-lg font-medium text-neutral-900 mb-2">Generate Workflows</h4>
-                        <p className="text-neutral-500 mb-6 max-w-md mx-auto">
-                            Click below to start generating workflows. This process runs in the background and takes approximately 10-15 minutes.
-                        </p>
-                        <Button
-                            onClick={generateWorkflows}
-                            disabled={isStarting}
-                            className="bg-primary hover:bg-primary/90"
-                        >
-                            {isStarting ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Starting...
-                                </>
-                            ) : (
-                                <>
-                                    <Workflow className="mr-2 h-4 w-4" />
-                                    Generate Workflows
-                                </>
-                            )}
-                        </Button>
-                    </div>
-                ) : !isDone ? (
+                {jobId && !isDone ? (
                     <div className="text-center">
                         <div className="mb-4 mx-auto relative w-16 h-16">
                             <div className="absolute inset-0 flex items-center justify-center animate-spin">
@@ -161,21 +150,18 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                         </h4>
                         <div className="flex items-center justify-center space-x-2 text-neutral-600 mb-2">
                             <Clock className="h-4 w-4" />
-                            <span>Status: {jobStatus || "Starting..."}</span>
+                            <span>Status: {socketEventType || jobStatus || "Starting..."}</span>
                         </div>
-                        {jobDescription && (
+                        {(socketMessage || jobDescription) && (
                             <p className="text-neutral-600 text-sm font-medium mb-2">
-                                {jobDescription}
+                                {socketMessage || jobDescription}
                             </p>
                         )}
                         <p className="text-neutral-500 text-sm italic">
                             This process takes 10-15 minutes. Status updates every 10 seconds.
                         </p>
                     </div>
-                ) : (
-                    steps.length === 0 ? (
-                        <p className="text-neutral-500">No workflows found.</p>
-                    ) : (
+                ) : steps.length > 0 ? (
                         <div className="space-y-4">
                             {steps.map((step, idx) => (
                                 <div key={idx} className="bg-white border rounded-lg p-6 shadow-sm">
@@ -219,7 +205,33 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                                 </div>
                             ))}
                         </div>
-                    )
+                ) : (
+                    <div className="text-center">
+                        <div className="mb-4 mx-auto w-16 h-16 flex items-center justify-center rounded-full bg-neutral-100">
+                            <Workflow className="h-8 w-8 text-neutral-500" />
+                        </div>
+                        <h4 className="text-lg font-medium text-neutral-900 mb-2">Generate Workflows</h4>
+                        <p className="text-neutral-500 mb-6 max-w-md mx-auto">
+                            Click below to start generating workflows. This process runs in the background and takes approximately 10-15 minutes.
+                        </p>
+                        <Button
+                            onClick={generateWorkflows}
+                            disabled={isStarting}
+                            className="bg-primary hover:bg-primary/90"
+                        >
+                            {isStarting ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Starting...
+                                </>
+                            ) : (
+                                <>
+                                    <Workflow className="mr-2 h-4 w-4" />
+                                    Generate Workflows
+                                </>
+                            )}
+                        </Button>
+                    </div>
                 )}
             </div>
 
