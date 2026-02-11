@@ -1,7 +1,8 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth } from "./auth";
+import { setupAuth, sessionMiddleware } from "./auth";
+import { setupSocketIO, publishJobEvent } from "./socket";
 import { z } from "zod";
 import { type InsertJob, type UpdateJob } from "@shared/schema";
 import { publishTask } from "./rabbitmq";
@@ -587,9 +588,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Publish task to RabbitMQ
       const message = {
-        jobId: job.id,
         type: "workflow_generation",
         payload: {
+          jobId: job.id,
           ideaId,
           projectId,
           workflowType,
@@ -636,6 +637,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (description) updates.description = description;
 
       await storage.updateJob(jobId, updates);
+      publishJobEvent(jobId, "status", { message: description || status });
 
       const updatedJob = await storage.getWorkflowJobById(jobId);
       return res.status(200).json(updatedJob);
@@ -647,17 +649,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
     try {
       const jobId = req.params.id;
+
       const job = await storage.getWorkflowJobById(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+
+      if (Number(job.userId) !== Number(req.user!.id)) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
       return res.status(200).json(job);
     } catch (error: any) {
       next(error);
     }
   });
 
+
   app.get("/api/ideas/:id/current-workflow-job", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
-      const job = await storage.getLatestWorkflowJob(ideaId);
+      const documentType = req.query.documentType as string;
+      const job = await storage.getLatestWorkflowJob(ideaId, undefined, documentType);
       if (!job) {
         return res.json(null); // No job found
       }
@@ -692,6 +703,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       console.log("Updating job progress", jobId, updates);
       await storage.updateJob(jobId, updates);
+
+      // Publish 'done' event when job is completed, otherwise 'progress'
+      const isCompleted = progress?.status?.toLowerCase() === 'completed';
+      if (isCompleted) {
+        publishJobEvent(jobId, "done", { message: progress?.description || "Completed" });
+      } else {
+        publishJobEvent(jobId, "progress", { message: progress?.description });
+      }
 
       const updatedJob = await storage.getWorkflowJobById(jobId);
       console.log("Updated job progress", jobId, updatedJob);
@@ -1618,6 +1637,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
         supabaseProjectId = projectId; // Default fallback
       }
 
+
+      // Get the leancanvas_id from lean_canvas table (the table's id column IS the leancanvas_id)
+      let leancanvasId;
+      try {
+        const { pool } = await import('./db');
+        const result = await pool.query('SELECT id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        if (result.rows.length > 0) {
+          leancanvasId = result.rows[0].id;
+          console.log(`Found leancanvas_id ${leancanvasId} for idea ${ideaId}`);
+        }
+      } catch (error) {
+        console.error('Error getting leancanvas_id:', error);
+      }
+
+      // Create or update a document record before creating the job
+      let document;
+      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements", req.user!.id);
+
+      if (existingDocument) {
+        // Update existing document
+        await storage.updateDocument(existingDocument.id, {
+          status: "Generating",
+          generationStartedAt: new Date()
+        }, req.user!.id);
+        document = await storage.getDocumentById(existingDocument.id, req.user!.id);
+        console.log(`Updated existing document ${existingDocument.id} for project requirements`);
+      } else {
+        // Create a new document
+        document = await storage.createDocument({
+          ideaId,
+          documentType: "ProjectRequirements",
+          title: "Project Requirements Document",
+          status: "Generating",
+          generationStartedAt: new Date()
+        }, req.user!.id);
+        console.log(`Created new document ${document.id} for project requirements`);
+      }
 
       // Create a background job for this task
       const jobData: InsertJob = {
@@ -3412,6 +3468,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  setupSocketIO(httpServer, sessionMiddleware);
 
   return httpServer;
 }

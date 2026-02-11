@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDocument } from "@/hooks/use-document";
+import { useJobPolling } from "@/hooks/use-job-polling";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +26,53 @@ export function FunctionalRequirementsTab({ ideaId }: FunctionalRequirementsTabP
         fetchDocument: fetchFunctionalRequirements
     } = useDocument(ideaId, "FunctionalRequirements");
 
+    const [jobId, setJobId] = useState<string | null>(null);
+
+    // Poll for job status
+    const { status: jobStatus, description: jobDescription } = useJobPolling({
+        jobId,
+        pollInterval: 3000,
+        stopOnStatuses: ["Done", "Completed", "Error", "Failed"],
+        onComplete: () => {
+            fetchFunctionalRequirements();
+        }
+    });
+
+    // Check for existing job on mount
+    useEffect(() => {
+        async function fetchCurrentJob() {
+            try {
+                const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job?documentType=FunctionalRequirements`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data?.id && (data.status !== 'Done' && data.status !== 'Completed' && data.status !== 'Error' && data.status !== 'Failed')) {
+                        setJobId(data.id);
+                    }
+                }
+            } catch (e) {
+                console.error("Error fetching current job", e);
+            }
+        }
+        fetchCurrentJob();
+    }, [ideaId]);
+
+    // Debug logging
+    useEffect(() => {
+        console.log("[FunctionalRequirementsTab] State:", {
+            jobId,
+            jobStatus,
+            jobDescription,
+            functionalRequirementsGenerating
+        });
+    }, [jobId, jobStatus, jobDescription, functionalRequirementsGenerating]);
+
+    const handleGenerate = async (notes: string) => {
+        const res = await generateFunctionalRequirements(notes);
+        if (res?.jobId) {
+            setJobId(res.jobId);
+        }
+    };
+
     return (
         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
             <div className="flex items-center justify-between mb-4">
@@ -33,7 +81,7 @@ export function FunctionalRequirementsTab({ ideaId }: FunctionalRequirementsTabP
                     <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => generateFunctionalRequirements(functionalRequirementsNotes)}
+                        onClick={() => handleGenerate(functionalRequirementsNotes)}
                         disabled={functionalRequirementsGenerating}
                     >
                         <Database className="mr-2 h-4 w-4" />
@@ -61,10 +109,10 @@ export function FunctionalRequirementsTab({ ideaId }: FunctionalRequirementsTabP
                         Forging Your Functional Requirements
                     </h4>
                     <p className="text-neutral-600 mb-2">
-                        Please wait while we hammer out the functional requirements for your idea...
+                        {jobDescription || "Please wait while we hammer out the functional requirements for your idea..."}
                     </p>
                     <p className="text-neutral-500 text-sm italic">
-                        This process usually takes 1-2 minutes.
+                        {jobStatus ? `Status: ${jobStatus}` : "This process usually takes 1-2 minutes."}
                     </p>
                 </div>
             ) : functionalRequirementsTimedOut ? (
@@ -81,7 +129,7 @@ export function FunctionalRequirementsTab({ ideaId }: FunctionalRequirementsTabP
                             </p>
                             <div className="flex items-center space-x-3">
                                 <Button
-                                    onClick={() => generateFunctionalRequirements(functionalRequirementsNotes)}
+                                    onClick={() => handleGenerate(functionalRequirementsNotes)}
                                     disabled={functionalRequirementsGenerating}
                                     className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
                                 >
@@ -205,7 +253,7 @@ export function FunctionalRequirementsTab({ ideaId }: FunctionalRequirementsTabP
                                     onClick={async () => {
                                         if (functionalRequirements?.id) {
                                             await deleteFunctionalRequirements();
-                                            generateFunctionalRequirements(functionalRequirementsNotes);
+                                            handleGenerate(functionalRequirementsNotes);
                                         }
                                     }}
                                     disabled={functionalRequirementsGenerating}
@@ -234,7 +282,7 @@ export function FunctionalRequirementsTab({ ideaId }: FunctionalRequirementsTabP
                     </div>
                     <div className="flex justify-center">
                         <Button
-                            onClick={() => generateFunctionalRequirements(functionalRequirementsNotes)}
+                            onClick={() => handleGenerate(functionalRequirementsNotes)}
                             disabled={functionalRequirementsGenerating}
                             className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
                         >

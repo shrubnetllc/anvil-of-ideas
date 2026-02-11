@@ -1,5 +1,6 @@
 import { consumeTasks } from "./rabbitmq";
 import { storage } from "./storage";
+import { publishJobEvent } from "./socket";
 
 export async function startWorker() {
     console.log("Starting RabbitMQ Worker...");
@@ -29,10 +30,12 @@ async function handleGenerateDocument(payload: any) {
 
     // Update job status
     await storage.updateJob(jobId, { status: "processing", description: "Calling external generation service..." });
+    publishJobEvent(jobId, "progress", { message: "Calling external generation service..." });
 
     try {
         // Prepare webhook body
         const webhookBody = {
+            job_id: jobId, // Add snake_case alias for n8n compatibility
             ideaId,
             leancanvas_id,
             documentId,
@@ -46,6 +49,7 @@ async function handleGenerateDocument(payload: any) {
         const authHeader = `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString('base64')}`;
 
         console.log(`[Worker] Calling webhook: ${webhookUrl}`);
+        console.log(`[Worker] Webhook Payload:`, JSON.stringify(webhookBody, null, 2));
         const response = await fetch(webhookUrl, {
             method: "POST",
             headers: {
@@ -82,15 +86,18 @@ async function handleGenerateDocument(payload: any) {
         if (externalId) {
             console.log(`[Worker] Found external ID: ${externalId}`);
             await storage.updateDocument(documentId, { externalId });
-            await storage.updateJob(jobId, { status: "completed", description: "Generation started successfully." });
+            await storage.updateJob(jobId, { status: "processing", description: "Generation request sent to AI agent..." });
+            publishJobEvent(jobId, "progress", { message: "Generation request sent to AI agent..." });
         } else {
             console.warn(`[Worker] No external ID found in response.`);
             await storage.updateJob(jobId, { status: "completed", description: "Generation started, but no ID returned." });
+            publishJobEvent(jobId, "done", { message: "Generation complete." });
         }
 
     } catch (error: any) {
         console.error(`[Worker] Job ${jobId} failed:`, error);
         await storage.updateJob(jobId, { status: "failed", description: `Error: ${error.message}` });
+        publishJobEvent(jobId, "error", { message: error.message });
     }
 }
 
@@ -111,6 +118,7 @@ async function handleWorkflowGeneration(payload: any) {
 
     try {
         await storage.updateJob(jobId, { status: "processing", description: "Initiating workflow generation..." });
+        publishJobEvent(jobId, "progress", { message: "Initiating workflow generation..." });
 
         const response = await fetch(webhookUrl, {
             method: "POST",
@@ -119,7 +127,8 @@ async function handleWorkflowGeneration(payload: any) {
                 "Authorization": authHeader
             },
             body: JSON.stringify({
-                "project_id": projectId
+                "project_id": projectId,
+                "job_id": jobId
             })
         });
 
@@ -128,9 +137,11 @@ async function handleWorkflowGeneration(payload: any) {
         }
 
         await storage.updateJob(jobId, { status: "completed", description: "Workflow generation initiated." });
+        publishJobEvent(jobId, "done", { message: "Workflow generation initiated." });
 
     } catch (error: any) {
         console.error(`[Worker] Workflow job ${jobId} failed:`, error);
         await storage.updateJob(jobId, { status: "failed", description: `Error: ${error.message}` });
+        publishJobEvent(jobId, "error", { message: error.message });
     }
 }

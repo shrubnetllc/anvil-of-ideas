@@ -51,7 +51,7 @@ export interface IStorage {
   createJob(job: InsertJob): Promise<Job>;
   updateJob(id: string, updates: Partial<UpdateJob>, requestingUserId?: number): Promise<void>;
   getWorkflowJobById(id: string, requestingUserId?: number): Promise<Job | null>;
-  getLatestWorkflowJob(ideaId: number, requestingUserId?: number): Promise<Job | null>;
+  getLatestWorkflowJob(ideaId: number, requestingUserId?: number, documentType?: string): Promise<Job | null>;
 
   // App Settings operations
   getSetting(key: string): Promise<string | null>;
@@ -733,13 +733,22 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getLatestWorkflowJob(ideaId: number, requestingUserId?: number): Promise<Job | null> {
+  async getLatestWorkflowJob(ideaId: number, requestingUserId?: number, documentType?: string): Promise<Job | null> {
     try {
       const execute = async (tx: typeof db) => {
-        const result = await tx.select().from(jobs)
+        let query = tx.select().from(jobs)
           .where(eq(jobs.ideaId, ideaId))
           .orderBy(desc(jobs.createdAt))
           .limit(1);
+
+        if (documentType) {
+          query = tx.select().from(jobs)
+            .where(and(eq(jobs.ideaId, ideaId), eq(jobs.documentType, documentType)))
+            .orderBy(desc(jobs.createdAt))
+            .limit(1);
+        }
+
+        const result = await query;
         return result[0] || null;
       };
 
@@ -1181,9 +1190,9 @@ export class MemStorage implements IStorage {
     return this.jobs.get(id) || null;
   }
 
-  async getLatestWorkflowJob(ideaId: number): Promise<Job | null> {
+  async getLatestWorkflowJob(ideaId: number, requestingUserId?: number, documentType?: string): Promise<Job | null> {
     const jobs = Array.from(this.jobs.values())
-      .filter(j => j.ideaId === ideaId)
+      .filter(j => j.ideaId === ideaId && (!documentType || j.documentType === documentType))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return jobs[0] || null;
   }

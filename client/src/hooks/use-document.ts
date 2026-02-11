@@ -191,6 +191,8 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
                 description: `Started forging ${documentType.replace(/([A-Z])/g, ' $1').trim()}. This may take a few minutes.`,
             });
 
+            return result;
+
         } catch (error) {
             console.error(`Error generating ${documentType}:`, error);
             setIsGenerating(false);
