@@ -1638,19 +1638,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      // Get the leancanvas_id from lean_canvas table (the table's id column IS the leancanvas_id)
-      let leancanvasId;
-      try {
-        const { pool } = await import('./db');
-        const result = await pool.query('SELECT id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
-        if (result.rows.length > 0) {
-          leancanvasId = result.rows[0].id;
-          console.log(`Found leancanvas_id ${leancanvasId} for idea ${ideaId}`);
-        }
-      } catch (error) {
-        console.error('Error getting leancanvas_id:', error);
-      }
-
       // Create or update a document record before creating the job
       let document;
       const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements", req.user!.id);
@@ -1687,28 +1674,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const job = await storage.createJob(jobData);
       console.log(`Created job ${job.id} for Project Requirements generation`);
-
-      // Create or update a document record before publishing to RabbitMQ
-      let document;
-      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements", req.user!.id);
-
-      if (existingDocument) {
-        await storage.updateDocument(existingDocument.id, {
-          status: "Generating",
-          generationStartedAt: new Date()
-        }, req.user!.id);
-        document = await storage.getDocumentById(existingDocument.id, req.user!.id);
-        console.log(`Updated existing document ${existingDocument.id} for project requirements`);
-      } else {
-        document = await storage.createDocument({
-          ideaId,
-          documentType: "ProjectRequirements",
-          title: "Project Requirements Document",
-          status: "Generating",
-          generationStartedAt: new Date()
-        }, req.user!.id);
-        console.log(`Created new document ${document!.id} for project requirements`);
-      }
 
       // Prepare payload for RabbitMQ
       const taskPayload = {
