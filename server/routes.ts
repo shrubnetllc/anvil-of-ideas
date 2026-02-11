@@ -87,6 +87,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // Create the idea
+      if (process.env.NODE_ENV === "production") {
+        const ideas = await storage.getIdeasByUser(req.user!.id);
+        if (ideas.length >= 5) {
+          return res.status(403).json({ message: "You have reached the maximum number of ideas allowed" });
+        }
+      }
       console.log("Creating idea...")
       const idea = await storage.createIdea({
         ...validatedIdeaData,
@@ -1188,7 +1194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      if (idea.userId !== req.user!.id) {
+      if (Number(idea.userId) !== Number(req.user!.id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -1313,7 +1319,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         // First try to get from local database
         const { pool } = await import('./db');
-        const result = await pool.query('SELECT project_id, leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        const result = await pool.query('SELECT project_id, id AS leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
 
         if (result.rows.length > 0) {
           supabaseProjectId = result.rows[0].project_id;
@@ -1589,17 +1595,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      // Get the Supabase project ID from lean_canvas table
+      // Get the Supabase project ID and leancanvas_id from lean_canvas table
       let supabaseProjectId;
+      let leancanvasId;
       try {
         // First try to get it from our lean_canvas table which should have stored the project_id
         const { pool } = await import('./db');
-        const result = await pool.query('SELECT project_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        const result = await pool.query('SELECT project_id, id AS leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
 
 
         if (result.rows.length > 0 && result.rows[0].project_id) {
           supabaseProjectId = result.rows[0].project_id;
-          console.log(`Using Supabase project ID: ${supabaseProjectId} from lean_canvas table`);
+          leancanvasId = result.rows[0].leancanvas_id;
+          console.log(`Using Supabase project ID: ${supabaseProjectId}, leancanvas_id: ${leancanvasId} from lean_canvas table`);
         } else {
           // If not found, use the ideaId as a default (but this likely won't work with Supabase)
           supabaseProjectId = projectId;
@@ -1623,6 +1631,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const job = await storage.createJob(jobData);
       console.log(`Created job ${job.id} for Project Requirements generation`);
+
+      // Create or update a document record before publishing to RabbitMQ
+      let document;
+      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements", req.user!.id);
+
+      if (existingDocument) {
+        await storage.updateDocument(existingDocument.id, {
+          status: "Generating",
+          generationStartedAt: new Date()
+        }, req.user!.id);
+        document = await storage.getDocumentById(existingDocument.id, req.user!.id);
+        console.log(`Updated existing document ${existingDocument.id} for project requirements`);
+      } else {
+        document = await storage.createDocument({
+          ideaId,
+          documentType: "ProjectRequirements",
+          title: "Project Requirements Document",
+          status: "Generating",
+          generationStartedAt: new Date()
+        }, req.user!.id);
+        console.log(`Created new document ${document!.id} for project requirements`);
+      }
 
       // Prepare payload for RabbitMQ
       const taskPayload = {
