@@ -97,13 +97,14 @@ flowchart LR
    N8N_AUTH_PASSWORD=your_password
    N8N_BRD_WEBHOOK_URL=your_brd_webhook
    N8N_FUNCTIONAL_WEBHOOK_URL=your_frd_webhook
+   N8N_WF_VECTOR_WEBHOOK_URL=your_wf_vector_webhook
    ```
 
 4. **Run the Development Server**:
    ```bash
    npm run dev
    ```
-   The application will be available at `http://localhost:5173`.
+   The application will be available at `http://localhost:5000`.
 
 ## 📜 License
 
