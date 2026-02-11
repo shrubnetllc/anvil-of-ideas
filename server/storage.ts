@@ -6,7 +6,7 @@ import {
   ProjectStatus, DocumentType,
   type AppSetting, type InsertAppSetting,
   type ProjectDocument, type InsertProjectDocument, type UpdateProjectDocument,
-  jobs
+  jobs, type Job, type InsertJob, type UpdateJob
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -48,9 +48,10 @@ export interface IStorage {
   createDocument(document: InsertProjectDocument, requestingUserId?: number): Promise<ProjectDocument>;
   updateDocument(id: number, updates: Partial<UpdateProjectDocument>, requestingUserId?: number): Promise<void>;
   deleteDocument(id: number, requestingUserId?: number): Promise<void>;
-  addWorkflowJobId(ideaId: number, userId: number, projectId: string, status: string): Promise<any>;
-  getWorkflowJobById(id: string, requestingUserId?: number): Promise<any>;
-  getLatestWorkflowJob(ideaId: number, requestingUserId?: number): Promise<any>;
+  createJob(job: InsertJob): Promise<Job>;
+  updateJob(id: string, updates: Partial<UpdateJob>, requestingUserId?: number): Promise<void>;
+  getWorkflowJobById(id: string, requestingUserId?: number): Promise<Job | null>;
+  getLatestWorkflowJob(ideaId: number, requestingUserId?: number, documentType?: string): Promise<Job | null>;
 
   // App Settings operations
   getSetting(key: string): Promise<string | null>;
@@ -671,19 +672,50 @@ export class DatabaseStorage implements IStorage {
       return undefined;
     }
   }
-  async addWorkflowJobId(ideaId: number, userId: number, projectId: string, status: string): Promise<any> {
+  async createJob(job: InsertJob): Promise<Job> {
     try {
-      return withRLS(userId, async (tx) => {
-        const [job] = await tx.insert(jobs).values({ ideaId, userId, projectId, status }).returning();
-        return job;
-      });
+      const execute = async (tx: typeof db) => {
+        const [newJob] = await tx.insert(jobs).values({
+          ...job,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }).returning();
+        return newJob;
+      };
+
+      if (job.userId) {
+        return withRLS(job.userId, execute);
+      }
+      return execute(db);
     } catch (error) {
-      console.error("Error adding workflow job ID:", error);
-      return null;
+      console.error("Error adding job:", error);
+      throw error;
     }
   }
 
-  async getWorkflowJobById(id: string, requestingUserId?: number): Promise<any> {
+  async updateJob(id: string, updates: Partial<UpdateJob>, requestingUserId?: number): Promise<void> {
+    try {
+      const execute = async (tx: typeof db) => {
+        await tx.update(jobs)
+          .set({
+            ...updates,
+            updatedAt: new Date()
+          })
+          .where(eq(jobs.id, id));
+      };
+
+      if (requestingUserId) {
+        await withRLS(requestingUserId, execute);
+      } else {
+        await execute(db);
+      }
+    } catch (error) {
+      console.error("Error updating job:", error);
+      throw error;
+    }
+  }
+
+  async getWorkflowJobById(id: string, requestingUserId?: number): Promise<Job | null> {
     try {
       const execute = async (tx: typeof db) => {
         // id is uuid from schema
@@ -696,18 +728,27 @@ export class DatabaseStorage implements IStorage {
       }
       return execute(db);
     } catch (error) {
-      console.error("Error getting workflow job by ID:", error);
+      console.error("Error getting job by ID:", error);
       return null;
     }
   }
 
-  async getLatestWorkflowJob(ideaId: number, requestingUserId?: number): Promise<any> {
+  async getLatestWorkflowJob(ideaId: number, requestingUserId?: number, documentType?: string): Promise<Job | null> {
     try {
       const execute = async (tx: typeof db) => {
-        const result = await tx.select().from(jobs)
+        let query = tx.select().from(jobs)
           .where(eq(jobs.ideaId, ideaId))
           .orderBy(desc(jobs.createdAt))
           .limit(1);
+
+        if (documentType) {
+          query = tx.select().from(jobs)
+            .where(and(eq(jobs.ideaId, ideaId), eq(jobs.documentType, documentType)))
+            .orderBy(desc(jobs.createdAt))
+            .limit(1);
+        }
+
+        const result = await query;
         return result[0] || null;
       };
 
@@ -716,7 +757,7 @@ export class DatabaseStorage implements IStorage {
       }
       return execute(db);
     } catch (error) {
-      console.error("Error getting latest workflow job:", error);
+      console.error("Error getting latest job:", error);
       return null;
     }
   }
@@ -1117,27 +1158,41 @@ export class MemStorage implements IStorage {
     return idea?.websiteUrl || undefined;
   }
 
-  async addWorkflowJobId(ideaId: number, userId: number, projectId: string, status: string): Promise<any> {
-    const job = {
+  async createJob(job: InsertJob): Promise<Job> {
+    const newJob: Job = {
       id: uuidv4(),
-      ideaId,
-      userId,
-      projectId,
-      status,
+      ideaId: job.ideaId || null,
+      userId: job.userId,
+      projectId: job.projectId,
+      documentType: job.documentType || null,
+      description: job.description || null,
+      status: job.status || "",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    this.jobs.set(job.id, job);
-    return job;
+    this.jobs.set(newJob.id, newJob);
+    return newJob;
   }
 
-  async getWorkflowJobById(id: string, requestingUserId?: number): Promise<any> {
+  async updateJob(id: string, updates: Partial<UpdateJob>): Promise<void> {
+    const job = this.jobs.get(id);
+    if (job) {
+      const updatedJob = {
+        ...job,
+        ...updates,
+        updatedAt: new Date(),
+      };
+      this.jobs.set(id, updatedJob);
+    }
+  }
+
+  async getWorkflowJobById(id: string): Promise<Job | null> {
     return this.jobs.get(id) || null;
   }
 
-  async getLatestWorkflowJob(ideaId: number, requestingUserId?: number): Promise<any> {
+  async getLatestWorkflowJob(ideaId: number, requestingUserId?: number, documentType?: string): Promise<Job | null> {
     const jobs = Array.from(this.jobs.values())
-      .filter(j => j.ideaId === ideaId)
+      .filter(j => j.ideaId === ideaId && (!documentType || j.documentType === documentType))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     return jobs[0] || null;
   }

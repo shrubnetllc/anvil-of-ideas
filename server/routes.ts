@@ -1,18 +1,45 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth } from "./auth";
+import { setupAuth, sessionMiddleware } from "./auth";
+import { setupSocketIO, publishJobEvent } from "./socket";
 import { z } from "zod";
+import { type InsertJob, type UpdateJob } from "@shared/schema";
+import { publishTask } from "./rabbitmq";
 import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema, insertProjectDocumentSchema, updateProjectDocumentSchema, DocumentType } from "@shared/schema";
 import { fetchLeanCanvasData, fetchUserIdeas, fetchBusinessRequirements, fetchFunctionalRequirements, fetchProjectWorkflows, fetchProjectEstimate } from "./supabase";
 import { emailService } from "./email";
 import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
 import { uuid } from "drizzle-orm/pg-core";
+import { v4 as uuidv4 } from "uuid";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
     return next();
   }
+  res.status(401).json({ message: "Unauthorized" });
+}
+
+// Middleware that accepts either session auth OR API key auth (for n8n callbacks)
+function isAuthenticatedOrApiKey(req: Request, res: Response, next: NextFunction) {
+  // First, check for session-based authentication
+  if (req.isAuthenticated()) {
+    return next();
+  }
+
+  // Check for API key in Authorization header (Bearer token)
+  const authHeader = req.headers.authorization;
+  const callbackSecret = process.env.N8N_CALLBACK_SECRET;
+
+  if (authHeader && callbackSecret) {
+    const [scheme, token] = authHeader.split(' ');
+    if (scheme === 'Bearer' && token === callbackSecret) {
+      // Mark this request as service-authenticated (no user session)
+      (req as any).isServiceAuth = true;
+      return next();
+    }
+  }
+
   res.status(401).json({ message: "Unauthorized" });
 }
 
@@ -61,6 +88,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // Create the idea
+      if (process.env.NODE_ENV === "production") {
+        const ideas = await storage.getIdeasByUser(req.user!.id);
+        if (ideas.length >= 5) {
+          return res.status(403).json({ message: "You have reached the maximum number of ideas allowed" });
+        }
+      }
       console.log("Creating idea...")
       const idea = await storage.createIdea({
         ...validatedIdeaData,
@@ -192,26 +225,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
       // Check if a functional requirements document already exists
+      let document;
       const existingDoc = await storage.getDocumentByType(ideaId, 'FunctionalRequirements');
+
       if (existingDoc) {
-        return res.status(409).json({
-          error: 'Functional requirements document already exists',
-          document: existingDoc
+        // Allow regeneration - update existing document to Generating state
+        console.log(`Existing FRD found (status: ${existingDoc.status}), resetting for regeneration`);
+        await storage.updateDocument(existingDoc.id, {
+          status: "Generating",
+          generationStartedAt: new Date()
+        });
+        document = await storage.getDocumentById(existingDoc.id);
+      } else {
+        // Create a new document with Generating status
+        document = await storage.createDocument({
+          ideaId,
+          title: "Functional Requirements Document",
+          documentType: "FunctionalRequirements",
+          status: "Generating",
+          generationStartedAt: new Date()
         });
       }
 
 
-      // Step 1: Create the document with Generating status
-      const document = await storage.createDocument({
-        ideaId,
-        title: "Functional Requirements Document",
-        documentType: "FunctionalRequirements",
-        status: "Generating",
-        generationStartedAt: new Date()
-      });
-
-
-      console.log(`Created functional requirements document with ID ${document.id}`);
+      console.log(`Created/updated functional requirements document with ID ${document!.id}`);
 
 
       // Step 2: Collect and verify the IDs for related documents
@@ -295,7 +332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      console.log(`Calling functional requirements webhook: ${webhookUrl.substring(0, 20)}...`);
+      console.log(`Queuing functional requirements generation task...`);
 
 
       const webhookBody = {
@@ -314,121 +351,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Webhook request body: ${JSON.stringify(webhookBody)}`);
 
 
-      // Step 4: Call the webhook with authentication
-      const username = process.env.N8N_AUTH_USERNAME;
-      const password = process.env.N8N_AUTH_PASSWORD;
+      // Create a background job for this task
+      const jobData: InsertJob = {
+        ideaId: ideaId,
+        userId: req.user!.id,
+        projectId: projectId || uuidv4(), // Fallback
+        documentType: "FunctionalRequirements",
+        description: `Generating Functional Requirements for ${idea.title}`,
+        status: "pending"
+      };
 
+      const job = await storage.createJob(jobData);
+      console.log(`Created job ${job.id} for Functional Requirements generation`);
 
-      if (!username || !password) {
-        throw new Error('N8N authentication credentials not configured');
-      }
+      // Prepare payload for RabbitMQ
+      const taskPayload = {
+        jobId: job.id,
+        documentId: document.id,
+        ideaId,
+        project_id: projectId,
+        leancanvas_id: leanCanvasId,
+        prd_id: prdId,
+        brd_id: brdId,
+        title: idea.title,
+        description: idea.idea,
+        instructions: instructions || "",
+        webhookUrl: process.env.N8N_FUNCTIONAL_WEBHOOK_URL,
+        auth: {
+          username: process.env.N8N_AUTH_USERNAME,
+          password: process.env.N8N_AUTH_PASSWORD
+        }
+      };
 
-
-      // Create Basic Auth header
-      const auth = Buffer.from(`${username}:${password}`).toString('base64');
-
-
-      const response = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Basic ${auth}`
-        },
-        body: JSON.stringify(webhookBody)
+      // Publish object to RabbitMQ
+      const published = await publishTask({
+        type: "generate_document",
+        payload: taskPayload
       });
 
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Webhook error (${response.status}): ${errorText}`);
-        throw new Error(`Webhook returned ${response.status}: ${errorText}`);
-      }
-
-
-      console.log(`Webhook response status: ${response.status}`);
-
-
-      // Step 5: Process the response
-      const responseText = await response.text();
-      console.log(`Webhook response: ${responseText}`);
-
-
-      // Try to parse the response to get the external ID
-      let functionalId = null;
-
-
-      try {
-        const responseJson = JSON.parse(responseText);
-        // Look for various possible ID fields in the response
-        if (responseJson.id) {
-          functionalId = responseJson.id;
-          console.log(`Parsed functional ID from JSON response 'id' field: ${functionalId}`);
-        } else if (responseJson.functional_id) {
-          functionalId = responseJson.functional_id;
-          console.log(`Parsed functional ID from JSON response 'functional_id' field: ${functionalId}`);
-        } else if (responseJson.functionalId) {
-          functionalId = responseJson.functionalId;
-          console.log(`Parsed functional ID from JSON response 'functionalId' field: ${functionalId}`);
-        } else if (responseJson.functional_requirements_id) {
-          functionalId = responseJson.functional_requirements_id;
-          console.log(`Parsed functional ID from JSON response 'functional_requirements_id' field: ${functionalId}`);
-        } else {
-          // Log the full response to help debug
-          console.log('Full webhook response JSON:', responseJson);
-
-
-          // Try to find any field that might contain an ID (containing 'id' in the key name)
-          const possibleIdFields = Object.keys(responseJson).filter(key =>
-            key.toLowerCase().includes('id') && typeof responseJson[key] === 'string'
-          );
-
-
-          if (possibleIdFields.length > 0) {
-            functionalId = responseJson[possibleIdFields[0]];
-            console.log(`Using field '${possibleIdFields[0]}' as functionalId: ${functionalId}`);
-          }
-        }
-      } catch (jsonError) {
-        console.error('Error parsing webhook response JSON:', jsonError);
-        // If not JSON, treat as plain text if it looks like a UUID
-        const uuidRegex = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-        const match = responseText.match(uuidRegex);
-
-
-        if (match) {
-          functionalId = match[0];
-          console.log(`Extracted UUID from text response: ${functionalId}`);
-        } else if (responseText.trim().length < 100) {  // Only use as ID if it's reasonably short
-          functionalId = responseText.trim();
-          console.log(`Using plain text response as functional ID: ${functionalId}`);
-        } else {
-          console.log('Response text too long to be an ID, not using as external ID');
-        }
-      }
-
-
-      // Step 6: Store the external ID with the document
-      if (functionalId) {
-        await storage.updateDocument(document.id, {
-          externalId: functionalId
-        });
-
-
-        // Get the updated document
-        const updatedDocument = await storage.getDocumentById(document.id);
-
-
-        return res.status(200).json({
-          message: "Functional requirements generation started successfully",
-          document: updatedDocument
-        });
+      if (published) {
+        console.log(`Published Functional Requirements generation task to RabbitMQ`);
       } else {
-        console.warn("No functional ID received from webhook response");
-        return res.status(202).json({
-          message: "Functional requirements generation started but no ID was received",
-          document: document
-        });
+        console.error(`Failed to publish Functional Requirements task to RabbitMQ`);
       }
+
+      // Return immediate success with the document
+      return res.status(200).json({
+        message: "Functional requirements generation started successfully",
+        document,
+        jobId: job.id
+      });
     } catch (error: any) {
       console.error("Error generating functional requirements:", error);
       next(error);
@@ -519,102 +491,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      // Call the business requirements webhook in the background
-      const webhookUrl = process.env.N8N_BRD_WEBHOOK_URL;
-      const username = process.env.N8N_AUTH_USERNAME;
-      const password = process.env.N8N_AUTH_PASSWORD;
+      // Create a background job for this task
+      const jobData: InsertJob = {
+        ideaId: ideaId,
+        userId: req.user!.id,
+        projectId: projectId || uuidv4(), // Fallback if no project ID yet
+        documentType: "BusinessRequirements",
+        description: `Generating Business Requirements for ${idea.title}`,
+        status: "pending"
+      };
 
+      const job = await storage.createJob(jobData);
+      console.log(`Created job ${job.id} for Business Requirements generation`);
 
-      if (!webhookUrl) {
-        throw new Error("N8N_BRD_WEBHOOK_URL environment variable is not set");
-      }
-
-
-      if (!username || !password) {
-        throw new Error("N8N authentication credentials are not set");
-      }
-
-
-      // Create basic auth header
-      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-
-
-      // Log the payload we're about to send
-      const webhookPayload = {
+      // Prepare payload for RabbitMQ
+      const taskPayload = {
+        jobId: job.id,
+        documentId: document!.id,
         ideaId,
         project_id: projectId,
         leancanvas_id: leanCanvasId,
         prd_id: prdId,
-        instructions: instructions || "Be comprehensive and detailed."
-      };
-      console.log(`Sending BRD webhook payload:`, JSON.stringify(webhookPayload, null, 2));
-      console.log(`To webhook URL: ${webhookUrl}`);
-
-
-      // Call the webhook and store the response with potential BRD ID
-      try {
-        const response = await fetch(webhookUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": authHeader
-          },
-          body: JSON.stringify(webhookPayload)
-        });
-
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Failed to call business requirements webhook: ${response.status} ${errorText}`);
-        } else {
-          console.log(`Successful response from business requirements webhook for idea ${ideaId}`);
-
-
-          // Try to get the BRD ID from the response
-          try {
-            const responseText = await response.text();
-            console.log(`N8N BRD webhook raw response: ${responseText}`);
-
-
-            let brdId = null;
-
-
-            // First try as JSON
-            try {
-              const responseData = JSON.parse(responseText);
-              if (responseData.brd_id || responseData.id) {
-                brdId = responseData.brd_id || responseData.id;
-                console.log(`Found BRD ID in JSON response: ${brdId}`);
-              }
-            } catch (jsonError) {
-              // If not JSON, treat as plain text (which might be just the ID)
-              if (responseText && responseText.trim()) {
-                brdId = responseText.trim();
-                console.log(`Using raw text as BRD ID: ${brdId}`);
-              }
-            }
-
-
-            // If we got a BRD ID, store it in the document
-            if (document && brdId) {
-              console.log(`Storing BRD ID ${brdId} in document ${document.id}`);
-              await storage.updateDocument(document.id, {
-                externalId: brdId
-              });
-            }
-          } catch (responseError: any) {
-            console.error(`Error processing webhook response: ${responseError.message}`);
-          }
+        instructions: instructions || "Be comprehensive and detailed.",
+        webhookUrl: process.env.N8N_BRD_WEBHOOK_URL,
+        auth: {
+          username: process.env.N8N_AUTH_USERNAME,
+          password: process.env.N8N_AUTH_PASSWORD
         }
-      } catch (error: any) {
-        console.error(`Error calling business requirements webhook: ${error.message}`);
-      }
+      };
 
+      // Publish object to RabbitMQ
+      const published = await publishTask({
+        type: "generate_document",
+        payload: taskPayload
+      });
+
+      if (published) {
+        console.log(`Published Business Requirements generation task to RabbitMQ`);
+      } else {
+        console.error(`Failed to publish Business Requirements task to RabbitMQ`);
+        // Fallback? For now, we rely on the queue. If it fails, the user will see it stuck in "Generating" I guess.
+        // Or we could revert to direct call here if critical. 
+        // Let's assume queue works or we error.
+      }
 
       // Return immediate success with the document
       return res.status(200).json({
         message: "Business requirements document generation started",
-        document
+        document,
+        jobId: job.id
       });
     } catch (error: any) {
       console.error("Error starting business requirements generation:", error);
@@ -642,36 +567,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Idea not found" });
       }
 
-      // Create the workflow
-      const workflowsWebhookUrl: string = process.env.N8N_WF_VECTOR_WEBHOOK_URL || "";
+      // Retrieve project ID
       const projectId: string | null | undefined = (await storage.getLeanCanvasByIdeaId(ideaId))?.projectId;
 
       if (!projectId) {
         return res.status(404).json({ message: "Lean Canvas not found" });
       }
 
-      const username = process.env.N8N_AUTH_USERNAME;
-      const password = process.env.N8N_AUTH_PASSWORD;
-      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
+      // Create the job entry
+      const jobData: InsertJob = {
+        ideaId: ideaId,
+        userId: userId,
+        projectId: projectId,
+        documentType: "Workflows",
+        description: `Generating ${title} workflow`,
+        status: "starting"
+      };
 
-      const response = await fetch(workflowsWebhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": authHeader
-        },
-        body: JSON.stringify({
-          "project_id": projectId
-        })
-      });
+      const job = await storage.createJob(jobData);
 
-      if (!response.ok) {
-        return res.status(response.status).json({ message: "Failed to create workflow" });
-      }
+      // Publish task to RabbitMQ
+      const message = {
+        type: "workflow_generation",
+        payload: {
+          jobId: job.id,
+          ideaId,
+          projectId,
+          workflowType,
+          title
+        }
+      };
 
-      const job = await storage.addWorkflowJobId(ideaId, userId, projectId, "Started");
+      await publishTask(message);
 
-      // Return the created workflow
+      // Return the created workflow job
       return res.status(201).json({
         message: "Workflow generation started",
         jobId: job.id
@@ -681,24 +610,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Updated Generic Job Status Route
+  app.put("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const jobId = req.params.id;
+      const { status, description } = req.body;
+
+      // Validate inputs
+      if (!status && !description) {
+        return res.status(400).json({ message: "No updates provided" });
+      }
+
+      const job = await storage.getWorkflowJobById(jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Check authorization (optional, depending on requirements, usually user who created the job)
+      if (Number(job.userId) !== Number(req.user!.id)) {
+        // Allow if admin or same user? For now assume strict ownership
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      const updates: Partial<UpdateJob> = {};
+      if (status) updates.status = status;
+      if (description) updates.description = description;
+
+      await storage.updateJob(jobId, updates);
+      publishJobEvent(jobId, "status", { message: description || status });
+
+      const updatedJob = await storage.getWorkflowJobById(jobId);
+      return res.status(200).json(updatedJob);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
   app.get("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
     try {
       const jobId = req.params.id;
+
       const job = await storage.getWorkflowJobById(jobId);
+      if (!job) return res.status(404).json({ message: "Job not found" });
+
+      if (Number(job.userId) !== Number(req.user!.id)) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
       return res.status(200).json(job);
     } catch (error: any) {
       next(error);
     }
   });
 
+
   app.get("/api/ideas/:id/current-workflow-job", isAuthenticated, async (req, res, next) => {
     try {
       const ideaId = parseInt(req.params.id);
-      const job = await storage.getLatestWorkflowJob(ideaId);
+      const documentType = req.query.documentType as string;
+      const job = await storage.getLatestWorkflowJob(ideaId, undefined, documentType);
       if (!job) {
         return res.json(null); // No job found
       }
       return res.status(200).json(job);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Job progress endpoint - accepts both session auth and API key auth (for n8n callbacks)
+  app.post("/api/jobs/:id/progress", isAuthenticatedOrApiKey, async (req, res, next) => {
+    try {
+      const jobId = req.params.id;
+      const { progress } = req.body;
+
+      const job = await storage.getWorkflowJobById(jobId);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      // Skip user ownership check if this is a service-authenticated request (n8n callback)
+      if (!(req as any).isServiceAuth) {
+        if (Number(job.userId) !== Number(req.user!.id)) {
+          return res.status(403).json({ message: "Unauthorized" });
+        }
+      }
+
+      console.log("Building job progress", jobId, progress);
+      const updates: Partial<UpdateJob> = {};
+      if (progress) updates.description = progress.description;
+      if (progress) updates.status = progress.status;
+
+      console.log("Updating job progress", jobId, updates);
+      await storage.updateJob(jobId, updates);
+
+      // Publish 'done' event when job is completed, otherwise 'progress'
+      const isCompleted = progress?.status?.toLowerCase() === 'completed';
+      if (isCompleted) {
+        publishJobEvent(jobId, "done", { message: progress?.description || "Completed" });
+      } else {
+        publishJobEvent(jobId, "progress", { message: progress?.description });
+      }
+
+      const updatedJob = await storage.getWorkflowJobById(jobId);
+      console.log("Updated job progress", jobId, updatedJob);
+      return res.status(200).json(updatedJob);
     } catch (error: any) {
       next(error);
     }
@@ -1197,7 +1213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      if (idea.userId !== req.user!.id) {
+      if (Number(idea.userId) !== Number(req.user!.id)) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -1322,7 +1338,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         // First try to get from local database
         const { pool } = await import('./db');
-        const result = await pool.query('SELECT project_id, leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        const result = await pool.query('SELECT project_id, id AS leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
 
         if (result.rows.length > 0) {
           supabaseProjectId = result.rows[0].project_id;
@@ -1598,17 +1614,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      // Get the Supabase project ID from lean_canvas table
+      // Get the Supabase project ID and leancanvas_id from lean_canvas table
       let supabaseProjectId;
+      let leancanvasId;
       try {
         // First try to get it from our lean_canvas table which should have stored the project_id
         const { pool } = await import('./db');
-        const result = await pool.query('SELECT project_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+        const result = await pool.query('SELECT project_id, id AS leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
 
 
         if (result.rows.length > 0 && result.rows[0].project_id) {
           supabaseProjectId = result.rows[0].project_id;
-          console.log(`Using Supabase project ID: ${supabaseProjectId} from lean_canvas table`);
+          leancanvasId = result.rows[0].leancanvas_id;
+          console.log(`Using Supabase project ID: ${supabaseProjectId}, leancanvas_id: ${leancanvasId} from lean_canvas table`);
         } else {
           // If not found, use the ideaId as a default (but this likely won't work with Supabase)
           supabaseProjectId = projectId;
@@ -1620,16 +1638,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
 
-      console.log(`Sending project requirements request to n8n for Supabase project ${supabaseProjectId}`);
-      console.log(`Using webhook URL: ${webhookUrl}`);
-      console.log(`With instructions: ${instructions || "No specific instructions"}`);
-
-
-      // Create a document record before calling N8N to ensure we have a record
-      // to update later even if the webhook call to n8n fails
+      // Create or update a document record before creating the job
       let document;
-      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
-
+      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements", req.user!.id);
 
       if (existingDocument) {
         // Update existing document
@@ -1638,99 +1649,71 @@ export async function registerRoutes(app: Express): Promise<Server> {
           generationStartedAt: new Date()
         }, req.user!.id);
         document = await storage.getDocumentById(existingDocument.id, req.user!.id);
-        console.log(`Updated existing document ${existingDocument.id} for requirements generation`);
+        console.log(`Updated existing document ${existingDocument.id} for project requirements`);
       } else {
         // Create a new document
         document = await storage.createDocument({
           ideaId,
           documentType: "ProjectRequirements",
-          title: "Project Requirements",
+          title: "Project Requirements Document",
           status: "Generating",
           generationStartedAt: new Date()
         }, req.user!.id);
-        console.log(`Created new document ${document.id} for requirements generation`);
+        console.log(`Created new document ${document.id} for project requirements`);
       }
 
-      // Get the leancanvas_id from our database
-      let leancanvasId = null;
-      try {
-        const { pool } = await import('./db');
-        const result = await pool.query('SELECT id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
+      // Create a background job for this task
+      const jobData: InsertJob = {
+        ideaId: ideaId,
+        userId: req.user!.id,
+        projectId: supabaseProjectId || uuidv4(), // Fallback
+        documentType: "ProjectRequirements",
+        description: `Generating Project Requirements for ${ideaId}`,
+        status: "pending"
+      };
 
-        if (result.rows.length > 0 && result.rows[0].id) {
-          leancanvasId = result.rows[0].id;
-          console.log(`Found leancanvas_id ${leancanvasId} for idea ${ideaId} in local database`);
-        } else {
-          console.log(`No leancanvas_id found for idea ${ideaId} in local database`);
+      const job = await storage.createJob(jobData);
+      console.log(`Created job ${job.id} for Project Requirements generation`);
+
+      // Prepare payload for RabbitMQ
+      const taskPayload = {
+        jobId: job.id,
+        documentId: document.id,
+        ideaId,
+        project_id: supabaseProjectId,
+        leancanvas_id: leancanvasId,
+        instructions: instructions || "Be brief and concise.",
+        webhookUrl: process.env.N8N_PRD_WEBHOOK_URL,
+        auth: {
+          username: process.env.N8N_AUTH_USERNAME,
+          password: process.env.N8N_AUTH_PASSWORD
         }
-      } catch (dbError) {
-        console.warn('Error querying local database for leancanvas_id:', dbError);
-      }
+      };
 
-      // Call the n8n webhook with the updated payload structure
-      console.log(`Sending webhook with project_id=${supabaseProjectId}`);
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": authHeader
-        },
-        body: JSON.stringify({
-          // The n8n workflow expects the Supabase UUID format project_id from the Lean Canvas
-          project_id: supabaseProjectId,
-          // Send user's instructions from the UI form
-          leancanvas_id: leancanvasId,
-          instructions: instructions || "Be brief and concise."
-        })
+      // Publish object to RabbitMQ
+      const published = await publishTask({
+        type: "generate_document",
+        payload: taskPayload
       });
 
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Failed to call requirements webhook: ${response.status} ${errorText}`);
-
-
-        // Even if the webhook fails, we'll return a 200 with the document
-        // This allows the UI to show the "generating" state and poll for updates
-        // We'll set the document to a "Failed" state after some time if no n8n response arrives
-
-
-        res.status(200).json({
-          message: "Requirements document created, but webhook failed. Document will remain in Generating state until timeout.",
-          document,
-          webhookError: errorText
-        });
-        return;
+      if (published) {
+        console.log(`Published Project Requirements generation task to RabbitMQ`);
+      } else {
+        console.error(`Failed to publish Project Requirements task to RabbitMQ`);
       }
 
-
-      // Read the response which contains the prd_id
-      const responseData = await response.text();
-      console.log(`Requirements generation webhook response: ${responseData}`);
-
-
-      // The response should be a prd_id like "29c3941e-6c36-4557-8bc1-ab21a92738d3"
-      // This ID will be needed later to match with the completed document
-
-      // Update the document with the external ID
-      await storage.updateDocument(document.id, {
-        externalId: responseData.trim()
-      }, req.user!.id);
-      console.log(`Updated document ${document.id} with external ID ${responseData.trim()}`);
-
-      // Get the updated document to return
-      const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
-
+      // Return immediate success with the document
       res.status(200).json({
-        message: "Requirements generation started",
-        document: updatedDocument,
-        data: responseData.trim()
+        message: "Project requirements document generation started",
+        document,
+        jobId: job.id
       });
-    } catch (error) {
-      console.error("Error in requirements webhook proxy:", error);
+    } catch (error: any) {
       next(error);
     }
   });
+
+
 
 
   // Canvas generation route
@@ -3450,6 +3433,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const httpServer = createServer(app);
+  setupSocketIO(httpServer, sessionMiddleware);
 
   return httpServer;
 }

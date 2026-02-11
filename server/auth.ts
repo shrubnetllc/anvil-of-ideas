@@ -30,19 +30,21 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-export function setupAuth(app: Express) {
-  const sessionSettings: session.SessionOptions = {
-    secret: process.env.SESSION_SECRET || "lean-canvas-secret-key",
-    resave: false,
-    saveUninitialized: false,
-    store: storage.sessionStore,
-    cookie: {
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
-    }
-  };
+const sessionSettings: session.SessionOptions = {
+  secret: process.env.SESSION_SECRET || "lean-canvas-secret-key",
+  resave: false,
+  saveUninitialized: false,
+  store: storage.sessionStore,
+  cookie: {
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 1 week
+  }
+};
 
+export const sessionMiddleware = session(sessionSettings);
+
+export function setupAuth(app: Express) {
   app.set("trust proxy", 1);
-  app.use(session(sessionSettings));
+  app.use(sessionMiddleware);
   app.use(passport.initialize());
   app.use(passport.session());
 

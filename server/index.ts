@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { storage } from "./storage";
+import { startWorker } from "./worker";
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -39,6 +40,13 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+
+  // Start the background worker
+  try {
+    await startWorker();
+  } catch (error) {
+    console.error("Failed to start background worker:", error);
+  }
 
   // Create a properly named sendError function to avoid reference errors
   function sendError(err: any, req: Request, res: Response, next: NextFunction) {
