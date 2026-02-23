@@ -4,14 +4,12 @@ import { storage } from "./storage";
 import { setupAuth, sessionMiddleware } from "./auth";
 import { setupSocketIO, publishJobEvent } from "./socket";
 import { z } from "zod";
-import { type InsertJob, type UpdateJob } from "@shared/schema";
-import { publishTask } from "./rabbitmq";
-import { insertIdeaSchema, updateLeanCanvasSchema, webhookResponseSchema, insertProjectDocumentSchema, updateProjectDocumentSchema, DocumentType } from "@shared/schema";
-import { fetchLeanCanvasData, fetchUserIdeas, fetchBusinessRequirements, fetchFunctionalRequirements, fetchProjectWorkflows, fetchProjectEstimate } from "./supabase";
+import { type InsertJob, type UpdateJob, type LeanCanvasContent } from "@shared/schema";
+import { insertIdeaSchema, insertDocumentSchema, DocumentType } from "@shared/schema";
+import { fetchProjectWorkflows, fetchProjectEstimate } from "./supabase";
 import { emailService } from "./email";
 import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
-import { uuid } from "drizzle-orm/pg-core";
-import { v4 as uuidv4 } from "uuid";
+import { triggerGeneration } from "./anvil-api";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
@@ -20,117 +18,37 @@ function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   res.status(401).json({ message: "Unauthorized" });
 }
 
-// Middleware that accepts either session auth OR API key auth (for n8n callbacks)
-function isAuthenticatedOrApiKey(req: Request, res: Response, next: NextFunction) {
-  // First, check for session-based authentication
-  if (req.isAuthenticated()) {
-    return next();
-  }
-
-  // Check for API key in Authorization header (Bearer token)
-  const authHeader = req.headers.authorization;
-  const callbackSecret = process.env.N8N_CALLBACK_SECRET;
-
-  if (authHeader && callbackSecret) {
-    const [scheme, token] = authHeader.split(' ');
-    if (scheme === 'Bearer' && token === callbackSecret) {
-      // Mark this request as service-authenticated (no user session)
-      (req as any).isServiceAuth = true;
-      return next();
-    }
-  }
-
-  res.status(401).json({ message: "Unauthorized" });
-}
-
 export async function registerRoutes(app: Express): Promise<Server> {
-  // sets up /api/register, /api/login, /api/logout, /api/user
   setupAuth(app);
 
-  // Ideas routes
+  // ==================== IDEAS ROUTES ====================
+
   app.get("/api/ideas", isAuthenticated, async (req, res, next) => {
     try {
       const userId = req.user!.id;
-      console.log(`[SECURITY] User ${userId} requesting all their ideas`);
-
-
-      // Get the user's ideas with proper filtering
       const ideas = await storage.getIdeasByUser(userId);
-
-
-      // Add an extra layer of security - double-check each idea belongs to this user
-      const verifiedIdeas = ideas.filter(idea => {
-        if (idea.userId != userId) {
-          console.log(`[CRITICAL SECURITY VIOLATION] Idea ${idea.id} with userId ${idea.userId} was about to be sent to user ${userId}`);
-          return false;
-        }
-        return true;
-      });
-
-
-      console.log(`[SECURITY] Returning ${verifiedIdeas.length} verified ideas to user ${userId}`);
-
-
-      // Return only the verified ideas
+      const verifiedIdeas = ideas.filter(idea => idea.userId === userId);
       res.json(verifiedIdeas);
     } catch (error: any) {
-      console.error('[SECURITY ERROR] Error retrieving ideas:', error);
       next(error);
     }
   });
 
   app.post("/api/ideas", isAuthenticated, async (req, res, next) => {
     try {
-      // Extract and validate the base idea fields
-      console.log("Validating idea data...")
-      console.log(req.body)
       const validatedIdeaData = insertIdeaSchema.parse(req.body);
 
-
-      // Create the idea
       if (process.env.NODE_ENV === "production") {
         const ideas = await storage.getIdeasByUser(req.user!.id);
         if (ideas.length >= 5) {
           return res.status(403).json({ message: "You have reached the maximum number of ideas allowed" });
         }
       }
-      console.log("Creating idea...")
+
       const idea = await storage.createIdea({
         ...validatedIdeaData,
         userId: req.user!.id,
       });
-
-
-      // Check if lean canvas data was submitted
-      console.log("Checking for lean canvas data...")
-      if (req.body.leanCanvas) {
-        try {
-          // Create the lean canvas
-          await storage.createLeanCanvas({
-            ideaId: idea.id,
-            problem: req.body.leanCanvas.problem || null,
-            customerSegments: req.body.leanCanvas.customerSegments || null,
-            uniqueValueProposition: req.body.leanCanvas.uniqueValueProposition || null,
-            solution: req.body.leanCanvas.solution || null,
-            channels: req.body.leanCanvas.channels || null,
-            revenueStreams: req.body.leanCanvas.revenueStreams || null,
-            costStructure: req.body.leanCanvas.costStructure || null,
-            keyMetrics: req.body.leanCanvas.keyMetrics || null,
-            unfairAdvantage: req.body.leanCanvas.unfairAdvantage || null,
-          });
-
-
-          // Update the idea status to Completed if there's canvas data
-          if (Object.values(req.body.leanCanvas).some(val => val)) {
-            await storage.updateIdeaStatus(idea.id, "Completed");
-          }
-        } catch (canvasError) {
-          console.error("Error creating lean canvas:", canvasError);
-          // We don't fail the entire request if canvas creation fails
-          // Just log the error and continue
-        }
-      }
-
 
       res.status(201).json(idea);
     } catch (error: any) {
@@ -140,24 +58,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
     try {
-      const ideaId = parseInt(req.params.id);
+      const ideaId = req.params.id;
       const userId = req.user!.id;
-
-
-      console.log(`[SECURITY] User ${userId} attempting to access idea ${ideaId}`);
-
-
-      // Pass userId to getIdeaById for security check - this ensures the user can only access their own ideas
       const idea = await storage.getIdeaById(ideaId, userId);
 
-
       if (!idea) {
-        console.log(`[SECURITY] Idea ${ideaId} not found or unauthorized access`);
         return res.status(404).json({ message: "Idea not found" });
       }
 
-
-      console.log(`[SECURITY] Authorized access: User ${userId} accessing their idea ${ideaId}`);
       res.json(idea);
     } catch (error: any) {
       next(error);
@@ -166,24 +74,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
     try {
-      const ideaId = parseInt(req.params.id);
-      const idea = await storage.getIdeaById(ideaId);
-
+      const ideaId = req.params.id;
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
 
       if (!idea) {
         return res.status(404).json({ message: "Idea not found" });
       }
 
-
       if (idea.userId !== req.user!.id) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
-
-      // Only allow updating specific fields
-      const allowedFields = ['title', 'idea', 'companyName', 'companyStage', 'founderName', 'founderEmail', 'websiteUrl'];
+      const allowedFields = ['title', 'description', 'companyName', 'companyStage', 'founderName', 'founderEmail', 'websiteUrl'];
       const updates: Record<string, any> = {};
-
 
       for (const field of allowedFields) {
         if (field in req.body) {
@@ -191,434 +94,469 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-
-      // Update the idea
       if (Object.keys(updates).length > 0) {
-        await storage.updateIdea(ideaId, updates);
-        const updatedIdea = await storage.getIdeaById(ideaId);
+        await storage.updateIdea(ideaId, updates, req.user!.id);
+        const updatedIdea = await storage.getIdeaById(ideaId, req.user!.id);
         res.json(updatedIdea);
       } else {
-        res.status(400).json({ message: "No valid fields to update" });
+        res.json(idea);
       }
     } catch (error: any) {
       next(error);
     }
   });
 
-  // Generate Business Requirements Document for an idea
-  // Functional Requirements Document generation API
-  app.post("/api/ideas/:id/generate-functional-requirements", isAuthenticated, async (req, res, next) => {
+  app.delete("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
     try {
-      const ideaId = parseInt(req.params.id);
-      const userId = req.user!.id;
-      const { instructions } = req.body;
+      const ideaId = req.params.id;
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
 
-
-      console.log(`[FUNCTIONAL REQUIREMENTS] User ${userId} requesting functional requirements generation for idea ${ideaId}`);
-
-
-      // Verify the idea exists and belongs to the user
-      const idea = await storage.getIdeaById(ideaId, userId);
       if (!idea) {
-        return res.status(404).json({ error: "Idea not found or you don't have access to it" });
+        return res.status(404).json({ message: "Idea not found" });
       }
 
-
-      // Check if a functional requirements document already exists
-      let document;
-      const existingDoc = await storage.getDocumentByType(ideaId, 'FunctionalRequirements');
-
-      if (existingDoc) {
-        // Allow regeneration - update existing document to Generating state
-        console.log(`Existing FRD found (status: ${existingDoc.status}), resetting for regeneration`);
-        await storage.updateDocument(existingDoc.id, {
-          status: "Generating",
-          generationStartedAt: new Date()
-        });
-        document = await storage.getDocumentById(existingDoc.id);
-      } else {
-        // Create a new document with Generating status
-        document = await storage.createDocument({
-          ideaId,
-          title: "Functional Requirements Document",
-          documentType: "FunctionalRequirements",
-          status: "Generating",
-          generationStartedAt: new Date()
-        });
+      if (idea.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Forbidden" });
       }
 
-
-      console.log(`Created/updated functional requirements document with ID ${document!.id}`);
-
-
-      // Step 2: Collect and verify the IDs for related documents
-      let prdId = null;
-      let brdId = null;
-      let projectId = null;
-      let leanCanvasId = null;
-
-
-      // Get the lean canvas ID
-      try {
-        const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
-        if (canvas && canvas.projectId) {
-          projectId = canvas.projectId;
-          leanCanvasId = canvas.id;
-          console.log(`Found project ID: ${projectId}`);
-        }
-      } catch (canvasError) {
-        console.error("Error getting canvas ID:", canvasError);
-      }
-
-
-      // Get the PRD external ID
-      try {
-        const prdDoc = await storage.getDocumentByType(ideaId, 'ProjectRequirements');
-        if (prdDoc && prdDoc.externalId) {
-          prdId = prdDoc.externalId;
-          console.log(`Found PRD ID: ${prdId}`);
-        } else {
-          console.log(`PRD externalId missing locally, trying one-time fallback lookup`);
-          const { fetchProjectRequirements } = await import('./supabase');
-          const prdRes = await fetchProjectRequirements('', ideaId, userId);
-          if (prdRes && prdRes.id) {
-            prdId = prdRes.id;
-            console.log(`Found PRD ID via fallback lookup: ${prdId}`);
-            // Update local database if record exists
-            if (prdDoc) {
-              await storage.updateDocument(prdDoc.id, { externalId: prdId });
-            }
-          }
-        }
-      } catch (prdError) {
-        console.error("Error getting PRD ID:", prdError);
-      }
-
-
-      // Get the BRD external ID
-      try {
-        const brdDoc = await storage.getDocumentByType(ideaId, 'BusinessRequirements');
-        if (brdDoc && brdDoc.externalId) {
-          brdId = brdDoc.externalId;
-          console.log(`Found BRD ID: ${brdId}`);
-        } else {
-          // If not in database, try a one-time lookup in Supabase
-          console.log(`BRD externalId missing locally, trying one-time fallback lookup`);
-          const { fetchBusinessRequirements } = await import('./supabase');
-          const brdRes = await fetchBusinessRequirements('', ideaId, req.user!.id);
-          if (brdRes && brdRes.data && brdRes.data.id) {
-            brdId = brdRes.data.id;
-            console.log(`Found BRD ID via fallback lookup: ${brdId}`);
-            // Proactively update our database if we have a document record
-            const existingBrd = await storage.getDocumentByType(ideaId, 'BusinessRequirements');
-            if (existingBrd) {
-              await storage.updateDocument(existingBrd.id, {
-                externalId: brdId,
-                html: brdRes.data.html || existingBrd.html,
-                status: (brdRes.data.html && brdRes.data.html.length > 0) ? 'Completed' : existingBrd.status
-              });
-            }
-          }
-        }
-      } catch (brdError) {
-        console.error("Error getting BRD ID:", brdError);
-      }
-
-
-      // Step 3: Prepare the request body for the webhook
-      const webhookUrl = process.env.N8N_FUNCTIONAL_WEBHOOK_URL;
-      if (!webhookUrl) {
-        throw new Error('Functional Requirements webhook URL not configured');
-      }
-
-
-      console.log(`Queuing functional requirements generation task...`);
-
-
-      const webhookBody = {
-        ideaId,
-        leancanvas_id: leanCanvasId,
-        documentId: document.id,
-        prd_id: prdId,
-        project_id: projectId,
-        brd_id: brdId,
-        title: idea.title,
-        description: idea.idea,
-        instructions: instructions || ""
-      };
-
-
-      console.log(`Webhook request body: ${JSON.stringify(webhookBody)}`);
-
-
-      // Create a background job for this task
-      const jobData: InsertJob = {
-        ideaId: ideaId,
-        userId: req.user!.id,
-        projectId: projectId || uuidv4(), // Fallback
-        documentType: "FunctionalRequirements",
-        description: `Generating Functional Requirements for ${idea.title}`,
-        status: "pending"
-      };
-
-      const job = await storage.createJob(jobData);
-      console.log(`Created job ${job.id} for Functional Requirements generation`);
-
-      // Prepare payload for RabbitMQ
-      const taskPayload = {
-        jobId: job.id,
-        documentId: document.id,
-        ideaId,
-        project_id: projectId,
-        leancanvas_id: leanCanvasId,
-        prd_id: prdId,
-        brd_id: brdId,
-        title: idea.title,
-        description: idea.idea,
-        instructions: instructions || "",
-        webhookUrl: process.env.N8N_FUNCTIONAL_WEBHOOK_URL,
-        auth: {
-          username: process.env.N8N_AUTH_USERNAME,
-          password: process.env.N8N_AUTH_PASSWORD
-        }
-      };
-
-      // Publish object to RabbitMQ
-      const published = await publishTask({
-        type: "generate_document",
-        payload: taskPayload
-      });
-
-      if (published) {
-        console.log(`Published Functional Requirements generation task to RabbitMQ`);
-      } else {
-        console.error(`Failed to publish Functional Requirements task to RabbitMQ`);
-      }
-
-      // Return immediate success with the document
-      return res.status(200).json({
-        message: "Functional requirements generation started successfully",
-        document,
-        jobId: job.id
-      });
+      await storage.deleteIdea(ideaId, req.user!.id);
+      res.status(200).json({ message: "Idea deleted" });
     } catch (error: any) {
-      console.error("Error generating functional requirements:", error);
       next(error);
     }
   });
 
-  app.post("/api/ideas/:id/generate-business-requirements", isAuthenticated, async (req, res, next) => {
+  // ==================== DOCUMENT ROUTES ====================
+
+  // Create or update a document
+  app.post("/api/ideas/:id/documents", isAuthenticated, async (req, res, next) => {
     try {
-      const ideaId = parseInt(req.params.id);
-      const { instructions } = req.body;
+      const ideaId = req.params.id;
+      const { documentType, content, contentSections } = req.body;
 
+      if (!documentType) {
+        return res.status(400).json({ message: "Missing required field: documentType" });
+      }
 
-      // Check if the user has permission to access this idea
       const idea = await storage.getIdeaById(ideaId, req.user!.id);
       if (!idea) {
         return res.status(404).json({ message: "Idea not found or access denied" });
       }
 
-
-      console.log(`Starting business requirements generation for idea ID: ${ideaId}`);
-
-
-      // Check for an existing document first
-      let document;
-      const existingDocument = await storage.getDocumentByType(ideaId, "BusinessRequirements");
-
+      const existingDocument = await storage.getDocumentByType(ideaId, documentType, req.user!.id);
 
       if (existingDocument) {
-        // Update existing document to generating state with timestamp
-        const generationStartedAt = new Date();
         await storage.updateDocument(existingDocument.id, {
-          status: "Generating",
-          generationStartedAt: generationStartedAt
-        });
-        document = await storage.getDocumentById(existingDocument.id);
-        console.log(`Updated existing business requirements document ${existingDocument.id} to Generating state at ${generationStartedAt.toISOString()}`);
+          content: content || existingDocument.content,
+          contentSections: contentSections || existingDocument.contentSections,
+        }, req.user!.id);
+        const updatedDocument = await storage.getDocumentById(existingDocument.id, req.user!.id);
+        return res.status(200).json(updatedDocument);
       } else {
-        // Create a new document in generating state with timestamp
-        const generationStartedAt = new Date();
-        document = await storage.createDocument({
+        const newDocument = await storage.createDocument({
+          userId: req.user!.id,
           ideaId,
-          documentType: "BusinessRequirements",
-          title: "Business Requirements Document",
-          status: "Generating",
-          generationStartedAt: generationStartedAt
-        });
-        console.log(`Created new business requirements document ${document.id} in Generating state at ${generationStartedAt.toISOString()}`);
+          documentType,
+          content: content || null,
+          contentSections: contentSections || null,
+        }, req.user!.id);
+        return res.status(201).json(newDocument);
       }
-
-
-      // Get data from lean canvas
-      let projectId;
-      let leanCanvasId;
-      try {
-        const canvas = await storage.getLeanCanvasByIdeaId(ideaId);
-        if (canvas) {
-          leanCanvasId = canvas.id;
-          projectId = canvas.projectId;
-          console.log(`Found projectId ${projectId} for idea ${ideaId}`);
-        }
-      } catch (error: any) {
-        console.error('Error getting canvas data:', error);
-      }
-
-
-      // Get PRD document for its externalId
-      let prdId;
-      try {
-        const prdDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements");
-        if (prdDocument && prdDocument.externalId) {
-          prdId = prdDocument.externalId;
-          console.log(`Found PRD with externalId ${prdId} for idea ${ideaId}`);
-        } else {
-          // If not in database, try fallback lookup
-          console.log(`PRD externalId missing locally, trying fallback lookup`);
-          const { fetchProjectRequirements } = await import('./supabase');
-          const prdRes = await fetchProjectRequirements('', ideaId, req.user!.id);
-          if (prdRes && prdRes.id) {
-            prdId = prdRes.id;
-            console.log(`Found PRD ID via fallback lookup: ${prdId}`);
-            if (prdDocument) {
-              await storage.updateDocument(prdDocument.id, { externalId: prdId });
-            }
-          }
-        }
-      } catch (error: any) {
-        console.error('Error getting PRD document:', error);
-      }
-
-
-      // Create a background job for this task
-      const jobData: InsertJob = {
-        ideaId: ideaId,
-        userId: req.user!.id,
-        projectId: projectId || uuidv4(), // Fallback if no project ID yet
-        documentType: "BusinessRequirements",
-        description: `Generating Business Requirements for ${idea.title}`,
-        status: "pending"
-      };
-
-      const job = await storage.createJob(jobData);
-      console.log(`Created job ${job.id} for Business Requirements generation`);
-
-      // Prepare payload for RabbitMQ
-      const taskPayload = {
-        jobId: job.id,
-        documentId: document!.id,
-        ideaId,
-        project_id: projectId,
-        leancanvas_id: leanCanvasId,
-        prd_id: prdId,
-        instructions: instructions || "Be comprehensive and detailed.",
-        webhookUrl: process.env.N8N_BRD_WEBHOOK_URL,
-        auth: {
-          username: process.env.N8N_AUTH_USERNAME,
-          password: process.env.N8N_AUTH_PASSWORD
-        }
-      };
-
-      // Publish object to RabbitMQ
-      const published = await publishTask({
-        type: "generate_document",
-        payload: taskPayload
-      });
-
-      if (published) {
-        console.log(`Published Business Requirements generation task to RabbitMQ`);
-      } else {
-        console.error(`Failed to publish Business Requirements task to RabbitMQ`);
-        // Fallback? For now, we rely on the queue. If it fails, the user will see it stuck in "Generating" I guess.
-        // Or we could revert to direct call here if critical. 
-        // Let's assume queue works or we error.
-      }
-
-      // Return immediate success with the document
-      return res.status(200).json({
-        message: "Business requirements document generation started",
-        document,
-        jobId: job.id
-      });
     } catch (error: any) {
-      console.error("Error starting business requirements generation:", error);
+      console.error("Error creating/updating document:", error);
       next(error);
     }
   });
 
-  // Workflow routes
-  app.post("/api/ideas/:id/workflows", isAuthenticated, async (req, res, next) => {
+  // Get a specific document by type
+  app.get("/api/ideas/:id/documents/:type", isAuthenticated, async (req, res, next) => {
     try {
-      const ideaId = parseInt(req.params.id);
-      const userId = req.user!.id;
-      const { workflowType, title } = req.body;
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
 
+      const ideaId = req.params.id;
+      const documentType = req.params.type as DocumentType;
 
-      // Validate required fields
-      if (!workflowType || !title) {
-        return res.status(400).json({ message: "Missing required fields: workflowType, title" });
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
       }
 
+      const document = await storage.getDocumentByType(ideaId, documentType, req.user!.id);
 
-      // Check if the user has permission to access this idea
+      if (!document) {
+        return res.status(200).json(null);
+      }
+
+      return res.status(200).json(document);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Get all documents for an idea
+  app.get("/api/ideas/:id/documents", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
       const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+
+      const docs = await storage.getDocumentsByIdeaId(ideaId, req.user!.id);
+      return res.status(200).json(docs);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Update a specific document
+  app.patch("/api/ideas/:ideaId/documents/:documentId", isAuthenticated, async (req, res, next) => {
+    try {
+      const { ideaId, documentId } = req.params;
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+
+      const document = await storage.getDocumentById(documentId, req.user!.id);
+      if (!document) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      const updates: Record<string, any> = {};
+      if ('content' in req.body) updates.content = req.body.content;
+      if ('contentSections' in req.body) updates.contentSections = req.body.contentSections;
+
+      await storage.updateDocument(documentId, updates, req.user!.id);
+      const updatedDocument = await storage.getDocumentById(documentId, req.user!.id);
+      return res.status(200).json(updatedDocument);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Delete a specific document
+  app.delete("/api/ideas/:ideaId/documents/:documentId", isAuthenticated, async (req, res, next) => {
+    try {
+      const { ideaId, documentId } = req.params;
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+
+      await storage.deleteDocument(documentId, req.user!.id);
+      return res.status(200).json({ message: "Document deleted" });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Delete document by type
+  app.delete("/api/ideas/:id/documents/type/:type", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const documentType = req.params.type;
+
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+
+      const document = await storage.getDocumentByType(ideaId, documentType, req.user!.id);
+      if (document) {
+        await storage.deleteDocument(document.id, req.user!.id);
+      }
+
+      return res.status(200).json({ message: "Document deleted" });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // ==================== CANVAS ROUTES ====================
+
+  // Get lean canvas (from unified documents table)
+  app.get("/api/ideas/:id/canvas", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+
+      const document = await storage.getDocumentByType(ideaId, "LeanCanvas", req.user!.id);
+
+      if (!document) {
+        return res.status(200).json(null);
+      }
+
+      // Return canvas data from content_sections
+      const sections = (document.contentSections as LeanCanvasContent) || {};
+      return res.status(200).json({
+        id: document.id,
+        ideaId: document.ideaId,
+        problem: sections.problem || null,
+        customerSegments: sections.customerSegments || null,
+        uniqueValueProposition: sections.uniqueValueProposition || null,
+        solution: sections.solution || null,
+        channels: sections.channels || null,
+        revenueStreams: sections.revenueStreams || null,
+        costStructure: sections.costStructure || null,
+        keyMetrics: sections.keyMetrics || null,
+        unfairAdvantage: sections.unfairAdvantage || null,
+        content: document.content,
+        createdAt: document.createdAt,
+        updatedAt: document.updatedAt,
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Update lean canvas
+  app.patch("/api/ideas/:id/canvas", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const idea = await storage.getIdeaById(ideaId, req.user!.id);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found or access denied" });
+      }
+
+      const canvasFields: (keyof LeanCanvasContent)[] = [
+        'problem', 'customerSegments', 'uniqueValueProposition', 'solution',
+        'channels', 'revenueStreams', 'costStructure', 'keyMetrics', 'unfairAdvantage'
+      ];
+
+      // Build updated sections from request body
+      const sectionUpdates: Partial<LeanCanvasContent> = {};
+      for (const field of canvasFields) {
+        if (field in req.body) {
+          sectionUpdates[field] = req.body[field];
+        }
+      }
+
+      const existingDoc = await storage.getDocumentByType(ideaId, "LeanCanvas", req.user!.id);
+
+      if (existingDoc) {
+        const currentSections = (existingDoc.contentSections as LeanCanvasContent) || {};
+        const mergedSections = { ...currentSections, ...sectionUpdates };
+        await storage.updateDocument(existingDoc.id, {
+          contentSections: mergedSections as any,
+          content: req.body.content || existingDoc.content,
+        }, req.user!.id);
+      } else {
+        // Create new LeanCanvas document
+        await storage.createDocument({
+          userId: req.user!.id,
+          ideaId,
+          documentType: "LeanCanvas",
+          content: req.body.content || null,
+          contentSections: sectionUpdates as any,
+        }, req.user!.id);
+      }
+
+      // Update the idea's updatedAt
+      await storage.updateIdea(ideaId, {}, req.user!.id);
+
+      // Return the updated canvas
+      const updated = await storage.getDocumentByType(ideaId, "LeanCanvas", req.user!.id);
+      if (updated) {
+        const sections = (updated.contentSections as LeanCanvasContent) || {};
+        return res.status(200).json({
+          id: updated.id,
+          ideaId: updated.ideaId,
+          problem: sections.problem || null,
+          customerSegments: sections.customerSegments || null,
+          uniqueValueProposition: sections.uniqueValueProposition || null,
+          solution: sections.solution || null,
+          channels: sections.channels || null,
+          revenueStreams: sections.revenueStreams || null,
+          costStructure: sections.costStructure || null,
+          keyMetrics: sections.keyMetrics || null,
+          unfairAdvantage: sections.unfairAdvantage || null,
+          content: updated.content,
+          createdAt: updated.createdAt,
+          updatedAt: updated.updatedAt,
+        });
+      }
+      return res.status(200).json(null);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // ==================== GENERATION ROUTES (STUBBED) ====================
+
+  // Generate canvas - triggers full pipeline via anvil-api
+  app.post("/api/ideas/:id/generate", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const userId = req.user!.id;
+      const idea = await storage.getIdeaById(ideaId, userId);
+
       if (!idea) {
         return res.status(404).json({ message: "Idea not found" });
       }
 
-      // Retrieve project ID
-      const projectId: string | null | undefined = (await storage.getLeanCanvasByIdeaId(ideaId))?.projectId;
+      // Create a job to track the generation
+      const job = await storage.createJob({
+        userId,
+        ideaId,
+        documentType: "LeanCanvas",
+        description: "Full document generation pipeline started",
+        status: "pending",
+      });
 
-      if (!projectId) {
-        return res.status(404).json({ message: "Lean Canvas not found" });
-      }
+      // Update idea status
+      await storage.updateIdeaStatus(ideaId, "Generating", userId);
 
-      // Create the job entry
-      const jobData: InsertJob = {
-        ideaId: ideaId,
-        userId: userId,
-        projectId: projectId,
-        documentType: "Workflows",
-        description: `Generating ${title} workflow`,
-        status: "starting"
-      };
+      // Fire-and-forget: trigger anvil-api generation pipeline
+      triggerGeneration(ideaId, job.id).catch((err) => {
+        console.error(`[generate] anvil-api trigger failed for idea ${ideaId}:`, err);
+      });
 
-      const job = await storage.createJob(jobData);
-
-      // Publish task to RabbitMQ
-      const message = {
-        type: "workflow_generation",
-        payload: {
-          jobId: job.id,
-          ideaId,
-          projectId,
-          workflowType,
-          title
-        }
-      };
-
-      await publishTask(message);
-
-      // Return the created workflow job
-      return res.status(201).json({
-        message: "Workflow generation started",
-        jobId: job.id
+      return res.status(200).json({
+        message: "Document generation started",
+        jobId: job.id,
       });
     } catch (error: any) {
       next(error);
     }
   });
 
-  // Updated Generic Job Status Route
-  app.put("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
+  // Generate functional requirements - stubbed
+  app.post("/api/ideas/:id/generate-functional-requirements", isAuthenticated, async (req, res, next) => {
     try {
+      const ideaId = req.params.id;
+      const userId = req.user!.id;
+      const idea = await storage.getIdeaById(ideaId, userId);
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      const job = await storage.createJob({
+        userId,
+        ideaId,
+        documentType: "FunctionalRequirements",
+        description: "Functional requirements generation requested",
+        status: "pending",
+      });
+
+      return res.status(200).json({
+        message: "Functional requirements generation job created",
+        jobId: job.id,
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Generate business requirements - stubbed
+  app.post("/api/ideas/:id/generate-business-requirements", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const userId = req.user!.id;
+      const idea = await storage.getIdeaById(ideaId, userId);
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      const job = await storage.createJob({
+        userId,
+        ideaId,
+        documentType: "BusinessRequirements",
+        description: "Business requirements generation requested",
+        status: "pending",
+      });
+
+      return res.status(200).json({
+        message: "Business requirements generation job created",
+        jobId: job.id,
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Generate ultimate website - stubbed
+  app.post("/api/ideas/:id/generate-ultimate-website", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const userId = req.user!.id;
+      const idea = await storage.getIdeaById(ideaId, userId);
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      const job = await storage.createJob({
+        userId,
+        ideaId,
+        documentType: "FrontEndSpecification",
+        description: "Ultimate website generation requested",
+        status: "pending",
+      });
+
+      return res.status(200).json({
+        message: "Ultimate website generation job created",
+        jobId: job.id,
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // Workflow generation - stubbed
+  app.post("/api/ideas/:id/workflows", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const userId = req.user!.id;
+      const idea = await storage.getIdeaById(ideaId, userId);
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      const job = await storage.createJob({
+        userId,
+        ideaId,
+        documentType: "Workflows",
+        description: "Workflow generation requested",
+        status: "pending",
+      });
+
+      return res.status(201).json({
+        message: "Workflow generation job created",
+        jobId: job.id,
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // ==================== INTERNAL WEBHOOK (anvil-api callbacks) ====================
+
+  const ANVIL_WEBHOOK_SECRET = process.env.ANVIL_WEBHOOK_SECRET;
+
+  app.post("/api/internal/jobs/:id/progress", async (req, res, next) => {
+    try {
+      // Validate shared secret
+      if (!ANVIL_WEBHOOK_SECRET) {
+        return res.status(503).json({ message: "Webhook not configured" });
+      }
+      const secret = req.headers["x-webhook-secret"];
+      if (secret !== ANVIL_WEBHOOK_SECRET) {
+        return res.status(401).json({ message: "Invalid webhook secret" });
+      }
+
       const jobId = req.params.id;
       const { status, description } = req.body;
 
-      // Validate inputs
-      if (!status && !description) {
-        return res.status(400).json({ message: "No updates provided" });
+      if (!status) {
+        return res.status(400).json({ message: "status is required" });
       }
 
       const job = await storage.getWorkflowJobById(jobId);
@@ -626,9 +564,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Job not found" });
       }
 
-      // Check authorization (optional, depending on requirements, usually user who created the job)
-      if (Number(job.userId) !== Number(req.user!.id)) {
-        // Allow if admin or same user? For now assume strict ownership
+      // Update job in database (no RLS — internal call)
+      const updates: Partial<UpdateJob> = { status, description };
+      await storage.updateJob(jobId, updates);
+
+      // Publish Socket.IO event based on status
+      const lowerStatus = status.toLowerCase();
+      if (lowerStatus === "completed" || lowerStatus === "done") {
+        publishJobEvent(jobId, "done", { message: description || "Completed" });
+        // Also update idea status
+        if (job.ideaId) {
+          await storage.updateIdeaStatus(job.ideaId, "Completed");
+        }
+      } else if (lowerStatus === "failed" || lowerStatus === "error") {
+        publishJobEvent(jobId, "error", { message: description || "Generation failed" });
+        if (job.ideaId) {
+          await storage.updateIdeaStatus(job.ideaId, "Draft");
+        }
+      } else {
+        publishJobEvent(jobId, "progress", { message: description });
+      }
+
+      return res.status(200).json({ ok: true });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // ==================== JOB ROUTES ====================
+
+  app.get("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const jobId = req.params.id;
+      const job = await storage.getWorkflowJobById(jobId, req.user!.id);
+
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (job.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Unauthorized" });
+      }
+
+      return res.status(200).json(job);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  app.put("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
+    try {
+      const jobId = req.params.id;
+      const { status, description } = req.body;
+
+      if (!status && !description) {
+        return res.status(400).json({ message: "No updates provided" });
+      }
+
+      const job = await storage.getWorkflowJobById(jobId, req.user!.id);
+      if (!job) {
+        return res.status(404).json({ message: "Job not found" });
+      }
+
+      if (job.userId !== req.user!.id) {
         return res.status(403).json({ message: "Unauthorized" });
       }
 
@@ -636,75 +634,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (status) updates.status = status;
       if (description) updates.description = description;
 
-      await storage.updateJob(jobId, updates);
+      await storage.updateJob(jobId, updates, req.user!.id);
       publishJobEvent(jobId, "status", { message: description || status });
 
-      const updatedJob = await storage.getWorkflowJobById(jobId);
+      const updatedJob = await storage.getWorkflowJobById(jobId, req.user!.id);
       return res.status(200).json(updatedJob);
     } catch (error: any) {
       next(error);
     }
   });
 
-  app.get("/api/jobs/:id", isAuthenticated, async (req, res, next) => {
-    try {
-      const jobId = req.params.id;
-
-      const job = await storage.getWorkflowJobById(jobId);
-      if (!job) return res.status(404).json({ message: "Job not found" });
-
-      if (Number(job.userId) !== Number(req.user!.id)) {
-        return res.status(403).json({ message: "Unauthorized" });
-      }
-
-      return res.status(200).json(job);
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-
-  app.get("/api/ideas/:id/current-workflow-job", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const documentType = req.query.documentType as string;
-      const job = await storage.getLatestWorkflowJob(ideaId, undefined, documentType);
-      if (!job) {
-        return res.json(null); // No job found
-      }
-      return res.status(200).json(job);
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  // Job progress endpoint - accepts both session auth and API key auth (for n8n callbacks)
-  app.post("/api/jobs/:id/progress", isAuthenticatedOrApiKey, async (req, res, next) => {
+  app.post("/api/jobs/:id/progress", isAuthenticated, async (req, res, next) => {
     try {
       const jobId = req.params.id;
       const { progress } = req.body;
 
-      const job = await storage.getWorkflowJobById(jobId);
+      const job = await storage.getWorkflowJobById(jobId, req.user!.id);
       if (!job) {
         return res.status(404).json({ message: "Job not found" });
       }
 
-      // Skip user ownership check if this is a service-authenticated request (n8n callback)
-      if (!(req as any).isServiceAuth) {
-        if (Number(job.userId) !== Number(req.user!.id)) {
-          return res.status(403).json({ message: "Unauthorized" });
-        }
+      if (job.userId !== req.user!.id) {
+        return res.status(403).json({ message: "Unauthorized" });
       }
 
-      console.log("Building job progress", jobId, progress);
       const updates: Partial<UpdateJob> = {};
-      if (progress) updates.description = progress.description;
-      if (progress) updates.status = progress.status;
+      if (progress) {
+        updates.description = progress.description;
+        updates.status = progress.status;
+      }
 
-      console.log("Updating job progress", jobId, updates);
-      await storage.updateJob(jobId, updates);
+      await storage.updateJob(jobId, updates, req.user!.id);
 
-      // Publish 'done' event when job is completed, otherwise 'progress'
       const isCompleted = progress?.status?.toLowerCase() === 'completed';
       if (isCompleted) {
         publishJobEvent(jobId, "done", { message: progress?.description || "Completed" });
@@ -712,25 +673,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         publishJobEvent(jobId, "progress", { message: progress?.description });
       }
 
-      const updatedJob = await storage.getWorkflowJobById(jobId);
-      console.log("Updated job progress", jobId, updatedJob);
+      const updatedJob = await storage.getWorkflowJobById(jobId, req.user!.id);
       return res.status(200).json(updatedJob);
     } catch (error: any) {
       next(error);
     }
   });
 
+  app.get("/api/ideas/:id/current-workflow-job", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const documentType = req.query.documentType as string;
+      const job = await storage.getLatestWorkflowJob(ideaId, req.user!.id, documentType);
+      return res.status(200).json(job || null);
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  // ==================== SUPABASE INTEGRATION ROUTES ====================
+
   app.get("/api/ideas/:id/project-workflows", isAuthenticated, async (req, res, next) => {
     try {
-      const ideaId = parseInt(req.params.id);
-      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
-      let projectId = leanCanvas?.projectId;
-
-      if (!projectId) {
-        return res.status(404).json({ message: "Project ID not found for this idea" });
-      }
-
-      const workflows = await fetchProjectWorkflows(projectId);
+      const ideaId = req.params.id;
+      const workflows = await fetchProjectWorkflows(ideaId, req.user!.id);
       return res.status(200).json(workflows);
     } catch (error: any) {
       next(error);
@@ -739,2527 +705,112 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/ideas/:id/project-estimate", isAuthenticated, async (req, res, next) => {
     try {
-      const ideaId = parseInt(req.params.id);
-
-      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
-      let projectId = leanCanvas?.projectId;
-
-      if (!projectId) {
-        return res.status(404).json({ message: "Project ID not found for this idea" });
-      }
-
-      const estimate = await fetchProjectEstimate(projectId);
+      const ideaId = req.params.id;
+      const estimate = await fetchProjectEstimate(ideaId, req.user!.id);
       return res.status(200).json(estimate);
     } catch (error: any) {
       next(error);
     }
   });
 
-
-
-  // Document management routes
-  // Create or update a document
-  app.post("/api/ideas/:id/documents", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const { documentType, title, status, content, html, externalId } = req.body;
-
-
-      // Validate required fields
-      if (!documentType || !title) {
-        return res.status(400).json({ message: "Missing required fields: documentType, title" });
-      }
-
-
-      // Check if the user has permission to access this idea
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found or access denied" });
-      }
-
-
-      // Check if document already exists for this idea and type
-      const existingDocument = await storage.getDocumentByType(ideaId, documentType);
-
-
-      if (existingDocument) {
-        // Update the existing document
-        await storage.updateDocument(existingDocument.id, {
-          title,
-          status,
-          content: content || existingDocument.content,
-          html: html || existingDocument.html,
-          externalId: externalId || existingDocument.externalId
-        });
-
-
-        const updatedDocument = await storage.getDocumentById(existingDocument.id);
-        return res.status(200).json(updatedDocument);
-      } else {
-        // Create a new document
-        const newDocument = await storage.createDocument({
-          ideaId,
-          documentType,
-          title,
-          status: status || "Draft",
-          content: content || null,
-          html: html || null,
-          externalId: externalId || null
-        });
-
-
-        return res.status(200).json(newDocument);
-      }
-    } catch (error: any) {
-      console.error("Error creating/updating document:", error);
-      next(error);
-    }
-  });
-
-
-  // Get a specific document by type
-  app.get("/api/ideas/:id/documents/:type", isAuthenticated, async (req, res, next) => {
-    try {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
-      res.setHeader('Surrogate-Control', 'no-store');
-
-      const ideaId = parseInt(req.params.id);
-
-      const documentType = req.params.type as DocumentType;
-
-      // Check if the user has permission to access this idea
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found or access denied" });
-      }
-
-      // Special handling for Lean Canvas
-      if (documentType === "LeanCanvas") {
-        const canvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
-        console.log(`[LeanCanvas] Fetched canvas for idea ${ideaId}:`, canvas ? `id=${canvas.id}, html=${canvas.html ? `${canvas.html.length} chars` : 'null'}` : 'null');
-
-        if (canvas) {
-          let htmlContent = canvas.html;
-
-          // If local html is null, try to fetch from Supabase
-          if (!htmlContent) {
-            console.log(`[LeanCanvas] Local html is null, fetching from Supabase...`);
-            try {
-              const { fetchLeanCanvasData } = await import('./supabase');
-              const supabaseCanvas = await fetchLeanCanvasData(ideaId, req.user!.id);
-              if (supabaseCanvas && supabaseCanvas.html) {
-                htmlContent = supabaseCanvas.html;
-                console.log(`[LeanCanvas] Found HTML in Supabase: ${htmlContent?.length || 0} chars`);
-
-                // Sync back to local DB
-                try {
-                  await storage.updateLeanCanvas(ideaId, { html: htmlContent }, req.user!.id);
-                  console.log(`[LeanCanvas] Synced HTML back to local database`);
-                } catch (syncError) {
-                  console.warn(`[LeanCanvas] Failed to sync HTML to local DB:`, syncError);
-                }
-              }
-            } catch (supabaseError) {
-              console.warn(`[LeanCanvas] Error fetching from Supabase:`, supabaseError);
-            }
-          }
-
-          // Convert Lean Canvas to ProjectDocument format
-          const document: any = {
-            id: canvas.id, // This is the canvas ID, not a document ID, but serves the purpose
-            ideaId: canvas.ideaId,
-            documentType: "LeanCanvas",
-            title: "Lean Canvas",
-            status: "Completed", // Canvas is always considered completed if it exists
-            content: null, // Store raw data as content
-            html: htmlContent,
-            createdAt: canvas.createdAt,
-            updatedAt: canvas.updatedAt,
-            version: 1
-          };
-          return res.status(200).json(document);
-        } else {
-          // If no canvas exists, return null (not found)
-          return res.status(200).json(null);
-        }
-      }
-
-      const document = await storage.getDocumentByType(ideaId, documentType, req.user!.id);
-
-      if (!document) {
-        return res.status(200).json(null); // Return null instead of 404 to handle case where document doesn't exist yet
-      }
-
-      console.log(`[DOC FETCH] Idea ${ideaId}, Type ${documentType}, Status ${document.status}, externalId: ${document.externalId || 'MISSING'}`);
-
-
-      // Special handling for Project Requirements if they're in Generating state with an externalId
-      if (documentType === "ProjectRequirements" && document.status === "Generating" && document.externalId) {
-        try {
-          // Check if we should fetch from Supabase
-          if (document.generationStartedAt) {
-            const generationStartTime = new Date(document.generationStartedAt).getTime();
-            const now = Date.now();
-            const secondsElapsed = (now - generationStartTime) / 1000;
-
-
-            // Only check Supabase if enough time has passed since generation started
-            if (secondsElapsed >= 10) {
-              console.log(`Checking Supabase for Project Requirements ${document.externalId} (${secondsElapsed.toFixed(1)}s elapsed)`);
-
-
-              // Import and fetch the PRD data from Supabase
-              const { fetchProjectRequirements } = await import('./supabase');
-              const prdData = await fetchProjectRequirements(document.externalId, ideaId, req.user!.id);
-
-
-              if (prdData && prdData.projectReqHtml) {
-                console.log(`Found HTML content for PRD ID ${document.externalId}`);
-
-
-                // Update the document with the HTML from Supabase
-                await storage.updateDocument(document.id, {
-                  html: prdData.projectReqHtml,
-                  status: "Completed",
-                  updatedAt: new Date()
-                }, req.user!.id);
-
-
-                // Return the updated document with the HTML content
-                const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
-                return res.status(200).json(updatedDocument);
-              }
-            }
-          }
-        } catch (supabaseError) {
-          console.error(`Error fetching Project Requirements from Supabase:`, supabaseError);
-          // Continue to return the document as is
-        }
-
-
-        // Check if generation has timed out (2 minutes)
-        if (document.generationStartedAt) {
-          const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-          if (new Date(document.generationStartedAt) < twoMinutesAgo) {
-            console.log(`Project Requirements generation timed out for document ${document.id}`);
-            // Still return the document as is - client will display retry button
-          }
-        }
-      }
-
-
-      // Special handling for Business Requirements document
-      // We also check if externalId is missing because fetchBusinessRequirements has fallback logic
-      if (documentType === "BusinessRequirements") {
-        try {
-          console.log(`BRD Handler: Checking Business Requirements document with externalId ${document.externalId}`);
-
-
-          // If the document should be completed but is missing HTML, try to fetch it
-          // Also fetch if still generating but some time has passed
-          const shouldFetchContent =
-            (document.status === "Completed" && (!document.html || document.html.length === 0)) ||
-            (document.status === "Generating" && document.generationStartedAt &&
-              ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10)) ||
-            (document.status === "Generating" && !document.externalId); // Also try if externalId is missing
-
-
-          if (shouldFetchContent) {
-            console.log(`BRD Handler: Attempting robust Supabase lookup for ideaId ${ideaId} (externalId: ${document.externalId || 'none'})`);
-
-
-            // Use robust helper method instead of direct query
-            const { fetchBusinessRequirements } = await import('./supabase');
-            const brdResponse = await fetchBusinessRequirements(document.externalId || '', ideaId, req.user!.id);
-
-
-            if (brdResponse && brdResponse.data && brdResponse.data.html) {
-              console.log(`BRD Handler: Found HTML content in Supabase (${brdResponse.data.html.length} chars)`);
-
-
-              // Update document with the retrieved HTML and the found externalId
-              await storage.updateDocument(document.id, {
-                html: brdResponse.data.html,
-                status: "Completed",
-                externalId: brdResponse.data.id, // Persist the ID found via fallback
-                updatedAt: new Date()
-              }, req.user!.id);
-
-
-              // Return the updated document
-              const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
-              console.log(`BRD Handler: Returning updated document with HTML content`);
-              return res.status(200).json(updatedDocument);
-            } else {
-              console.log(`BRD Handler: No HTML content found via fetchBusinessRequirements`);
-            }
-          }
-        } catch (brdError) {
-          console.error(`Error fetching Business Requirements from Supabase:`, brdError);
-          // Continue to return the document as is
-        }
-
-
-      }
-
-
-      // Special handling for Functional Requirements document
-      if (documentType === "FunctionalRequirements") {
-        try {
-          console.log(`FRD Handler: Checking Functional Requirements document with externalId ${document.externalId}`);
-
-          const shouldFetchContent =
-            (document.status === "Completed" && (!document.html || document.html.length === 0)) ||
-            (document.status === "Generating" && document.generationStartedAt &&
-              ((Date.now() - new Date(document.generationStartedAt).getTime()) / 1000 >= 10)) ||
-            (document.status === "Generating" && !document.externalId); // Also try if externalId is missing
-
-          if (shouldFetchContent) {
-            console.log(`FRD Handler: Attempting robust Supabase lookup for ideaId ${ideaId} (externalId: ${document.externalId || 'none'})`);
-            const { fetchFunctionalRequirements } = await import('./supabase');
-            const frdResponse = await fetchFunctionalRequirements(document.externalId || '', ideaId, req.user!.id);
-
-            if (frdResponse && frdResponse.data && frdResponse.data.html) {
-              console.log(`FRD Handler: Found HTML content in Supabase (${frdResponse.data.html.length} chars)`);
-
-              await storage.updateDocument(document.id, {
-                html: frdResponse.data.html,
-                status: "Completed",
-                externalId: frdResponse.data.id, // Persist the ID found via fallback
-                updatedAt: new Date()
-              }, req.user!.id);
-
-              const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
-              console.log(`FRD Handler: Returning updated document with HTML content`);
-              return res.status(200).json(updatedDocument);
-            } else {
-              console.log(`FRD Handler: No HTML content found via fetchFunctionalRequirements`);
-            }
-          }
-        } catch (frdError) {
-          console.error(`Error fetching Functional Requirements from Supabase:`, frdError);
-        }
-      }
-
-
-      // Check if generation has timed out (2 minutes)
-      if (document.status === "Generating" && document.generationStartedAt) {
-        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
-        if (new Date(document.generationStartedAt) < twoMinutesAgo) {
-          console.log(`${documentType} generation timed out for document ${document.id}`);
-        }
-      }
-
-      res.status(200).json(document);
-    } catch (error: any) {
-      console.error(`Error fetching ${req.params.type} document:`, error);
-      next(error);
-    }
-  });
-
-
-  // Delete a document by type (useful for singleton documents like Lean Canvas)
-  app.delete("/api/ideas/:id/documents/type/:type", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const documentType = req.params.type as DocumentType;
-
-      // Check if the user has permission to access this idea
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found or access denied" });
-      }
-
-      // Special handling for Lean Canvas
-      if (documentType === "LeanCanvas") {
-        const canvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
-        if (canvas) {
-          // We don't have a direct deleteLeanCanvas method exposed in IStorage that takes an ID,
-          // but we can implement a deleteLeanCanvasByIdeaId or similar.
-          // For now, let's assume we can add a method or use what's available.
-          // Checking storage.ts, we have deleteIdea which deletes canvas, but no direct deleteCanvas.
-          // Let's check if we can add it or if we need to use a workaround.
-          // Actually, looking at storage.ts, we can see `deleteLeanCanvas` isn't there.
-          // We should probably add it to storage interface or just use db directly if we were inside storage.
-          // But we are in routes.
-
-          // Let's look at storage.ts again.
-          // It has `deleteIdea` which deletes canvas.
-          // It DOES NOT have `deleteLeanCanvas`.
-          // We need to add `deleteLeanCanvas` to `IStorage` and `DatabaseStorage`/`MemStorage`.
-          // For now, I will assume I will add it in the next step.
-          await storage.deleteLeanCanvas(ideaId, req.user!.id);
-          return res.status(200).json({ message: "Lean Canvas deleted successfully" });
-        }
-        return res.status(404).json({ message: "Lean Canvas not found" });
-      }
-
-      const document = await storage.getDocumentByType(ideaId, documentType, req.user!.id);
-
-      if (!document) {
-        return res.status(404).json({ message: "Document not found" });
-      }
-
-      await storage.deleteDocument(document.id, req.user!.id);
-      res.status(200).json({ message: "Document deleted successfully" });
-    } catch (error) {
-      console.error(`Error deleting ${req.params.type} document:`, error);
-      next(error);
-    }
-  });
-
-  // Get all documents for an idea
-  app.get("/api/ideas/:id/documents", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-
-
-      // Check if the user has permission to access this idea
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found or access denied" });
-      }
-
-
-      const documents = await storage.getDocumentsByIdeaId(ideaId, req.user!.id);
-
-
-      res.status(200).json(documents);
-    } catch (error: any) {
-      console.error("Error fetching documents:", error);
-      next(error);
-    }
-  });
-
-
-  // Update a specific document
-  app.patch("/api/ideas/:ideaId/documents/:documentId", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.ideaId);
-      const documentId = parseInt(req.params.documentId);
-
-
-      // Check if the user has permission to access this idea
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found or access denied" });
-      }
-
-
-      // Get the document and verify it belongs to this idea
-      const document = await storage.getDocumentById(documentId, req.user!.id);
-      if (!document || document.ideaId !== ideaId) {
-        return res.status(404).json({ message: "Document not found or doesn't belong to this idea" });
-      }
-
-
-      await storage.updateDocument(documentId, req.body, req.user!.id);
-      const updatedDocument = await storage.getDocumentById(documentId, req.user!.id);
-
-
-      res.status(200).json(updatedDocument);
-    } catch (error: any) {
-      console.error("Error updating document:", error);
-      next(error);
-    }
-  });
-
-
-  // Delete a specific document (for regeneration)
-  app.delete("/api/ideas/:ideaId/documents/:documentId", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.ideaId);
-      const documentId = parseInt(req.params.documentId);
-
-
-      // Check if the user has permission to access this idea
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found or access denied" });
-      }
-
-
-      // Get the document and verify it belongs to this idea
-      const document = await storage.getDocumentById(documentId, req.user!.id);
-      if (!document || document.ideaId !== ideaId) {
-        return res.status(404).json({ message: "Document not found or doesn't belong to this idea" });
-      }
-
-
-      await storage.deleteDocument(documentId, req.user!.id);
-
-
-      res.status(200).json({ message: "Document deleted successfully" });
-    } catch (error: any) {
-      console.error("Error deleting document:", error);
-      next(error);
-    }
-  });
-
-
-  app.delete("/api/ideas/:id", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-
-
-      // Get the idea and verify ownership
-      const idea = await storage.getIdeaById(ideaId);
-
-
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-
-      if (Number(idea.userId) !== Number(req.user!.id)) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
-
-      console.log(`Attempting to delete idea ${ideaId} requested by user ${req.user!.id}`);
-
-
-      try {
-        // First manually delete all related project documents for this idea
-        const documents = await storage.getDocumentsByIdeaId(ideaId, req.user!.id);
-        console.log(`Found ${documents.length} documents to delete for idea ${ideaId}`);
-
-
-        for (const doc of documents) {
-          try {
-            console.log(`Deleting document ${doc.id} of type ${doc.documentType} for idea ${ideaId}`);
-            await storage.deleteDocument(doc.id, req.user!.id);
-          } catch (docError) {
-            console.error(`Error deleting document ${doc.id}:`, docError);
-            // Continue with other documents even if one fails
-          }
-        }
-
-
-        // Now try to delete the idea itself
-        await storage.deleteIdea(ideaId, req.user!.id);
-        return res.status(200).json({ message: "Idea deleted successfully" });
-      } catch (deleteError: any) {
-        console.error(`Error during deletion process for idea ${ideaId}:`, deleteError);
-        return res.status(500).json({
-          message: "Failed to delete idea",
-          error: deleteError.message || "Unknown error"
-        });
-      }
-    } catch (error: any) {
-      console.error("Error in delete idea route:", error);
-      next(error);
-    }
-  });
-
-  // Canvas generation route
-  // Webhook proxy for Business Requirements
-  app.post("/api/webhook/business-requirements", isAuthenticated, async (req, res, next) => {
-    try {
-      console.log("BRD webhook received with body:", JSON.stringify(req.body, null, 2));
-
-
-      const { projectId, instructions, ideaId: requestIdeaId } = req.body;
-
-
-      if (!projectId && !requestIdeaId) {
-        return res.status(400).json({ message: "Project ID or Idea ID is required" });
-      }
-
-
-      // If direct ideaId is provided, we should use that
-      if (requestIdeaId) {
-        console.log(`BRD: Direct ideaId provided in request: ${requestIdeaId}`);
-      }
-
-
-      // Use the BRD-specific webhook URL from environment variables
-      const webhookUrl = process.env.N8N_BRD_WEBHOOK_URL;
-      const username = process.env.N8N_AUTH_USERNAME;
-      const password = process.env.N8N_AUTH_PASSWORD;
-
-
-      if (!webhookUrl) {
-        return res.status(500).json({ message: "N8N Business Requirements webhook URL not configured" });
-      }
-
-
-      if (!username || !password) {
-        return res.status(500).json({ message: "N8N authentication credentials not configured" });
-      }
-
-
-      // Create basic auth header
-      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-
-
-      // Get the numeric idea ID - ensure we're working with a valid integer
-      let ideaId;
-      try {
-        // First check if projectId is a uuid format from Supabase
-        if (typeof projectId === 'string' && (projectId.includes('-') || !Number.isInteger(Number(projectId)))) {
-          // If it's a uuid format, we need to look up the corresponding idea
-          const { pool } = await import('./db');
-          const result = await pool.query('SELECT idea_id FROM lean_canvas WHERE project_id = $1', [projectId]);
-
-
-          if (result.rows.length > 0) {
-            ideaId = result.rows[0].idea_id;
-            console.log(`Found idea_id ${ideaId} for project_id ${projectId}`);
-          } else {
-            // Fallback to the request parameters - the :id in the URL
-            ideaId = parseInt(req.body.ideaId?.toString() || '0');
-            console.log(`Using fallback ideaId ${ideaId} from request body`);
-          }
-        } else {
-          // If it's a plain number, use it directly
-          ideaId = parseInt(projectId.toString());
-        }
-
-
-        // Validate that we have a legitimate ideaId
-        if (!ideaId || ideaId <= 0 || isNaN(ideaId)) {
-          return res.status(400).json({ message: "Invalid Idea ID. Could not determine the correct idea for this document." });
-        }
-
-
-        console.log(`Resolved ideaId: ${ideaId} from projectId: ${projectId}`);
-      } catch (error: any) {
-        console.error('Error resolving idea ID:', error);
-        return res.status(400).json({ message: "Failed to resolve idea ID from project ID" });
-      }
-
-      // Get the project_id and leancanvas_id from lean_canvas table
-      let supabaseProjectId;
-      let leancanvasId;
-
-      try {
-        // First try to get from local database
-        const { pool } = await import('./db');
-        const result = await pool.query('SELECT project_id, id AS leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
-
-        if (result.rows.length > 0) {
-          supabaseProjectId = result.rows[0].project_id;
-          leancanvasId = result.rows[0].leancanvas_id;
-          console.log(`Found project_id ${supabaseProjectId} and leancanvas_id ${leancanvasId} for idea ${ideaId}`);
-        } else {
-          console.log(`No IDs found for idea ${ideaId} in local database`);
-
-          // If leancanvas_id is null, try to fetch from Supabase directly
-          try {
-            const { supabase } = await import('./supabase');
-            console.log(`Querying Supabase lean_canvas table with ideaId=${ideaId}`);
-
-            // First try to find via Supabase by idea_id
-            let { data: canvasData } = await supabase
-              .from('lean_canvas')
-              .select('project_id, id')
-              .eq('idea_id', ideaId)
-              .single();
-
-            if (!canvasData) {
-              // If no result, try getting the idea first to get its project_id
-              // Note: projectId is stored on lean_canvas table, not ideas table
-              const localCanvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
-              if (localCanvas) {
-                supabaseProjectId = localCanvas.projectId;
-                console.log(`Found project_id ${supabaseProjectId} from local canvas for idea ${ideaId}`);
-
-                // Then look up the canvas using the idea's project_id
-                if (supabaseProjectId) {
-                  let { data: canvasByProject } = await supabase
-                    .from('lean_canvas')
-                    .select('*')
-                    .eq('project_id', supabaseProjectId)
-                    .single();
-
-                  if (canvasByProject) {
-                    canvasData = canvasByProject;
-                  }
-                }
-              }
-            }
-
-            if (canvasData) {
-              // We have the canvas data from Supabase
-              supabaseProjectId = canvasData.project_id;
-              leancanvasId = canvasData.id; // Use the Supabase ID as leancanvas_id
-              console.log(`Found data in Supabase: project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
-            } else {
-              // Fallback to using ideaId as the project_id
-              supabaseProjectId = ideaId.toString();
-              console.log(`No canvas data found in Supabase. Using fallback project_id=${supabaseProjectId}`);
-            }
-          } catch (supabaseError) {
-            console.error('Error getting canvas from Supabase:', supabaseError);
-            supabaseProjectId = ideaId.toString();
-          }
-        }
-      } catch (error) {
-        console.error('Error getting Supabase IDs:', error);
-        supabaseProjectId = projectId.toString();
-      }
-
-      // Make sure we have valid values and not undefined
-      supabaseProjectId = supabaseProjectId || ideaId.toString();
-
-      console.log(`Sending business requirements request to n8n with project_id=${supabaseProjectId}, leancanvas_id=${leancanvasId}`);
-      console.log(`Using webhook URL: ${webhookUrl}`);
-      console.log(`With instructions: ${instructions || "No specific instructions"}`);
-
-
-      // Create a document record before calling N8N
-      let document;
-      const existingDocument = await storage.getDocumentByType(ideaId, "BusinessRequirements", req.user!.id);
-
-
-      if (existingDocument) {
-        // Update existing document
-        await storage.updateDocument(existingDocument.id, {
-          status: "Generating",
-          generationStartedAt: new Date()
-        }, req.user!.id);
-        document = await storage.getDocumentById(existingDocument.id, req.user!.id);
-        console.log(`Updated existing document ${existingDocument.id} for business requirements`);
-      } else {
-        // Create a new document
-        document = await storage.createDocument({
-          ideaId,
-          documentType: "BusinessRequirements",
-          title: "Business Requirements Document",
-          status: "Generating",
-          generationStartedAt: new Date()
-        }, req.user!.id);
-        console.log(`Created new document ${document.id} for business requirements`);
-      }
-
-
-      // Get prd_id if available from documents
-      let prdId = null;
-      try {
-        const prdDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements", req.user!.id);
-        if (prdDocument) {
-          prdId = prdDocument.externalId;
-          console.log(`Found existing PRD document with external ID: ${prdId}`);
-        }
-      } catch (error: any) {
-        console.error('Error getting PRD document:', error);
-      }
-
-
-      // Call the n8n webhook with the payload
-      // Ensure we use the exact payload structure expected by the API
-      const payload = {
-        leancanvas_id: leancanvasId,
-        prd_id: prdId,
-        project_id: supabaseProjectId,
-        instructions: instructions || "Be comprehensive and detailed."
-      };
-
-
-      console.log(`Sending BRD webhook with payload:`, payload);
-
-
-      const response = await fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": authHeader
-        },
-        body: JSON.stringify(payload)
-      });
-
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`Failed to call business requirements webhook: ${response.status} ${errorText}`);
-
-
-        res.status(200).json({
-          message: "Business requirements document created, but webhook failed. Document will remain in Generating state until timeout.",
-          document,
-          webhookError: errorText
-        });
-        return;
-      }
-
-
-      // Get webhook response
-      const responseText = await response.text();
-      console.log(`N8N BRD webhook response: ${responseText}`);
-
-
-      try {
-        // Try to parse response as JSON if possible
-        let brdId = null;
-
-
-        try {
-          // First attempt as JSON
-          const responseData = JSON.parse(responseText);
-          if (responseData.external_id || responseData.brd_id) {
-            brdId = responseData.external_id || responseData.brd_id;
-            console.log(`Parsed BRD ID from JSON response: ${brdId}`);
-          }
-        } catch (jsonError) {
-          // If not JSON, try to extract ID from plain text
-          console.log(`N8N response is not valid JSON, treating as plain text: ${responseText}`);
-          // Assume response might be just the ID string
-          if (responseText && responseText.trim()) {
-            brdId = responseText.trim();
-            console.log(`Using plain text response as BRD ID: ${brdId}`);
-          }
-        }
-
-
-        // If we have an ID, store it with the document
-        if (brdId) {
-          console.log(`Storing BRD ID with document: ${brdId}`);
-          await storage.updateDocument(document.id, {
-            externalId: brdId
-          }, req.user!.id);
-
-
-          // Get the updated document to include in the response
-          const updatedDocument = await storage.getDocumentById(document.id, req.user!.id);
-          document = updatedDocument;
-
-
-          console.log(`Successfully updated document ${document.id} with external ID ${brdId}`);
-        } else {
-          console.warn(`WARNING: No BRD ID received from n8n webhook response. This may prevent accessing the document in Supabase later.`);
-        }
-      } catch (e: any) {
-        console.error(`Error processing N8N response: ${e.message}`);
-      }
-
-
-      // Return success
-      res.status(200).json({
-        message: "Business requirements document generation started",
-        document
-      });
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  // Webhook proxy for Project Requirements
-  app.post("/api/webhook/requirements", isAuthenticated, async (req, res, next) => {
-    try {
-      const { projectId, instructions } = req.body;
-
-
-      if (!projectId) {
-        return res.status(400).json({ message: "Project ID is required" });
-      }
-
-
-      // Use the PRD-specific webhook URL from environment variables
-      const webhookUrl = process.env.N8N_PRD_WEBHOOK_URL;
-      const username = process.env.N8N_AUTH_USERNAME;
-      const password = process.env.N8N_AUTH_PASSWORD;
-
-
-      if (!webhookUrl) {
-        return res.status(500).json({ message: "N8N Project Requirements webhook URL not configured" });
-      }
-
-
-      if (!username || !password) {
-        return res.status(500).json({ message: "N8N authentication credentials not configured" });
-      }
-
-
-      // Create basic auth header
-      const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-
-
-      // Get the numeric idea ID - ensure we're working with a valid integer
-      let ideaId;
-      try {
-        // First check if projectId is a uuid format from Supabase
-        if (typeof projectId === 'string' && (projectId.includes('-') || !Number.isInteger(Number(projectId)))) {
-          // If it's a uuid format, we need to look up the corresponding idea
-          const { pool } = await import('./db');
-          const result = await pool.query('SELECT idea_id FROM lean_canvas WHERE project_id = $1', [projectId]);
-
-
-          if (result.rows.length > 0) {
-            ideaId = result.rows[0].idea_id;
-            console.log(`Found idea_id ${ideaId} for project_id ${projectId}`);
-          } else {
-            // Fallback to the request parameters - the :id in the URL
-            ideaId = parseInt(req.body.ideaId?.toString() || '0');
-            console.log(`Using fallback ideaId ${ideaId} from request body`);
-          }
-        } else {
-          // If it's a plain number, use it directly
-          ideaId = parseInt(projectId.toString());
-        }
-
-
-        // Validate that we have a legitimate ideaId
-        if (!ideaId || ideaId <= 0 || isNaN(ideaId)) {
-          return res.status(400).json({ message: "Invalid Idea ID. Could not determine the correct idea for this document." });
-        }
-
-
-        console.log(`Resolved ideaId: ${ideaId} from projectId: ${projectId}`);
-      } catch (error: any) {
-        console.error('Error resolving idea ID:', error);
-        return res.status(400).json({ message: "Failed to resolve idea ID from project ID" });
-      }
-
-
-      // Get the Supabase project ID and leancanvas_id from lean_canvas table
-      let supabaseProjectId;
-      let leancanvasId;
-      try {
-        // First try to get it from our lean_canvas table which should have stored the project_id
-        const { pool } = await import('./db');
-        const result = await pool.query('SELECT project_id, id AS leancanvas_id FROM lean_canvas WHERE idea_id = $1', [ideaId]);
-
-
-        if (result.rows.length > 0 && result.rows[0].project_id) {
-          supabaseProjectId = result.rows[0].project_id;
-          leancanvasId = result.rows[0].leancanvas_id;
-          console.log(`Using Supabase project ID: ${supabaseProjectId}, leancanvas_id: ${leancanvasId} from lean_canvas table`);
-        } else {
-          // If not found, use the ideaId as a default (but this likely won't work with Supabase)
-          supabaseProjectId = projectId;
-          console.log(`No Supabase project ID found in database, defaulting to ${projectId}`);
-        }
-      } catch (error: any) {
-        console.error('Error getting Supabase project ID:', error);
-        supabaseProjectId = projectId; // Default fallback
-      }
-
-
-      // Create or update a document record before creating the job
-      let document;
-      const existingDocument = await storage.getDocumentByType(ideaId, "ProjectRequirements", req.user!.id);
-
-      if (existingDocument) {
-        // Update existing document
-        await storage.updateDocument(existingDocument.id, {
-          status: "Generating",
-          generationStartedAt: new Date()
-        }, req.user!.id);
-        document = await storage.getDocumentById(existingDocument.id, req.user!.id);
-        console.log(`Updated existing document ${existingDocument.id} for project requirements`);
-      } else {
-        // Create a new document
-        document = await storage.createDocument({
-          ideaId,
-          documentType: "ProjectRequirements",
-          title: "Project Requirements Document",
-          status: "Generating",
-          generationStartedAt: new Date()
-        }, req.user!.id);
-        console.log(`Created new document ${document.id} for project requirements`);
-      }
-
-      // Create a background job for this task
-      const jobData: InsertJob = {
-        ideaId: ideaId,
-        userId: req.user!.id,
-        projectId: supabaseProjectId || uuidv4(), // Fallback
-        documentType: "ProjectRequirements",
-        description: `Generating Project Requirements for ${ideaId}`,
-        status: "pending"
-      };
-
-      const job = await storage.createJob(jobData);
-      console.log(`Created job ${job.id} for Project Requirements generation`);
-
-      // Prepare payload for RabbitMQ
-      const taskPayload = {
-        jobId: job.id,
-        documentId: document.id,
-        ideaId,
-        project_id: supabaseProjectId,
-        leancanvas_id: leancanvasId,
-        instructions: instructions || "Be brief and concise.",
-        webhookUrl: process.env.N8N_PRD_WEBHOOK_URL,
-        auth: {
-          username: process.env.N8N_AUTH_USERNAME,
-          password: process.env.N8N_AUTH_PASSWORD
-        }
-      };
-
-      // Publish object to RabbitMQ
-      const published = await publishTask({
-        type: "generate_document",
-        payload: taskPayload
-      });
-
-      if (published) {
-        console.log(`Published Project Requirements generation task to RabbitMQ`);
-      } else {
-        console.error(`Failed to publish Project Requirements task to RabbitMQ`);
-      }
-
-      // Return immediate success with the document
-      res.status(200).json({
-        message: "Project requirements document generation started",
-        document,
-        jobId: job.id
-      });
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-
-
-
-  // Canvas generation route
-  app.post("/api/ideas/:id/generate", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-
-
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-
-      if (Number(idea.userId) !== Number(req.user!.id)) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
-
-      // Start idea generation with timestamp
-      await storage.startIdeaGeneration(ideaId, req.user!.id);
-
-
-      // Trigger the webhook to n8n
-      try {
-        console.log(`Starting canvas generation for idea ${ideaId}`);
-
-
-        const webhookUrl = process.env.N8N_WEBHOOK_URL;
-        const username = process.env.N8N_AUTH_USERNAME;
-        const password = process.env.N8N_AUTH_PASSWORD;
-
-
-        console.log(`Webhook URL: ${webhookUrl ? 'configured' : 'missing'}`);
-        console.log(`Auth credentials: ${username && password ? 'configured' : 'missing'}`);
-
-
-        if (!webhookUrl) {
-          throw new Error("N8N webhook URL not configured");
-        }
-
-
-        if (!username || !password) {
-          throw new Error("N8N authentication credentials not configured");
-        }
-
-
-        // Create basic auth header
-        const authHeader = `Basic ${Buffer.from(`${username}:${password}`).toString('base64')}`;
-
-
-        // Create the payload
-        const payload = {
-          title: idea.title || "",
-          idea: idea.idea,
-          founder_name: idea.founderName || "",
-          founder_email: idea.founderEmail || "",
-          company_stage: idea.companyStage || "",
-          website_url: idea.websiteUrl || "",
-          company_name: idea.companyName || "",
-
-
-          lean_canvas: {
-            problem: "",
-            customer_segments: "",
-            unique_value_proposition: "",
-            solution: "",
-            channels: "",
-            revenue_streams: "",
-            cost_structure: "",
-            key_metrics: "",
-            unfair_advantage: ""
-          },
-
-
-          traction_evidence: {
-            customer_interviews: 0,
-            waitlist_signups: 0,
-            paying_customers: 0
-          },
-
-
-          target_launch_date: "2026-01-15",
-          preferred_pricing_model: "",
-          additional_notes: "",
-          "unique-user-id": `user-${idea.userId}-idea-${ideaId}`
-        };
-
-
-        console.log(`Sending payload to n8n:`, JSON.stringify(payload, null, 2));
-
-
-        // Send the idea data to n8n with basic auth in the exact format required
-        const response = await fetch(webhookUrl, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": authHeader
-          },
-          body: JSON.stringify(payload)
-        });
-
-
-        const responseStatus = response.status;
-        const responseText = await response.text();
-        console.log(`N8N webhook response: ${responseStatus} - ${responseText}`);
-
-
-        if (!response.ok) {
-          throw new Error(`Failed to call n8n webhook: ${responseStatus} ${responseText}`);
-        }
-
-
-        // Parse the response JSON to extract project_id and leancanvas_id
-        let projectId = '';
-        let leancanvasId = '';
-
-        try {
-          // Parse the JSON response
-          const responseData = JSON.parse(responseText);
-
-
-          // Extract the individual fields
-          projectId = responseData.project_id || '';
-          leancanvasId = responseData.leancanvas_id || '';
-
-          console.log(`Extracted from response: project_id=${projectId}, leancanvas_id=${leancanvasId}`);
-          console.log(`Full response data:`, JSON.stringify(responseData));
-        } catch (jsonError) {
-          // Fallback to using the entire response as projectId for backward compatibility
-          console.error('Failed to parse webhook response as JSON:', jsonError);
-          projectId = responseText.trim();
-          console.log(`Using entire response as project_id: ${projectId}`);
-        }
-
-        // Store the project_id and leancanvas_id in the database
-        if (projectId) {
-          try {
-            // Check if lean canvas already exists for this idea
-            // TODO: This function needs to get the LeanCanvas in Supabase rather than create a new record
-            const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
-
-
-            if (existingCanvas) {
-              // Update the existing canvas with the project_id and leancanvas_id
-              await storage.updateLeanCanvas(ideaId, {
-                projectId,
-                leancanvasId
-              }, req.user!.id);
-              console.log(`Updated existing canvas with project_id: ${projectId}`);
-            } else {
-              // Create a new canvas with the project_id and leancanvas_id
-              await storage.createLeanCanvas({
-                ideaId,
-                projectId,
-                problem: null,
-                customerSegments: null,
-                uniqueValueProposition: null,
-                solution: null,
-                channels: null,
-                revenueStreams: null,
-                costStructure: null,
-                keyMetrics: null,
-                unfairAdvantage: null,
-                html: null
-              }, req.user!.id);
-              console.log(`Created new canvas with project_id: ${projectId}`);
-            }
-          } catch (dbError) {
-            console.error('Failed to store project_id in database:', dbError);
-            // Continue even if database storage fails
-          }
-        }
-
-
-        res.status(200).json({
-          message: "Canvas generation started",
-          projectId: projectId || null
-        });
-      } catch (error: any) {
-        console.error("Error triggering webhook:", error);
-        await storage.updateIdeaStatus(ideaId, "Draft", req.user!.id);
-        throw new Error("Failed to start canvas generation");
-      }
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  // Webhook endpoint for n8n to send back the generated business requirements
-  // Webhook endpoint for n8n to return business requirements document generation results
-  app.post("/api/webhook/business-requirements-result", async (req, res, next) => {
-    // Verify n8n credentials if they are configured
-    if (process.env.N8N_AUTH_USERNAME && process.env.N8N_AUTH_PASSWORD) {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Basic ')) {
-        return res.status(401).json({ message: "Unauthorized - Missing credentials" });
-      }
-
-
-      // Decode and verify the credentials
-      const base64Credentials = authHeader.split(' ')[1];
-      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
-      const [username, password] = credentials.split(':');
-
-
-      if (username !== process.env.N8N_AUTH_USERNAME || password !== process.env.N8N_AUTH_PASSWORD) {
-        return res.status(401).json({ message: "Unauthorized - Invalid credentials" });
-      }
-    }
-
-
-    try {
-      console.log("Received business requirements data from n8n:", JSON.stringify(req.body, null, 2));
-
-
-      // Extract data from the webhook payload
-      const { ideaId, brd_id, content, html, project_id, leancanvas_id, prd_id } = req.body;
-
-      console.log(`Received business requirements with: ideaId=${ideaId}, brd_id=${brd_id}, project_id=${project_id}, leancanvas_id=${leancanvas_id}, prd_id=${prd_id}`);
-      console.log(`Content length: ${content ? content.length : 'missing'}, HTML length: ${html ? html.length : 'missing'}`);
-
-
-      if (!ideaId) {
-        return res.status(400).json({ message: "Missing required field: ideaId" });
-      }
-
-
-      if (!content) {
-        console.warn("Warning: Received webhook without content");
-      }
-
-
-      // Search for a document with this brd_id as externalId
-      // If not found, try to find by ideaId and documentType
-      let existingDocument = null;
-
-
-      if (brd_id) {
-        const documents = await storage.getDocumentsByIdeaId(parseInt(ideaId));
-        existingDocument = documents.find(doc =>
-          doc.documentType === "BusinessRequirements" && doc.externalId === brd_id
-        );
-      }
-
-
-      if (!existingDocument) {
-        existingDocument = await storage.getDocumentByType(parseInt(ideaId), "BusinessRequirements");
-      }
-
-
-      if (existingDocument) {
-        // Update existing document with the content from n8n
-        // Use a properly typed object to avoid TypeScript errors
-        const updates: {
-          content?: string;
-          html?: string | null;
-          status: string;
-          externalId?: string;
-        } = {
-          status: "Completed"
-        };
-
-
-        // Only add fields if they are provided
-        if (content) updates.content = content;
-        if (html !== undefined) updates.html = html;
-        if (brd_id) updates.externalId = brd_id;
-
-
-        await storage.updateDocument(existingDocument.id, updates);
-        console.log(`Updated existing document ID ${existingDocument.id} for idea ${ideaId} with business requirements`);
-
-
-        // Log the updated document for debugging
-        const updatedDoc = await storage.getDocumentById(existingDocument.id);
-        console.log(`Updated document details: ${JSON.stringify(updatedDoc)}`);
-      } else {
-        // Create new document
-        const newDoc: {
-          ideaId: number;
-          documentType: "BusinessRequirements";
-          title: string;
-          content?: string;
-          html?: string | null;
-          status: string;
-          externalId?: string;
-        } = {
-          ideaId: parseInt(ideaId),
-          documentType: "BusinessRequirements",
-          title: "Business Requirements Document",
-          status: "Completed"
-        };
-
-
-        // Only add fields if they are provided
-        if (content) newDoc.content = content;
-        if (html !== undefined) newDoc.html = html;
-        if (brd_id) newDoc.externalId = brd_id;
-
-
-        const document = await storage.createDocument(newDoc);
-        console.log(`Created new document ID ${document.id} for idea ${ideaId} with business requirements`);
-      }
-
-
-      // Get the idea information to send notification
-      try {
-        const idea = await storage.getIdeaById(parseInt(ideaId));
-        if (idea && idea.founderEmail) {
-          // Send email notification that the requirements are generated
-          const title = idea.title || idea.idea.substring(0, 30) + '...';
-          await emailService.sendCanvasGeneratedEmail(idea.founderEmail, idea.founderName || 'User', title);
-          console.log(`Sent business requirements generation notification email to ${idea.founderEmail}`);
-        }
-      } catch (emailError) {
-        console.error('Failed to send business requirements generation notification:', emailError);
-        // Continue even if email sending fails
-      }
-
-
-      res.status(200).json({ message: "Business requirements document updated successfully" });
-    } catch (error: any) {
-      console.error("Error processing business requirements webhook:", error);
-      next(error);
-    }
-  });
-
-
-  // Webhook endpoint for n8n to send back the generated requirements
-  app.post("/api/webhook/requirements-result", async (req, res, next) => {
-    // Verify n8n credentials if they are configured
-    if (process.env.N8N_AUTH_USERNAME && process.env.N8N_AUTH_PASSWORD) {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Basic ')) {
-        return res.status(401).json({ message: "Unauthorized - Missing credentials" });
-      }
-
-
-      // Decode and verify the credentials
-      const base64Credentials = authHeader.split(' ')[1];
-      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
-      const [username, password] = credentials.split(':');
-
-
-      if (username !== process.env.N8N_AUTH_USERNAME || password !== process.env.N8N_AUTH_PASSWORD) {
-        return res.status(401).json({ message: "Unauthorized - Invalid credentials" });
-      }
-    }
-
-
-    try {
-      console.log("Received requirements data from n8n:", JSON.stringify(req.body, null, 2));
-
-
-      // Extract data from the webhook payload
-      const { ideaId, prd_id, content, html } = req.body;
-
-
-      if (!ideaId || !content) {
-        return res.status(400).json({ message: "Missing required fields: ideaId, content" });
-      }
-
-
-      // Search for a document with this prd_id as externalId
-      // If not found, try to find by ideaId and documentType
-      let existingDocument = null;
-
-
-      // First try to find by the external ID (prd_id) if it was provided
-      if (prd_id) {
-        // We could add a getDocumentByExternalId method to our storage interface
-        // For now, we'll get all documents for the idea and filter
-        const allDocs = await storage.getDocumentsByIdeaId(parseInt(ideaId));
-        existingDocument = allDocs.find(doc =>
-          doc.documentType === "ProjectRequirements" && doc.externalId === prd_id
-        );
-      }
-
-
-      // If not found by external ID, try to find by type
-      if (!existingDocument) {
-        existingDocument = await storage.getDocumentByType(parseInt(ideaId), "ProjectRequirements");
-      }
-
-
-      if (existingDocument) {
-        // Update existing document
-        await storage.updateDocument(existingDocument.id, {
-          content,
-          html: html || null,
-          status: "Completed",
-          externalId: prd_id || existingDocument.externalId // Preserve the external ID if it exists
-        });
-        console.log(`Updated existing document for idea ${ideaId} with project requirements`);
-      } else {
-        // Create new document
-        await storage.createDocument({
-          ideaId: parseInt(ideaId),
-          documentType: "ProjectRequirements",
-          title: "Project Requirements",
-          content,
-          html: html || null,
-          status: "Completed",
-          externalId: prd_id || null
-        });
-        console.log(`Created new document for idea ${ideaId} with project requirements`);
-      }
-
-
-      // Get the idea information to send notification
-      try {
-        const idea = await storage.getIdeaById(parseInt(ideaId));
-        if (idea && idea.founderEmail) {
-          // Send email notification that the requirements are generated
-          const title = idea.title || idea.idea.substring(0, 30) + '...';
-          await emailService.sendCanvasGeneratedEmail(idea.founderEmail, idea.founderName || 'User', title);
-          console.log(`Sent requirements generation notification email to ${idea.founderEmail}`);
-        }
-      } catch (emailError) {
-        console.error('Failed to send requirements generation notification:', emailError);
-        // Continue even if email sending fails
-      }
-
-
-      res.status(200).json({ message: "Requirements document processed successfully" });
-    } catch (error: any) {
-      console.error("Error processing requirements webhook:", error);
-      next(error);
-    }
-  });
-
-
-  // Webhook endpoint for n8n to send back the generated canvas
-  app.post("/api/webhook/canvas", async (req, res, next) => {
-    // Verify n8n credentials if they are configured
-    if (process.env.N8N_AUTH_USERNAME && process.env.N8N_AUTH_PASSWORD) {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Basic ')) {
-        return res.status(401).json({ message: "Unauthorized - Missing credentials" });
-      }
-
-
-      // Decode and verify the credentials
-      const base64Credentials = authHeader.split(' ')[1];
-      const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
-      const [username, password] = credentials.split(':');
-
-
-      if (username !== process.env.N8N_AUTH_USERNAME || password !== process.env.N8N_AUTH_PASSWORD) {
-        return res.status(401).json({ message: "Unauthorized - Invalid credentials" });
-      }
-    }
-    try {
-      console.log("Received webhook data from n8n:", JSON.stringify(req.body, null, 2));
-
-
-      // Parse and transform the webhook data according to our schema
-      // The schema transform will throw if ideaId is missing
-      const transformedData = webhookResponseSchema.parse(req.body);
-      const { ideaId, ...canvasData } = transformedData;
-
-
-      // Update idea status to Completed
-      console.log(`Updating idea ${ideaId} status to Completed`);
-      await storage.updateIdeaStatus(ideaId, "Completed");
-
-
-      // Check if a canvas already exists for this idea
-      const existingCanvas = await storage.getLeanCanvasByIdeaId(ideaId);
-
-
-      console.log(`Canvas data to save:`, JSON.stringify(canvasData, null, 2));
-
-
-      if (existingCanvas) {
-        // Update existing canvas
-        console.log(`Updating existing canvas for idea ${ideaId}`);
-        await storage.updateLeanCanvas(ideaId, canvasData);
-      } else {
-        // Create new canvas
-        console.log(`Creating new canvas for idea ${ideaId}`);
-        await storage.createLeanCanvas({ ideaId, ...canvasData });
-      }
-
-
-      // Get the idea information to send notification
-      try {
-        const idea = await storage.getIdeaById(ideaId);
-        if (idea && idea.founderEmail) {
-          // Send email notification that the canvas is generated
-          const title = idea.title || idea.idea.substring(0, 30) + '...';
-          await emailService.sendCanvasGeneratedEmail(idea.founderEmail, idea.founderName || 'User', title);
-          console.log(`Sent canvas generation notification email to ${idea.founderEmail}`);
-        }
-      } catch (emailError) {
-        console.error('Failed to send canvas generation notification:', emailError);
-        // Continue even if email sending fails
-      }
-
-
-      res.status(200).json({ message: "Canvas created successfully" });
-    } catch (error: any) {
-      console.error("Error processing webhook:", error);
-      next(error);
-    }
-  });
-
-  // Canvas routes
-  app.get("/api/ideas/:id/canvas", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const userId = req.user!.id;
-
-
-      console.log(`[SECURITY] User ${userId} attempting to access canvas for idea ${ideaId}`);
-
-
-      // Pass userId directly to getLeanCanvasByIdeaId which will check ownership
-      const canvas = await storage.getLeanCanvasByIdeaId(ideaId, userId);
-
-
-      if (!canvas) {
-        console.log(`[SECURITY] Canvas for idea ${ideaId} not found or unauthorized`);
-        return res.status(404).json({ message: "Canvas not found" });
-      }
-
-
-      console.log(`[SECURITY] Authorized canvas access: User ${userId} accessing canvas for their idea ${ideaId}`);
-      res.json(canvas);
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  app.patch("/api/ideas/:id/canvas", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-
-
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-
-      if (idea.userId !== req.user!.id) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
-
-      const canvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
-
-
-      if (!canvas) {
-        return res.status(404).json({ message: "Canvas not found" });
-      }
-
-
-      const validatedData = updateLeanCanvasSchema.partial().parse(req.body);
-      await storage.updateLeanCanvas(ideaId, validatedData, req.user!.id);
-
-
-      const updatedCanvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
-      res.json(updatedCanvas);
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  app.post("/api/ideas/:id/generate-ultimate-website", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const idea = await storage.getIdeaById(ideaId, req.user!.id);
-
-      const leanCanvas = await storage.getLeanCanvasByIdeaId(ideaId, req.user!.id);
-
-      const project_id = leanCanvas?.projectId;
-      const leancanvas_id = leanCanvas?.id;
-
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-      if (Number(idea.userId) !== Number(req.user!.id)) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-      const generateUltimateWebsiteSchema = z.object({
-        businessName: z.string().min(1).max(100),
-        industry: z.string().min(1).max(100),
-        targetAudience: z.string().min(1).max(100),
-      });
-      const validatedData = generateUltimateWebsiteSchema.parse(req.body);
-
-      if (!validatedData) {
-        return res.status(400).json({ message: "Invalid data" });
-      }
-      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId, req.user!.id);
-
-      if (ultimateWebsite) {
-        return res.status(409).json({ message: "Ultimate website already exists" });
-      }
-
-      const ultimateWebsiteWebhookURL: string = process.env.ULTIMATE_WEBSITE_WEBHOOK_URL || "";
-
-      // Build the body for the webhook
-      const body = {
-        "project_id": project_id,
-        "leancanvas_id": leancanvas_id,
-        "idea_id": ideaId,
-        "business_name": validatedData.businessName,
-        "industry": validatedData.industry,
-        "target_audience": validatedData.targetAudience,
-      };
-
-      // Call the webhook which now handles the entire process including DB updates
-      // The webhook is expected to respond immediately to acknowledge receipt
-      const response = await fetch(ultimateWebsiteWebhookURL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        // idea_id added so webhook knows which idea to update
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        console.error(`Webhook failed with status ${response.status}: ${text.substring(0, 200)}`);
-        return res.status(response.status).json({
-          message: "Failed to trigger generation workflow",
-          details: text.substring(0, 200)
-        });
-      }
-
-      // Success - the webhook is running and will update the DB when done
-      return res.status(200).json({ message: "Ultimate website generation started" });
-    } catch (error: any) {
-      console.error("Error triggering ultimate website generation:", error);
-      next(error);
-    }
-  });
-
   app.get("/api/ideas/:id/ultimate-website", isAuthenticated, async (req, res, next) => {
     try {
-      const ideaId = parseInt(req.params.id);
+      const ideaId = req.params.id;
       const idea = await storage.getIdeaById(ideaId, req.user!.id);
-
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-      if (Number(idea.userId) !== Number(req.user!.id)) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
-
-      const ultimateWebsite = await storage.getUltimateWebsiteByIdeaId(ideaId, req.user!.id);
-      if (!ultimateWebsite) {
-        return res.status(404).json({ message: "Ultimate website not found" });
-      }
-      return res.status(200).json({ "task_id": ultimateWebsite });
+      return res.status(200).json({ websiteUrl: idea?.websiteUrl || null });
     } catch (error: any) {
       next(error);
     }
   });
 
+  // ==================== EMAIL ROUTES ====================
 
-  // Direct BRD viewer endpoint with HTML embedded for visualization
-  app.get("/api/debug/brd-viewer/:external_id", isAuthenticated, async (req, res) => {
-    try {
-      const externalId = req.params.external_id;
-      const { supabase } = await import('./supabase');
-
-
-      console.log(`🔬 BRD VIEWER: Direct access for ID ${externalId}`);
-
-
-      // Attempt direct lookup by ID, which we know works from our test
-      const { data, error } = await supabase
-        .from('brd')
-        .select('*')
-        .eq('id', externalId)
-        .single();
-
-
-      if (error) {
-        console.log(`🔬 BRD VIEWER: Error fetching BRD - ${error.message}`);
-        return res.send(`
-          <html>
-            <head><title>BRD Viewer - Error</title></head>
-            <body>
-              <h1>Error Retrieving BRD</h1>
-              <p>Failed to retrieve BRD with ID: ${externalId}</p>
-              <p>Error: ${error.message}</p>
-            </body>
-          </html>
-        `);
-      }
-
-
-      // Extract HTML content
-      const htmlContent = data.brd_html || data.html || '';
-      const contentLength = htmlContent.length;
-
-
-      console.log(`🔬 BRD VIEWER: Found BRD content with ${contentLength} characters`);
-
-
-      if (contentLength === 0) {
-        // If no HTML content found, show diagnostic info
-        return res.send(`
-          <html>
-            <head><title>BRD Viewer - No Content</title></head>
-            <body>
-              <h1>No HTML Content Found</h1>
-              <p>BRD record exists but has no HTML content.</p>
-              <h2>Available Fields:</h2>
-              <pre>${JSON.stringify(Object.keys(data), null, 2)}</pre>
-              <h2>Data Preview:</h2>
-              <pre>${JSON.stringify(data, null, 2)}</pre>
-            </body>
-          </html>
-        `);
-      }
-
-
-      // Return the actual HTML content
-      console.log(`🔬 BRD VIEWER: Sending ${contentLength} characters of HTML content`);
-      return res.send(htmlContent);
-
-    } catch (error) {
-      console.error('🔬 BRD VIEWER: Unhandled error', error);
-      return res.status(500).send(`
-        <html>
-          <head><title>BRD Viewer - Error</title></head>
-          <body>
-            <h1>Unhandled Error</h1>
-            <p>An unexpected error occurred while fetching the BRD.</p>
-            <pre>${error.message}\n${error.stack}</pre>
-          </body>
-        </html>
-      `);
-    }
-  });
-
-
-  // Direct debug endpoint for Supabase FRD
-  app.get("/api/debug/supabase-frd/:external_id", isAuthenticated, async (req, res) => {
-    try {
-      const externalId = req.params.external_id;
-      const { supabase } = await import('./supabase');
-
-
-      console.log(`=== DIRECT SUPABASE FRD DEBUG ===`);
-      console.log(`Debugging Supabase FRD with ID: ${externalId}`);
-
-
-      // Log all FRD records (for debugging only)
-      try {
-        const allRecords = await supabase
-          .from('frd')
-          .select('id')
-          .limit(10);
-
-
-        console.log(`Available FRD records: ${JSON.stringify(allRecords.data || [])}`);
-      } catch (err) {
-        console.log('Could not list FRD records', err);
-      }
-
-
-      // Try to query the FRD table directly using ID field
-      console.log('Attempting primary query using id field on FRD table...');
-      const { data, error } = await supabase
-        .from('frd')
-        .select('*')
-        .eq('id', externalId)
-        .single();
-
-
-      if (error) {
-        console.log(`Error in direct FRD lookup by id: ${error.message}`);
-
-
-        // Try project_id field
-        console.log('Attempting query using project_id field...');
-        const projectIdResult = await supabase
-          .from('frd')
-          .select('*')
-          .eq('project_id', externalId)
-          .single();
-
-
-        if (projectIdResult.error) {
-          console.log(`project_id lookup failed: ${projectIdResult.error.message}`);
-
-
-          // Try the original table as fallback
-          console.log('Attempting query on functional_requirements table...');
-          const originalTable = await supabase
-            .from('functional_requirements')
-            .select('*')
-            .eq('id', externalId)
-            .single();
-
-
-          if (originalTable.error) {
-            console.log(`Original table lookup failed: ${originalTable.error.message}`);
-            return res.status(404).json({
-              success: false,
-              error: 'Document not found in Supabase',
-              attempts: ['frd.id', 'frd.project_id', 'functional_requirements.id'],
-              externalId
-            });
-          } else {
-            console.log(`Found FRD in original table lookup`);
-
-
-            // Log available fields
-            console.log(`Fields: ${Object.keys(originalTable.data).join(', ')}`);
-
-
-            // Check for HTML content
-            const hasHtml = originalTable.data.html || originalTable.data.func_html;
-            console.log(`Has HTML content: ${!!hasHtml}`);
-
-
-            // Log a sample of the HTML if it exists
-            if (hasHtml) {
-              const htmlContent = originalTable.data.html || originalTable.data.func_html;
-              console.log(`HTML content length: ${htmlContent.length}`);
-              console.log(`Sample: ${htmlContent.substring(0, 200)}...`);
-            }
-
-
-            return res.json({
-              success: true,
-              source: 'functional_requirements',
-              data: originalTable.data
-            });
-          }
-        } else {
-          console.log(`Found FRD by project_id lookup`);
-
-
-          // Log available fields
-          console.log(`Fields: ${Object.keys(projectIdResult.data).join(', ')}`);
-
-
-          // Check for HTML content
-          const hasHtml = projectIdResult.data.frd_html || projectIdResult.data.html;
-          console.log(`Has HTML content: ${!!hasHtml}`);
-
-
-          // Log a sample of the HTML if it exists
-          if (hasHtml) {
-            const htmlContent = projectIdResult.data.frd_html || projectIdResult.data.html;
-            console.log(`HTML content length: ${htmlContent.length}`);
-            console.log(`Sample: ${htmlContent.substring(0, 200)}...`);
-          }
-
-
-          return res.json({
-            success: true,
-            source: 'project_id',
-            data: projectIdResult.data
-          });
-        }
-      } else {
-        console.log(`Found FRD by direct id lookup`);
-
-
-        // Log available fields
-        console.log(`Fields: ${Object.keys(data).join(', ')}`);
-
-
-        // Check for HTML content
-        const hasHtml = data.frd_html || data.html;
-        console.log(`Has HTML content: ${!!hasHtml}`);
-
-
-        // Log a sample of the HTML if it exists
-        if (hasHtml) {
-          const htmlContent = data.frd_html || data.html;
-          console.log(`HTML content length: ${htmlContent.length}`);
-          console.log(`Sample: ${htmlContent.substring(0, 200)}...`);
-        }
-
-
-        return res.json({
-          success: true,
-          source: 'id',
-          data
-        });
-      }
-    } catch (error: any) {
-      console.error('Debug endpoint error:', error);
-      return res.status(500).json({
-        success: false,
-        error: 'Internal server error: ' + (error.message || 'Unknown error')
-      });
-    }
-  });
-
-
-  // Direct debug endpoint for Supabase BRD
-  app.get("/api/debug/supabase-brd/:external_id", isAuthenticated, async (req, res) => {
-    try {
-      const externalId = req.params.external_id;
-      const { supabase } = await import('./supabase');
-
-
-      console.log(`=== DIRECT SUPABASE BRD DEBUG ===`);
-      console.log(`Debugging Supabase BRD with ID: ${externalId}`);
-
-
-      // Log all BRD records (for debugging only)
-      try {
-        const allRecords = await supabase
-          .from('brd')
-          .select('id, uuid, reference_id')
-          .limit(10);
-
-
-        console.log(`Available BRD records: ${JSON.stringify(allRecords.data || [])}`);
-      } catch (err) {
-        console.log('Could not list BRD records', err);
-      }
-
-
-      // Try to query the BRD table directly using ID field
-      console.log('Attempting primary query using id field...');
-      const { data, error } = await supabase
-        .from('brd')
-        .select('*')
-        .eq('id', externalId)
-        .single();
-
-
-      if (error) {
-        console.log(`Error in direct BRD lookup by id: ${error.message}`);
-
-
-        // Try alternative fields - reference_id
-        console.log('Attempting query using reference_id field...');
-        const alt = await supabase
-          .from('brd')
-          .select('*')
-          .eq('reference_id', externalId)
-          .single();
-
-
-        if (alt.error) {
-          console.log(`Reference_id lookup failed: ${alt.error.message}`);
-
-
-          // Try uuid field
-          console.log('Attempting query using uuid field...');
-          const uuid = await supabase
-            .from('brd')
-            .select('*')
-            .eq('uuid', externalId)
-            .single();
-
-
-          if (uuid.error) {
-            console.log(`UUID lookup failed: ${uuid.error.message}`);
-
-
-            // Try a raw query to see field names
-            console.log('Attempting raw query to inspect schema...');
-            try {
-              const { data: tableInfo } = await supabase.rpc('get_schema_info', { table_name: 'brd' });
-              console.log('Table schema info:', tableInfo);
-            } catch (e) {
-              console.log('Schema inspection failed:', e);
-            }
-
-
-            return res.status(404).json({
-              message: "BRD not found in any table/column",
-              checked_fields: ['id', 'reference_id', 'uuid'],
-              external_id: externalId
-            });
-          }
-
-
-          console.log(`Found BRD by uuid lookup`);
-          console.log(`Fields: ${Object.keys(uuid.data).join(', ')}`);
-
-
-          // Check for HTML content
-          const hasContent = !!uuid.data.brd_html || !!uuid.data.html || !!uuid.data.content;
-          console.log(`Has HTML content: ${hasContent}`);
-
-
-          if (hasContent) {
-            const htmlField = uuid.data.brd_html ? 'brd_html' : (uuid.data.html ? 'html' : 'content');
-            const htmlContent = uuid.data[htmlField];
-            console.log(`HTML content from ${htmlField} field, length: ${htmlContent.length}`);
-            console.log(`Sample: ${htmlContent.substring(0, 100)}...`);
-          }
-
-
-          return res.json({
-            success: true,
-            source: 'uuid',
-            data: uuid.data,
-            has_html: hasContent,
-            fields: Object.keys(uuid.data)
-          });
-        }
-
-
-        console.log(`Found BRD by reference_id lookup`);
-        console.log(`Fields: ${Object.keys(alt.data).join(', ')}`);
-
-
-        // Check for HTML content
-        const hasContent = !!alt.data.brd_html || !!alt.data.html || !!alt.data.content;
-        console.log(`Has HTML content: ${hasContent}`);
-
-
-        if (hasContent) {
-          const htmlField = alt.data.brd_html ? 'brd_html' : (alt.data.html ? 'html' : 'content');
-          const htmlContent = alt.data[htmlField];
-          console.log(`HTML content from ${htmlField} field, length: ${htmlContent.length}`);
-          console.log(`Sample: ${htmlContent.substring(0, 100)}...`);
-        }
-
-
-        return res.json({
-          success: true,
-          source: 'reference_id',
-          data: alt.data,
-          has_html: hasContent,
-          fields: Object.keys(alt.data)
-        });
-      }
-
-
-      console.log(`Found BRD by direct id lookup`);
-      console.log(`Fields: ${Object.keys(data).join(', ')}`);
-
-
-      // Check for HTML content
-      const hasContent = !!data.brd_html || !!data.html || !!data.content;
-      console.log(`Has HTML content: ${hasContent}`);
-
-
-      if (hasContent) {
-        const htmlField = data.brd_html ? 'brd_html' : (data.html ? 'html' : 'content');
-        const htmlContent = data[htmlField];
-        console.log(`HTML content from ${htmlField} field, length: ${htmlContent.length}`);
-        console.log(`Sample: ${htmlContent.substring(0, 100)}...`);
-      }
-
-
-      return res.json({
-        success: true,
-        source: 'id',
-        data,
-        has_html: hasContent,
-        fields: Object.keys(data)
-      });
-    } catch (error: any) {
-      console.error('Error in debug endpoint:', error);
-      res.status(500).json({
-        error: 'Error accessing Supabase',
-        message: error.message,
-        stack: error.stack
-      });
-    }
-  });
-
-
-  // Supabase integration routes
-  // Get Business Requirements Document from Supabase
-  // API endpoint to fetch functional requirements content from Supabase
-  app.get("/api/supabase/functional-requirements/:id", isAuthenticated, async (req, res, next) => {
-    try {
-      console.log("==== FUNCTIONAL REQUIREMENTS API ACCESS ====");
-      const { id: ideaId } = req.params;
-      const userId = req.user!.id;
-
-
-      console.log(`User ${userId} is requesting Functional Requirements data for idea ${ideaId}`);
-
-
-      // First check if we have the document in our database
-      const document = await storage.getDocumentByType(parseInt(ideaId), 'FunctionalRequirements', userId);
-
-
-      if (!document || !document.externalId) {
-        return res.status(404).json({ error: 'Functional Requirements document not found or has no external ID' });
-      }
-
-
-      console.log(`External ID provided in query: ${document.externalId}`);
-      console.log(`✓ Document found with ID ${document.id}, status ${document.status}, externalId: ${document.externalId}`);
-
-
-      // If document exists and has an external ID, fetch from Supabase
-      console.log(`🔍 Using external ID ${document.externalId} to fetch Functional Requirements from Supabase`);
-
-
-      const supabaseResponse = await fetchFunctionalRequirements(document.externalId, parseInt(ideaId), userId);
-
-
-      if (supabaseResponse.error) {
-        return res.status(500).json({
-          error: `Failed to retrieve functional requirements data: ${supabaseResponse.error}`
-        });
-      }
-
-
-
-      // Extract HTML content - check multiple possible fields where HTML content might be found
-      let htmlContent = null;
-
-
-      if (supabaseResponse.data) {
-        // Check the different possible locations for HTML content
-        if (supabaseResponse.data.html) {
-          console.log('✓ Found HTML content in standard html field');
-          htmlContent = supabaseResponse.data.html;
-        } else if (supabaseResponse.data.frd_html) {
-          console.log('✓ Found HTML content in frd_html field');
-          htmlContent = supabaseResponse.data.frd_html;
-        } else if (supabaseResponse.data.func_html) {
-          console.log('✓ Found HTML content in func_html field');
-          htmlContent = supabaseResponse.data.func_html;
-        } else {
-          // Check all fields for HTML-like content as a last resort
-          for (const [key, value] of Object.entries(supabaseResponse.data)) {
-            if (typeof value === 'string' &&
-              (value.includes('<html') ||
-                value.includes('<!DOCTYPE') ||
-                value.includes('<body') ||
-                value.includes('<div') ||
-                value.includes('<p>'))) {
-              console.log(`✓ Found HTML content in field '${key}'`);
-              htmlContent = value;
-              break;
-            }
-          }
-
-        }
-      }
-
-
-      // Update the document's status if needed
-      if (htmlContent) {
-        console.log(`✓ Updating document ${document.id} with HTML content of length ${htmlContent.length}`);
-
-
-        try {
-          await storage.updateDocument(document.id, {
-            html: htmlContent,
-            status: 'Completed',
-            updatedAt: new Date()
-          }, userId);
-
-
-          console.log(`✓ Successfully updated document status to Completed and added HTML content`);
-
-
-          // Also update the response to include the HTML content in the standard field
-          if (supabaseResponse.data) {
-            supabaseResponse.data.html = htmlContent;
-          }
-        } catch (updateError) {
-          console.error('Error updating document with HTML:', updateError);
-        }
-      } else {
-        // No HTML content found but we should still update the status if it's timed out
-        // Check if the document has been generating for more than 2 minutes
-        const TWO_MINUTES = 2 * 60 * 1000; // 2 minutes in milliseconds
-        const isTimedOut = document.status === 'Generating' &&
-          document.generationStartedAt &&
-          (new Date().getTime() - document.generationStartedAt.getTime() > TWO_MINUTES);
-
-
-        if (isTimedOut) {
-          console.log(`⚠️ Document ${document.id} generation timed out. Updating status to Completed.`);
-          try {
-            await storage.updateDocument(document.id, {
-              status: 'Completed',
-              updatedAt: new Date()
-            }, userId);
-            console.log(`✓ Successfully updated timed-out document status to Completed`);
-          } catch (updateError) {
-            console.error('Error updating document status:', updateError);
-          }
-        } else {
-          console.log('⚠️ No HTML content found in Supabase response and document is not timed out');
-        }
-      }
-
-
-      res.json(supabaseResponse);
-    } catch (error: any) {
-      console.error('Error fetching functional requirements:', error);
-      next(error);
-    }
-  });
-
-
-  app.get("/api/supabase/business-requirements/:id", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const userId = req.user!.id;
-      // Check if external_id was explicitly provided in the query
-      const externalIdFromQuery = req.query.external_id as string;
-
-
-      console.log(`==== BUSINESS REQUIREMENTS API ACCESS ====`);
-      console.log(`User ${userId} is requesting BRD data for idea ${ideaId}`);
-      if (externalIdFromQuery) {
-        console.log(`External ID provided in query: ${externalIdFromQuery}`);
-      }
-
-
-      // First get the document from our database to get the external ID if not provided
-      const document = await storage.getDocumentByType(ideaId, "BusinessRequirements", userId);
-
-
-      if (!document) {
-        console.log(`⚠️ ERROR: No Business Requirements Document found for idea ${ideaId}`);
-        return res.status(404).json({ message: "Business Requirements Document not found" });
-      }
-
-
-      console.log(`✓ Document found with ID ${document.id}, status ${document.status}, externalId: ${document.externalId || 'none'}`);
-
-
-      // If document is generating, we still attempt to fetch from Supabase
-      // below, especially if some time has passed.
-
-
-      // Use the external ID from the query if provided, otherwise use the one from the document
-      const externalIdToUse = externalIdFromQuery || document.externalId;
-
-
-      // Check for external ID which is needed for Supabase lookup
-      if (!externalIdToUse) {
-        console.log(`⚠️ ERROR: No external ID available, cannot fetch from Supabase`);
-        return res.status(400).json({
-          message: "No external ID available to fetch Business Requirements from Supabase",
-          document
-        });
-      }
-
-
-
-      // Log that we're using this external ID to fetch from Supabase
-      console.log(`🔍 Using external ID ${externalIdToUse} to fetch BRD from Supabase`);
-
-
-      try {
-        const { fetchBusinessRequirements } = await import('./supabase');
-        console.log(`Calling fetchBusinessRequirements with ID: ${externalIdToUse}, ideaId: ${ideaId}, userId: ${userId}`);
-        const brdData = await fetchBusinessRequirements(externalIdToUse, ideaId, userId);
-
-
-        if (!brdData) {
-          console.log(`⚠️ ERROR: No BRD data found in Supabase for external ID ${externalIdToUse}`);
-          return res.status(404).json({
-            message: "Business Requirements not found in Supabase",
-            document
-          });
-        }
-
-
-
-        console.log(`✓ Successfully retrieved BRD data from Supabase with keys: ${Object.keys(brdData.data).join(', ')}`);
-
-
-        // Check if the BRD data actually has HTML content
-        if (brdData.data.html) {
-          console.log(`✓ BRD data contains HTML content (${brdData.data.html.length} characters)`);
-          console.log(`HTML preview: ${brdData.data.html.substring(0, 100)}...`);
-
-
-          // Update our local document with the HTML content from Supabase if it doesn't already have it
-          if (!document.html) {
-            console.log(`Updating local document ${document.id} with HTML content from Supabase`);
-            try {
-              await storage.updateDocument(document.id, {
-                html: brdData.data.html,
-                status: "Completed" // Ensure status is completed since we have the content
-              }, userId);
-              console.log(`✓ Successfully updated local document with HTML content`);
-            } catch (updateError) {
-              console.error(`⚠️ ERROR: Failed to update local document with HTML:`, updateError);
-            }
-          }
-        } else {
-          console.log(`⚠️ WARNING: No HTML content found in Supabase BRD data`);
-
-
-          // Check all data fields to debug
-          for (const [key, value] of Object.entries(brdData.data)) {
-            if (typeof value === 'string' && value.includes('<')) {
-              console.log(`Found potential HTML in field '${key}':`, value.substring(0, 100));
-            }
-          }
-        }
-
-
-        // Return the combined data
-        res.json(brdData);
-      } catch (supabaseError) {
-        console.error(`⚠️ ERROR: Error fetching Business Requirements from Supabase:`, supabaseError);
-        // Continue to return the document as is
-        res.json({
-          source: "local",
-          data: document,
-          error: "Failed to fetch from Supabase"
-        });
-      }
-    } catch (error: any) {
-      console.error(`⚠️ CRITICAL ERROR in /api/supabase/business-requirements/:id endpoint:`, error);
-      next(error);
-    }
-  });
-
-
-  app.get("/api/supabase/canvas/:id", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = parseInt(req.params.id);
-      const userId = req.user!.id;
-
-
-      console.log(`[SECURITY] User ${userId} attempting to access Supabase canvas for idea ${ideaId}`);
-
-
-      // First verify the user owns this idea with enhanced security
-      const idea = await storage.getIdeaById(ideaId, userId);
-
-
-      if (!idea) {
-        console.log(`[SECURITY] Idea ${ideaId} not found or unauthorized for Supabase canvas access`);
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-
-      // At this point, we've verified ownership through the storage security check
-      console.log(`[SECURITY] Authorization confirmed: User ${userId} owns idea ${ideaId} for Supabase canvas access`);
-
-
-      // Fetch data from Supabase with security context
-      try {
-        // Add userId as authorization check for fetchLeanCanvasData
-        const supabaseCanvas = await fetchLeanCanvasData(ideaId, userId);
-        res.json({
-          source: "supabase",
-          data: supabaseCanvas
-        });
-      } catch (supabaseError) {
-        console.error(`[SECURITY] Error fetching from Supabase for idea ${ideaId} belonging to user ${userId}:`, supabaseError);
-
-
-        // Fallback to local storage if Supabase fails, with security check
-        const localCanvas = await storage.getLeanCanvasByIdeaId(ideaId, userId);
-        if (!localCanvas) {
-          return res.status(404).json({ message: "Canvas not found" });
-        }
-
-
-        res.json({
-          source: "local",
-          data: localCanvas
-        });
-      }
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-
-  app.get("/api/supabase/ideas", isAuthenticated, async (req, res, next) => {
-    try {
-      // Extract authenticated user ID
-      const authenticatedUserId = req.user!.id;
-
-
-      // Fetch data from Supabase with authorization check
-      try {
-        // Pass both the user ID and the authenticated user ID for permission check
-        const supabaseIdeas = await fetchUserIdeas(authenticatedUserId, authenticatedUserId);
-        res.json({
-          source: "supabase",
-          data: supabaseIdeas
-        });
-      } catch (supabaseError) {
-        console.error("Error fetching ideas from Supabase:", supabaseError);
-
-
-        // Fallback to local storage if Supabase fails
-        const localIdeas = await storage.getIdeasByUser(authenticatedUserId);
-        res.json({
-          source: "local",
-          data: localIdeas
-        });
-      }
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  // Email service routes
   app.post("/api/email/test", isAuthenticated, async (req, res, next) => {
     try {
       const { email } = req.body;
-
-
       if (!email) {
         return res.status(400).json({ message: "Email address is required" });
       }
-
-
-      const result = await emailService.sendTestEmail(email);
-
-
-      if (result) {
-        res.json({ success: true, message: "Test email sent successfully" });
-      } else {
-        res.status(500).json({ success: false, message: "Failed to send test email" });
+      const success = await emailService.sendTestEmail(email);
+      if (success) {
+        return res.status(200).json({ message: "Test email sent successfully" });
       }
+      return res.status(500).json({ message: "Failed to send test email" });
     } catch (error: any) {
       next(error);
     }
   });
 
-
-  // Email verification status endpoint
   app.get("/api/email/verification-status", isAuthenticated, async (req, res, next) => {
     try {
-      if (!req.user) {
-        return res.status(401).json({ message: "Unauthorized" });
+      const isVerified = await storage.isEmailVerified(req.user!.id);
+      return res.status(200).json({ verified: isVerified, email: req.user!.email });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  app.get("/api/email/config", isAuthenticated, async (req, res, next) => {
+    try {
+      const fromAddress = await emailService.getFromAddress();
+      return res.status(200).json({ fromAddress });
+    } catch (error: any) {
+      next(error);
+    }
+  });
+
+  app.post("/api/email/config", isAuthenticated, async (req, res, next) => {
+    try {
+      const { fromAddress } = req.body;
+      if (!fromAddress) {
+        return res.status(400).json({ message: "fromAddress is required" });
       }
+      const success = await emailService.updateFromAddress(fromAddress);
+      if (success) {
+        return res.status(200).json({ message: "Email config updated" });
+      }
+      return res.status(500).json({ message: "Failed to update email config" });
+    } catch (error: any) {
+      next(error);
+    }
+  });
 
-
-      const isVerified = await storage.isEmailVerified(req.user.id);
-      res.json({
-        isVerified,
-        email: req.user.email || null
+  app.post("/api/email/welcome", isAuthenticated, async (req, res, next) => {
+    try {
+      const { email, username } = req.body;
+      if (!email || !username) {
+        return res.status(400).json({ message: "Email and username required" });
+      }
+      const success = await emailService.sendWelcomeEmail(email, username);
+      return res.status(success ? 200 : 500).json({
+        message: success ? "Welcome email sent" : "Failed to send"
       });
     } catch (error: any) {
       next(error);
     }
   });
 
-
-
-  // Get email configuration
-  app.get("/api/email/config", isAuthenticated, async (req, res, next) => {
-    try {
-      const fromAddress = await emailService.getFromAddress();
-      res.json({ fromAddress });
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-
-  // Update email configuration
-  app.post("/api/email/config", isAuthenticated, async (req, res, next) => {
-    try {
-      const { fromAddress } = req.body;
-
-
-      if (!fromAddress) {
-        return res.status(400).json({ message: "From address is required" });
-      }
-
-
-      const result = await emailService.updateFromAddress(fromAddress);
-
-
-      if (result) {
-        res.json({ success: true, message: "Email configuration updated successfully" });
-      } else {
-        res.status(500).json({ success: false, message: "Failed to update email configuration" });
-      }
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-
-  // Send welcome email route
-  app.post("/api/email/welcome", isAuthenticated, async (req, res, next) => {
-    try {
-      const { email, username } = req.body;
-
-
-      if (!email || !username) {
-        return res.status(400).json({ message: "Email address and username are required" });
-      }
-
-
-      const result = await emailService.sendWelcomeEmail(email, username);
-
-
-      if (result) {
-        res.json({ success: true, message: "Welcome email sent successfully" });
-      } else {
-        res.status(500).json({ success: false, message: "Failed to send welcome email" });
-      }
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-
-  // Send canvas generated notification email
   app.post("/api/email/canvas-generated", isAuthenticated, async (req, res, next) => {
     try {
       const { email, username, ideaTitle } = req.body;
-
-
       if (!email || !username || !ideaTitle) {
-        return res.status(400).json({ message: "Email address, username, and idea title are required" });
+        return res.status(400).json({ message: "Missing required fields" });
       }
-
-
-      const result = await emailService.sendCanvasGeneratedEmail(email, username, ideaTitle);
-
-
-      if (result) {
-        res.json({ success: true, message: "Canvas generation notification email sent successfully" });
-      } else {
-        res.status(500).json({ success: false, message: "Failed to send canvas generation notification email" });
-      }
+      const success = await emailService.sendCanvasGeneratedEmail(email, username, ideaTitle);
+      return res.status(success ? 200 : 500).json({
+        message: success ? "Notification sent" : "Failed to send"
+      });
     } catch (error: any) {
       next(error);
     }
   });
 
-  // App Settings routes
+  // ==================== SETTINGS ROUTES ====================
+
   app.get("/api/settings", isAuthenticated, async (req, res, next) => {
     try {
       const settings = await storage.getAllSettings();
-      res.json(settings);
+      return res.status(200).json(settings);
     } catch (error: any) {
       next(error);
     }
@@ -3267,15 +818,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/settings/:key", isAuthenticated, async (req, res, next) => {
     try {
-      const key = req.params.key;
-      const value = await storage.getSetting(key);
-
-
-      if (value === null) {
-        res.status(404).json({ message: `Setting '${key}' not found` });
-      } else {
-        res.json({ key, value });
-      }
+      const value = await storage.getSetting(req.params.key);
+      return res.status(200).json({ key: req.params.key, value });
     } catch (error: any) {
       next(error);
     }
@@ -3284,153 +828,74 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/settings", isAuthenticated, async (req, res, next) => {
     try {
       const { key, value } = req.body;
-
-
-      if (!key || typeof value !== 'string') {
-        return res.status(400).json({ message: "Key and value are required" });
+      if (!key) {
+        return res.status(400).json({ message: "key is required" });
       }
-
-
       await storage.setSetting(key, value);
-      res.json({ key, value });
+      return res.status(200).json({ message: "Setting saved" });
     } catch (error: any) {
       next(error);
     }
   });
 
+  // ==================== EMAIL VERIFICATION ROUTES ====================
 
-  // Email verification endpoints - both legacy query param format and new path-based format
   app.get("/api/verify-email", async (req, res, next) => {
     try {
-      const userId = parseInt(req.query.userId as string);
-      const token = req.query.token as string;
-
-
+      const { userId, token } = req.query;
       if (!userId || !token) {
         return res.status(400).json({ message: "Missing userId or token" });
       }
-
-
-      const verified = await storage.verifyEmail(userId, token);
-
-
-      if (verified) {
-        // Get the user to send welcome email
-        const user = await storage.getUser(userId);
-
-
-        if (user && user.email) {
-          try {
-            // Send welcome email upon successful verification
-            await emailService.sendWelcomeEmail(user.email, user.username);
-            console.log(`Welcome email sent to ${user.email} after verification`);
-          } catch (emailError) {
-            console.error('Failed to send welcome email after verification:', emailError);
-            // Continue even if welcome email fails
-          }
-        }
-
-
-        // Email successfully verified, redirect to success page
-        res.redirect('/?verified=true');
-      } else {
-        // Verification failed, redirect to error page
-        res.redirect('/?verified=false');
+      const success = await storage.verifyEmail(userId as string, token as string);
+      if (success) {
+        return res.redirect("/?verified=true");
       }
+      return res.redirect("/?verified=false");
     } catch (error: any) {
       next(error);
     }
   });
 
-
-  // Add a server route to handle the new path-based URLs for email verification
   app.get("/confirm-email/:userId/:token", async (req, res, next) => {
     try {
-      const userId = parseInt(req.params.userId);
-      const token = req.params.token;
-
-
-      if (isNaN(userId) || !token) {
-        return res.status(400).json({ message: "Invalid verification link" });
+      const { userId, token } = req.params;
+      const success = await storage.verifyEmail(userId, token);
+      if (success) {
+        return res.redirect("/?verified=true");
       }
-
-
-      const verified = await storage.verifyEmail(userId, token);
-
-
-      if (verified) {
-        // Get the user to send welcome email
-        const user = await storage.getUser(userId);
-
-
-        if (user && user.email) {
-          try {
-            // Send welcome email upon successful verification
-            await emailService.sendWelcomeEmail(user.email, user.username);
-            console.log(`Welcome email sent to ${user.email} after verification`);
-          } catch (emailError) {
-            console.error('Failed to send welcome email after verification:', emailError);
-            // Continue even if welcome email fails
-          }
-        }
-
-
-        // Email successfully verified, redirect to success page
-        res.redirect('/?verified=true');
-      } else {
-        // Verification failed, redirect to error page
-        res.redirect('/?verified=false');
-      }
+      return res.redirect("/?verified=false");
     } catch (error: any) {
       next(error);
     }
   });
-
 
   app.post("/api/resend-verification", isAuthenticated, async (req, res, next) => {
     try {
-      if (!req.user) {
-        return res.status(401).json({ message: "Unauthorized" });
+      const user = req.user!;
+      if (!user.email) {
+        return res.status(400).json({ message: "No email address on file" });
       }
 
-
-      const user = req.user;
-
-
-      // Check if user email is already verified
       const isVerified = await storage.isEmailVerified(user.id);
       if (isVerified) {
-        return res.status(400).json({ message: "Email is already verified" });
+        return res.status(400).json({ message: "Email already verified" });
       }
 
-
-      // Generate new verification token
       const token = generateVerificationToken();
-      const expiryDate = generateTokenExpiry(24); // 24 hours
-
-
-      // Store token in database
+      const expiryDate = generateTokenExpiry(24);
       await storage.setVerificationToken(user.id, token, expiryDate);
 
-
-      // Determine base URL for verification link
       const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
       const verificationUrl = buildVerificationUrl(baseUrl, user.id, token);
+      await emailService.sendVerificationEmail(user.email, user.username, verificationUrl);
 
-
-      // Send verification email
-      const success = await emailService.sendVerificationEmail(user.email!, user.username, verificationUrl);
-
-
-      if (success) {
-        res.json({ success: true, message: "Verification email sent successfully" });
-      } else {
-        res.status(500).json({ success: false, message: "Failed to send verification email" });
-      }
+      return res.status(200).json({ message: "Verification email sent" });
     } catch (error: any) {
       next(error);
     }
   });
+
+  // ==================== SERVER SETUP ====================
 
   const httpServer = createServer(app);
   setupSocketIO(httpServer, sessionMiddleware);

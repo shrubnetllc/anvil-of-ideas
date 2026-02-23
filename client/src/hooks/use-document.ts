@@ -1,16 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { DocumentType, ProjectDocument } from "@shared/schema";
+import { DocumentType, Document } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import { storage } from "server/storage";
 
-export function useDocument(ideaId: number, documentType: DocumentType) {
-    const [document, setDocument] = useState<ProjectDocument | null>(null);
+export function useDocument(ideaId: string, documentType: DocumentType) {
+    const [document, setDocument] = useState<Document | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [isTimedOut, setIsTimedOut] = useState(false);
     const { toast } = useToast();
 
-    // Refs to prevent stale closures in intervals
     const documentRef = useRef(document);
     useEffect(() => {
         documentRef.current = document;
@@ -27,21 +25,8 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
                 const data = await response.json();
                 setDocument(data);
 
-                // Check status
-                if (data.status === 'Generating') {
-                    setIsGenerating(true);
-                    checkTimeout(data.generationStartedAt);
-                } else {
-                    setIsGenerating(false);
-                    setIsTimedOut(false);
-                }
-
-                // Auto-fix logic: If we have HTML but status is not Completed
-                if (data.html && data.status !== 'Completed') {
-                    console.log(`[${documentType}] Auto-fixing status: Found HTML but status is ${data.status}`);
-                    await updateStatus(data.id, 'Completed');
-                    // Update local state immediately to avoid UI flicker
-                    setDocument(prev => prev ? { ...prev, status: 'Completed' as any } : null);
+                // Document existence = generation complete
+                if (data) {
                     setIsGenerating(false);
                     setIsTimedOut(false);
                 }
@@ -55,106 +40,74 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
         }
     }, [ideaId, documentType]);
 
-    const updateStatus = async (docId: number, status: string) => {
+    // Check job status for generation tracking
+    const checkJobStatus = useCallback(async () => {
         try {
-            await fetch(`/api/ideas/${ideaId}/documents/${docId}`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status })
-            });
-        } catch (e) {
-            console.error("Error updating status:", e);
+            const response = await fetch(`/api/ideas/${ideaId}/current-workflow-job?documentType=${documentType}`);
+            if (response.ok) {
+                const job = await response.json();
+                if (job) {
+                    const isPending = job.status === 'pending' || job.status === 'processing' || job.status === 'starting';
+                    setIsGenerating(isPending);
+
+                    // Check timeout (2 minutes)
+                    if (isPending && job.createdAt) {
+                        const createdAt = new Date(job.createdAt);
+                        const diffMinutes = (Date.now() - createdAt.getTime()) / (1000 * 60);
+                        setIsTimedOut(diffMinutes >= 2);
+                    }
+
+                    if (!isPending) {
+                        // Job completed - refetch document
+                        await fetchDocument();
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error checking job status:", error);
         }
-    };
+    }, [ideaId, documentType, fetchDocument]);
 
-    const checkTimeout = (startedAtStr?: string | Date) => {
-        if (!startedAtStr) return;
-        const startedAt = new Date(startedAtStr);
-        const now = new Date();
-        const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
-
-        if (diffMinutes >= 2) {
-            console.log(`[${documentType}] Generation timed out (${diffMinutes.toFixed(1)} mins)`);
-            setIsTimedOut(true);
-        } else {
-            setIsTimedOut(false);
-        }
-    };
-
-    // Polling effect
+    // Polling effect for generation tracking
     useEffect(() => {
         let pollTimer: NodeJS.Timeout;
 
         if (isGenerating) {
             pollTimer = setInterval(async () => {
-                try {
-                    const response = await fetch(`/api/ideas/${ideaId}/documents/${documentType}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        setDocument(data);
-
-                        checkTimeout(data.generationStartedAt);
-
-                        if (data.status !== 'Generating') {
-                            setIsGenerating(false);
-                            setIsTimedOut(false);
-                            toast({
-                                title: "Success",
-                                description: `${documentType.replace(/([A-Z])/g, ' $1').trim()} has been forged!`,
-                            });
-                        }
-                    }
-                } catch (e) {
-                    console.error("Polling error:", e);
-                }
+                await checkJobStatus();
             }, 10000);
         }
 
         return () => {
             if (pollTimer) clearInterval(pollTimer);
         };
-    }, [isGenerating, ideaId, documentType, toast]);
+    }, [isGenerating, checkJobStatus]);
 
     // Initial fetch
     useEffect(() => {
         fetchDocument();
     }, [fetchDocument]);
 
-    const generate = async (instructions: string = "", projectId?: string, leanCanvasId?: string, prdId?: string, brdId?: string, frdId?: string) => {
+    const generate = async (instructions: string = "") => {
         try {
             setIsGenerating(true);
             setIsTimedOut(false);
 
             let url = "";
-            let body = {};
+            let body: Record<string, any> = {};
 
-            // Determine endpoint and body based on document type
             switch (documentType) {
                 case "LeanCanvas":
                     url = `/api/ideas/${ideaId}/generate`;
-                    body = {
-                        notes: instructions
-                    };
+                    body = { notes: instructions };
                     break;
                 case "ProjectRequirements":
-                    url = `/api/webhook/requirements`;
-                    console.log("Generating project requirements for idea", ideaId);
-                    console.log("Project ID:", projectId);
-                    console.log("Lean Canvas ID:", leanCanvasId);
-                    console.log("Instructions:", instructions);
-                    body = {
-                        projectId: projectId || ideaId.toString(),
-                        leanCanvasId: leanCanvasId,
-                        instructions: instructions || "Be Brief as possible"
-                    };
+                    url = `/api/ideas/${ideaId}/generate-functional-requirements`;
+                    body = { instructions: instructions || "Be Brief as possible" };
                     break;
                 case "BusinessRequirements":
                     url = `/api/ideas/${ideaId}/generate-business-requirements`;
-                    body = {
-                        ideaId,
-                        projectId,
-                        instructions: instructions || "Provide detailed business requirements aligned with the lean canvas and project requirements."
-                    };
+                    body = { instructions: instructions || "Provide detailed business requirements." };
                     break;
                 case "FunctionalRequirements":
                     url = `/api/ideas/${ideaId}/generate-functional-requirements`;
@@ -162,9 +115,7 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
                     break;
                 case "Workflows":
                     url = `/api/ideas/${ideaId}/workflows`;
-                    body = {
-                        projectId
-                    };
+                    body = {};
                     break;
                 default:
                     throw new Error(`Generation not implemented for ${documentType}`);
@@ -183,16 +134,12 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
             const result = await response.json();
             console.log(`[${documentType}] Generation started:`, result);
 
-            // Immediately fetch to update state
-            fetchDocument();
-
             toast({
                 title: "Generation Started",
                 description: `Started forging ${documentType.replace(/([A-Z])/g, ' $1').trim()}. This may take a few minutes.`,
             });
 
             return result;
-
         } catch (error) {
             console.error(`Error generating ${documentType}:`, error);
             setIsGenerating(false);
@@ -205,13 +152,11 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
     };
 
     const deleteDoc = async () => {
-        // For LeanCanvas, we don't need a document ID, we delete by type
         if (documentType === 'LeanCanvas') {
             try {
                 const response = await fetch(`/api/ideas/${ideaId}/documents/type/LeanCanvas`, {
                     method: 'DELETE'
                 });
-
                 if (response.ok) {
                     setDocument(null);
                     setIsGenerating(false);
@@ -231,7 +176,6 @@ export function useDocument(ideaId: number, documentType: DocumentType) {
             const response = await fetch(`/api/ideas/${ideaId}/documents/${document.id}`, {
                 method: 'DELETE'
             });
-
             if (response.ok) {
                 setDocument(null);
                 setIsGenerating(false);

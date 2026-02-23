@@ -1,7 +1,8 @@
 import formData from 'form-data';
 import Mailgun from 'mailgun.js';
 import { storage } from './storage';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ path: process.env.NODE_ENV === 'development' ? '.env.development' : '.env' });
 
 // Initialize Mailgun client
 const mailgun = new Mailgun(formData);

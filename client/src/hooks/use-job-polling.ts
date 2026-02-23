@@ -80,7 +80,7 @@ export function useJobPolling({
             setError(null);
 
             // Check if job has reached a completion status
-            if (stopOnStatusesRef.current.includes(data.status)) {
+            if (data.status && stopOnStatusesRef.current.includes(data.status)) {
                 setIsComplete(true);
                 setIsPolling(false);
                 onCompleteRef.current?.(data);
@@ -120,7 +120,7 @@ export function useJobPolling({
             const data = await fetchJob();
 
             // Stop polling if job completed
-            if (data && stopOnStatusesRef.current.includes(data.status)) {
+            if (data && data.status && stopOnStatusesRef.current.includes(data.status)) {
                 clearInterval(intervalId);
             }
         }, pollInterval);
