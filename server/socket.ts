@@ -37,7 +37,7 @@ export function setupSocketIO(httpServer: HttpServer, sessionMiddleware: Request
       const jobId = match[1];
       try {
         const job = await storage.getWorkflowJobById(jobId);
-        if (!job || Number(job.userId) !== Number(userId)) {
+        if (!job || job.userId !== userId) {
           socket.emit("error", { message: "Unauthorized channel" });
           return;
         }

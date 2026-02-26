@@ -1,7 +1,8 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ path: process.env.NODE_ENV === 'development' ? '.env.development' : '.env' });
 import * as schema from "@shared/schema";
 
 // Configure WebSocket for Node.js environment (required when running in Docker/server)                                                            

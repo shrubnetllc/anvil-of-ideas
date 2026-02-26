@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 import { useDocument } from "@/hooks/use-document";
-import { useJobPolling } from "@/hooks/use-job-polling";
-import { useJobSocket } from "@/hooks/use-job-socket";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,73 +9,26 @@ import { formatDate, copyHtmlToClipboard } from "@/lib/utils";
 import { DocumentType } from "@shared/schema";
 
 interface IdeaDocumentTabProps {
-    ideaId: number;
+    ideaId: string;
     documentType: DocumentType;
 }
 
 export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) {
     const { toast } = useToast();
     const [tabNotes, setTabNotes] = useState('');
-    const [jobId, setJobId] = useState<string | null>(null);
 
     const {
-        document: document,
+        document,
         isLoading: isLoadingDocument,
         isGenerating: documentGenerating,
         isTimedOut: documentTimedOut,
         generate: generateDocument,
         deleteDoc: deleteDocument,
-        fetchDocument: fetchDocument
+        fetchDocument
     } = useDocument(ideaId, documentType);
 
-    // Poll for job updates if we have a job ID
-    const { status: jobStatus, description: jobDescription } = useJobPolling({
-        jobId,
-        pollInterval: 3000,
-        onComplete: () => {
-            // Refresh document when job completes
-            fetchDocument();
-        }
-    });
-
-    // Real-time updates via WebSocket (falls back to polling above)
-    const { message: socketMessage, eventType: socketEventType } = useJobSocket({
-        jobId,
-        onDone: () => fetchDocument(),
-    });
-
-    // Fetch any existing/running job on mount
-    useEffect(() => {
-        async function fetchCurrentJob() {
-            try {
-                const res = await fetch(`/api/ideas/${ideaId}/current-workflow-job?documentType=${documentType}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.status !== 'completed' && data.status !== 'failed') {
-                        console.log(`[IdeaDocumentTab] Found active job for ${documentType}:`, data);
-                        setJobId(data.id);
-                    }
-                }
-            } catch (e) {
-                console.error("Error fetching current job:", e);
-            }
-        }
-        fetchCurrentJob();
-    }, [ideaId, documentType]);
-
-    // Stop polling if document is completed
-    useEffect(() => {
-        if (document?.status === 'Completed') {
-            setJobId(null);
-        }
-    }, [document?.status]);
-
     const handleGenerate = async (notes: string) => {
-        const result = await generateDocument(notes);
-        if (result && result.jobId) {
-            console.log(`[IdeaDocumentTab] Started generation, tracking job: ${result.jobId}`);
-            setJobId(result.jobId);
-        }
+        await generateDocument(notes);
     };
 
     const formatDocumentType = (type: DocumentType) => {
@@ -88,7 +39,7 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
         <div className="bg-white rounded-lg border border-neutral-200 shadow-sm overflow-hidden p-8">
             <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold text-neutral-900">{formatDocumentType(documentType)} Document</h3>
-                {!document && (
+                {!document && !documentGenerating && (
                     <Button
                         size="sm"
                         variant="outline"
@@ -120,10 +71,10 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                         Forging Your {formatDocumentType(documentType)}
                     </h4>
                     <p className="text-neutral-600 mb-2">
-                        {socketMessage || jobDescription || `Please wait while we hammer out the ${formatDocumentType(documentType).toLowerCase()} for your idea...`}
+                        Please wait while we hammer out the {formatDocumentType(documentType).toLowerCase()} for your idea...
                     </p>
                     <p className="text-neutral-500 text-sm italic">
-                        {socketEventType ? `Status: ${socketEventType}` : jobStatus ? `Status: ${jobStatus}` : "This process usually takes 1-2 minutes."}
+                        This process usually takes 1-2 minutes.
                     </p>
                 </div>
             ) : documentTimedOut ? (
@@ -136,7 +87,6 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                             <h4 className="font-bold text-destructive mb-2">Generation Timed Out</h4>
                             <p className="text-neutral-700 mb-4">
                                 The {formatDocumentType(documentType).toLowerCase()} generation is taking longer than expected.
-                                This could be due to high system load or complexity of your project.
                             </p>
                             <div className="flex items-center space-x-3">
                                 <Button
@@ -144,17 +94,8 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                                     disabled={documentGenerating}
                                     className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
                                 >
-                                    {documentGenerating ? (
-                                        <>
-                                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                            Retrying...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <RefreshCw className="mr-2 h-4 w-4" />
-                                            Retry Generation
-                                        </>
-                                    )}
+                                    <RefreshCw className="mr-2 h-4 w-4" />
+                                    Retry Generation
                                 </Button>
                                 <Button
                                     variant="outline"
@@ -169,116 +110,100 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                 </div>
             ) : document ? (
                 <div>
-                    {document.status === 'Completed' ? (
-                        <div>
-                            <div className="mb-6 flex justify-between items-center">
-                                <div>
-                                    <p className="text-sm text-neutral-500">
-                                        Last updated: {formatDate(document.updatedAt || document.createdAt)}
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={async () => {
-                                            const success = await copyHtmlToClipboard("document-content");
-                                            if (success) {
-                                                toast({
-                                                    title: "Content copied to clipboard",
-                                                    description: "Document copied as formatted text",
-                                                    duration: 3000
-                                                });
-                                            } else {
-                                                toast({
-                                                    title: "Failed to copy content",
-                                                    description: "Please try again or select and copy manually",
-                                                    variant: "destructive",
-                                                    duration: 3000
-                                                });
-                                            }
-                                        }}
-                                    >
-                                        <Copy className="mr-2 h-4 w-4" />
-                                    </Button>
-                                </div>
+                    <div className="mb-6 flex justify-between items-center">
+                        <p className="text-sm text-neutral-500">
+                            Last updated: {formatDate(document.updatedAt || document.createdAt)}
+                        </p>
+                        <div className="flex gap-2">
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={async () => {
+                                    const success = await copyHtmlToClipboard("document-content");
+                                    if (success) {
+                                        toast({
+                                            title: "Content copied to clipboard",
+                                            description: "Document copied as formatted text",
+                                            duration: 3000
+                                        });
+                                    } else {
+                                        toast({
+                                            title: "Failed to copy content",
+                                            description: "Please try again or select and copy manually",
+                                            variant: "destructive",
+                                            duration: 3000
+                                        });
+                                    }
+                                }}
+                            >
+                                <Copy className="mr-2 h-4 w-4" />
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div id="document-content" className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700">
+                        {document.content ? (
+                            <div dangerouslySetInnerHTML={{ __html: document.content }} />
+                        ) : (
+                            <div className="p-4 text-center">
+                                <p className="text-neutral-600">
+                                    Document content is being processed. Check status to refresh.
+                                </p>
                             </div>
+                        )}
+                    </div>
 
-                            {/* Display the document content */}
-                            <div id="document-content" className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700">
-                                {document.html ? (
-                                    <div dangerouslySetInnerHTML={{ __html: document.html }} /> //TODO: Why isn't the lean canvas html being displayed?
-                                ) : document.content ? (
-                                    <div className="whitespace-pre-wrap font-mono text-sm bg-neutral-50 p-4 rounded-md">
-                                        {document.content}
-                                    </div>
-                                ) : (
-                                    <div className="p-4 text-center">
-                                        <p className="text-neutral-600">
-                                            Document content is being processed. Check status to refresh.
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Additional notes panel for regeneration - using a dialog like with lean canvas */}
-                            <div className="mt-6 flex justify-between items-center">
-                                <Dialog>
-                                    <DialogTrigger asChild>
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="text-sm text-neutral-500 inline-flex items-center"
-                                        >
-                                            <FileText className="mr-1 h-4 w-4" />
-                                            Add regeneration instructions
-                                        </Button>
-                                    </DialogTrigger>
-                                    <DialogContent className="sm:max-w-[550px]">
-                                        <DialogHeader>
-                                            <DialogTitle>Add Regeneration Instructions</DialogTitle>
-                                            <DialogDescription>
-                                                Add specific instructions for regenerating your {formatDocumentType(documentType)}. These instructions will be used when you click the Regenerate button.
-                                            </DialogDescription>
-                                        </DialogHeader>
-                                        <div className="py-4">
-                                            <Textarea
-                                                id="tabNotes"
-                                                value={tabNotes}
-                                                onChange={(e) => setTabNotes(e.target.value)}
-                                                placeholder="E.g., Include more specific user stories, emphasize mobile app requirements, focus on security features..."
-                                                className="min-h-[150px]"
-                                            />
-                                        </div>
-                                        <DialogFooter>
-                                            <DialogClose asChild>
-                                                <Button type="button">Save Instructions</Button>
-                                            </DialogClose>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-
+                    <div className="mt-6 flex justify-between items-center">
+                        <Dialog>
+                            <DialogTrigger asChild>
                                 <Button
+                                    variant="ghost"
                                     size="sm"
-                                    variant="outline"
-                                    onClick={async () => {
-                                        if (document?.id) {
-                                            await deleteDocument();
-                                            handleGenerate(tabNotes);
-                                        }
-                                    }}
-                                    disabled={documentGenerating}
+                                    className="text-sm text-neutral-500 inline-flex items-center"
                                 >
-                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                    Regenerate
+                                    <FileText className="mr-1 h-4 w-4" />
+                                    Add regeneration instructions
                                 </Button>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="text-center py-8">
-                            <p>{formatDocumentType(documentType)} is in {document.status.toLowerCase()} state.</p>
-                        </div>
-                    )}
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[550px]">
+                                <DialogHeader>
+                                    <DialogTitle>Add Regeneration Instructions</DialogTitle>
+                                    <DialogDescription>
+                                        Add specific instructions for regenerating your {formatDocumentType(documentType)}.
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="py-4">
+                                    <Textarea
+                                        id="tabNotes"
+                                        value={tabNotes}
+                                        onChange={(e) => setTabNotes(e.target.value)}
+                                        placeholder="E.g., Include more specific user stories, emphasize mobile app requirements..."
+                                        className="min-h-[150px]"
+                                    />
+                                </div>
+                                <DialogFooter>
+                                    <DialogClose asChild>
+                                        <Button type="button">Save Instructions</Button>
+                                    </DialogClose>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                                if (document?.id) {
+                                    await deleteDocument();
+                                    handleGenerate(tabNotes);
+                                }
+                            }}
+                            disabled={documentGenerating}
+                        >
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Regenerate
+                        </Button>
+                    </div>
                 </div>
             ) : !documentGenerating ? (
                 <div className="py-8">
@@ -287,7 +212,7 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                         <Textarea
                             value={tabNotes}
                             onChange={(e) => setTabNotes(e.target.value)}
-                            placeholder="e.g., Focus on specific features, include technical constraints, specify target platforms..."
+                            placeholder="e.g., Focus on specific features, include technical constraints..."
                             className="h-24"
                         />
                     </div>
@@ -298,21 +223,11 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                             className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
                         >
                             <Hammer className="mr-2 h-4 w-4" />
-                            {documentGenerating ? 'Generating...' : 'Generate Document'}
+                            Generate Document
                         </Button>
                     </div>
                 </div>
-            ) : (
-                <div className="text-center py-8">
-                    <div className="mx-auto w-16 h-16 mb-4 bg-amber-50 rounded-full flex items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                    <h4 className="text-lg font-medium mb-2">Preparing to Generate Document</h4>
-                    <p className="text-neutral-600 max-w-lg mx-auto">
-                        Setting up the forge to generate your document...
-                    </p>
-                </div>
-            )}
+            ) : null}
         </div>
     );
 }
