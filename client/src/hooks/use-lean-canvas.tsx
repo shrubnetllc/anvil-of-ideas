@@ -1,19 +1,36 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { CanvasSection, LeanCanvas, UpdateLeanCanvas } from "@shared/schema";
+import { CanvasSection } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 
-export function useLeanCanvas(ideaId: number) {
+// Canvas data shape returned from the API (from content_sections)
+interface CanvasData {
+  id: string;
+  ideaId: string;
+  problem: string | null;
+  customerSegments: string | null;
+  uniqueValueProposition: string | null;
+  solution: string | null;
+  channels: string | null;
+  revenueStreams: string | null;
+  costStructure: string | null;
+  keyMetrics: string | null;
+  unfairAdvantage: string | null;
+  content: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function useLeanCanvas(ideaId: string) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
 
-  const { data: canvas, isLoading, error } = useQuery<LeanCanvas>({
+  const { data: canvas, isLoading, error } = useQuery<CanvasData>({
     queryKey: [`/api/ideas/${ideaId}/canvas`],
     enabled: !!ideaId,
     retry: (failureCount, error: any) => {
-      // Don't retry on 403/404 errors (forbidden/not found)
       if (error?.status === 403 || error?.status === 404) {
         return false;
       }
@@ -21,8 +38,7 @@ export function useLeanCanvas(ideaId: number) {
     },
     throwOnError: false
   });
-  
-  // Handle unauthorized access
+
   useEffect(() => {
     if (error) {
       const status = (error as any)?.status;
@@ -32,9 +48,8 @@ export function useLeanCanvas(ideaId: number) {
           description: "You don't have permission to view this canvas",
           variant: "destructive"
         });
-        navigate('/'); // Redirect to dashboard
+        navigate('/');
       } else if (status === 404 && ideaId) {
-        // Only show error for 404 if we have an ideaId (avoid errors during initial load)
         toast({
           title: "Canvas Not Found",
           description: "The requested canvas could not be found",
@@ -52,7 +67,7 @@ export function useLeanCanvas(ideaId: number) {
       section: CanvasSection;
       content: string;
     }) => {
-      const payload = { [section.charAt(0).toLowerCase() + section.slice(1)]: content } as Partial<UpdateLeanCanvas>;
+      const payload = { [section.charAt(0).toLowerCase() + section.slice(1)]: content };
       const res = await apiRequest("PATCH", `/api/ideas/${ideaId}/canvas`, payload);
       return res.json();
     },
@@ -101,11 +116,10 @@ export function useLeanCanvas(ideaId: number) {
     [updateSectionMutation]
   );
 
-  // Creating a function wrapper to ensure parameters are passed correctly
   const regenerateCanvas = useCallback((data?: { notes?: string }) => {
     regenerateCanvasMutation.mutate(data);
   }, [regenerateCanvasMutation]);
-  
+
   return {
     canvas,
     isLoading,

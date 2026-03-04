@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ProjectStatus, projectStatuses } from "@shared/schema";
+import { IdeaStatus, ideaStatuses } from "@shared/schema";
 import { Sidebar } from "@/components/sidebar";
 import { Header } from "@/components/header";
 import { IdeaCard } from "@/components/idea-card";
@@ -24,7 +24,7 @@ export default function Dashboard() {
   const { location } = useSafeNavigation();
   const [showNewIdeaModal, setShowNewIdeaModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<ProjectStatus | "All">("All");
+  const [statusFilter, setStatusFilter] = useState<IdeaStatus | "All">("All");
   const [sortOrder, setSortOrder] = useState<string>("newest");
   
   // Check for verification success from URL params
@@ -82,7 +82,7 @@ export default function Dashboard() {
     .filter(idea => 
       (statusFilter === "All" || idea.status === statusFilter) &&
       (idea.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-       idea.idea.toLowerCase().includes(searchQuery.toLowerCase()) || 
+       idea.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
        (idea.companyName && idea.companyName.toLowerCase().includes(searchQuery.toLowerCase())))
     )
     .sort((a, b) => {
@@ -91,8 +91,8 @@ export default function Dashboard() {
       } else if (sortOrder === "oldest") {
         return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       } else if (sortOrder === "a-z") {
-        const aTitle = a.title || a.idea;
-        const bTitle = b.title || b.idea;
+        const aTitle = a.title || a.description;
+        const bTitle = b.title || b.description;
         return aTitle.localeCompare(bTitle);
       }
       return 0;
@@ -162,14 +162,14 @@ export default function Dashboard() {
                 <div className="flex space-x-3">
                   <Select
                     value={statusFilter}
-                    onValueChange={(value) => setStatusFilter(value as ProjectStatus | "All")}
+                    onValueChange={(value) => setStatusFilter(value as IdeaStatus | "All")}
                   >
                     <SelectTrigger className="w-[180px]">
                       <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="All">All Statuses</SelectItem>
-                      {projectStatuses.map((status) => (
+                      {ideaStatuses.map((status) => (
                         <SelectItem key={status} value={status}>{status}</SelectItem>
                       ))}
                     </SelectContent>

@@ -36,7 +36,7 @@ export function isTokenExpired(expiryDate: Date | null): boolean {
  * @param token Verification token
  * @returns Full verification URL to include in email
  */
-export function buildVerificationUrl(baseUrl: string, userId: number, token: string): string {
+export function buildVerificationUrl(baseUrl: string, userId: string, token: string): string {
   // Use a more email-friendly path-based URL instead of query parameters
   return `${baseUrl}/confirm-email/${userId}/${token}`;
 }

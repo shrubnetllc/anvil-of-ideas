@@ -8,30 +8,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect } from "react";
 import { queryClient } from "@/lib/queryClient";
 
-// Import new tab components
-import { ProjectRequirementsTab } from "@/components/idea-detail-tabs/project-requirements-tab";
-import { BusinessRequirementsTab } from "@/components/idea-detail-tabs/business-requirements-tab";
-import { FunctionalRequirementsTab } from "@/components/idea-detail-tabs/functional-requirements-tab";
 import { LeanCanvasTab } from "@/components/idea-detail-tabs/lean-canvas-tab";
-import { WorkflowsTab } from "@/components/idea-detail-tabs/workflows-tab";
-import { DocumentsOverviewTab } from "@/components/idea-detail-tabs/documents-overview-tab";
 import { IdeaDocumentTab } from "@/components/idea-detail-tabs/idea-document-tab";
 import { IdeaDetailsTab } from "@/components/idea-detail-tabs/idea-details-tab";
-import { UltimateWebsiteTab } from "@/components/idea-detail-tabs/ultimate-website-tab";
-import { FrontendTab } from "@/components/idea-detail-tabs/frontend-tab";
-import { BackendTab } from "@/components/idea-detail-tabs/backend-tab";
-import { EstimateTab } from "@/components/idea-detail-tabs/estimate-tab";
 
 export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const ideaId = parseInt(id);
-  const { idea, isLoading: isLoadingIdea } = useIdea(ideaId);
+  const { idea, isLoading: isLoadingIdea } = useIdea(id);
 
   // URL-based tab state management
   const getTabFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
-    return params.get("tab") || "documents";
+    return params.get("tab") || "canvas";
   };
 
   const [activeTab, setActiveTabState] = useState(getTabFromUrl());
@@ -44,7 +33,6 @@ export default function IdeaDetail() {
     window.history.pushState({}, "", newUrl);
   };
 
-  // Sync state with URL on back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
       setActiveTabState(getTabFromUrl());
@@ -53,54 +41,23 @@ export default function IdeaDetail() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  // Polling for idea generation status
+  // Polling for idea status when generating
   useEffect(() => {
     let timer: number | null = null;
-    let timeoutTimer: number | null = null;
 
     if (idea?.status === "Generating") {
-      // Check if generation has timed out (2 minutes or more since started)
-      if (idea.generationStartedAt) {
-        const startedAt = new Date(idea.generationStartedAt);
-        const now = new Date();
-        const diffMinutes = (now.getTime() - startedAt.getTime()) / (1000 * 60);
-
-        if (diffMinutes >= 2) {
-          console.log(`Canvas generation timed out (started ${diffMinutes.toFixed(1)} minutes ago)`);
-          // We could set a timeout state here if needed, but for now we just log
-        } else {
-          console.log(`Canvas generation in progress (started ${diffMinutes.toFixed(1)} minutes ago)`);
-
-          // Set a timer to check for timeout after the 2-minute mark
-          const remainingMs = Math.max(0, (2 * 60 * 1000) - (now.getTime() - startedAt.getTime()));
-          if (remainingMs > 0) {
-            timeoutTimer = window.setTimeout(() => {
-              if (idea?.status === "Generating") {
-                console.log('Timeout check triggered: Canvas generation has exceeded 2 minutes');
-              }
-            }, remainingMs);
-          }
-        }
-      }
-
-      // Regular polling every 10 seconds
-      timer = window.setTimeout(() => {
-        // Refresh data every 10 seconds if still in generating state
-        queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
-        queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}/canvas`] });
-        queryClient.invalidateQueries({ queryKey: [`/api/supabase/canvas/${ideaId}`] });
+      timer = window.setInterval(() => {
+        queryClient.invalidateQueries({ queryKey: [`/api/ideas/${id}`] });
+        queryClient.invalidateQueries({ queryKey: [`/api/ideas/${id}/canvas`] });
       }, 10000);
     }
 
     return () => {
       if (timer !== null) {
-        clearTimeout(timer);
-      }
-      if (timeoutTimer !== null) {
-        clearTimeout(timeoutTimer);
+        clearInterval(timer);
       }
     };
-  }, [idea?.status, idea?.generationStartedAt, ideaId]);
+  }, [idea?.status, id]);
 
   const handleBackClick = () => {
     navigate("/");
@@ -170,24 +127,16 @@ export default function IdeaDetail() {
                   </span>
                 </div>
                 <h1 className="text-2xl font-bold text-neutral-900">
-                  {idea.title || idea.companyName || idea.idea.split(' ').slice(0, 5).join(' ') + '...'}
+                  {idea.title || idea.companyName || idea.description.split(' ').slice(0, 5).join(' ') + '...'}
                 </h1>
               </div>
             </div>
 
             <div className="flex flex-col lg:flex-row lg:space-x-6">
-              {/* Main content */}
               <div className="w-full">
-                {/* Tabs */}
                 <div className="border-b border-neutral-200">
                   <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList className="w-auto flex flex-wrap">
-                      <TabsTrigger value="documents" className="text-sm">
-                        <div className="flex items-center">
-                          <Hammer className="h-4 w-4 mr-1" />
-                          Documents
-                        </div>
-                      </TabsTrigger>
                       <TabsTrigger value="canvas" className="text-sm">Lean Canvas</TabsTrigger>
                       <TabsTrigger value="requirements" className="text-sm">Project Requirements</TabsTrigger>
                       <TabsTrigger value="business" className="text-sm">Business Requirements</TabsTrigger>
@@ -195,10 +144,7 @@ export default function IdeaDetail() {
                       <TabsTrigger value="workflows" className="text-sm">Workflows</TabsTrigger>
                       <TabsTrigger value="frontend" className="text-sm">Front End Spec</TabsTrigger>
                       <TabsTrigger value="backend" className="text-sm">Back End Spec</TabsTrigger>
-                      <TabsTrigger value="marketing" className="text-sm">Marketing</TabsTrigger>
-                      <TabsTrigger value="pitchdeck" className="text-sm">Pitch Deck</TabsTrigger>
                       <TabsTrigger value="estimate" className="text-sm">Estimate</TabsTrigger>
-                      <TabsTrigger value="ultimate-website" className="text-sm">Ultimate Website</TabsTrigger>
                       <TabsTrigger value="details" className="text-sm">
                         <div className="flex items-center">
                           <Info className="h-4 w-4 mr-1" />
@@ -207,68 +153,40 @@ export default function IdeaDetail() {
                       </TabsTrigger>
                     </TabsList>
 
-                    {/* Documents Overview */}
-                    <TabsContent value="documents" className="mt-6">
-                      <DocumentsOverviewTab ideaId={ideaId} setActiveTab={setActiveTab} />
-                    </TabsContent>
-
-                    {/* Lean Canvas */}
                     <TabsContent value="canvas" className="mt-6">
-                      <IdeaDocumentTab ideaId={ideaId} documentType='LeanCanvas' />
-                    </TabsContent>
-                    {/* Project Requirements */}
-                    <TabsContent value='requirements'>
-                      <IdeaDocumentTab ideaId={ideaId} documentType='ProjectRequirements' />
+                      <LeanCanvasTab ideaId={id} />
                     </TabsContent>
 
-                    {/* Business Requirements */}
-                    {/* <TabsContent value="business" className="mt-6">
-                      <BusinessRequirementsTab ideaId={ideaId} />
-                    </TabsContent> */}
-                    <TabsContent value='business'>
-                      <IdeaDocumentTab ideaId={ideaId} documentType='BusinessRequirements' />
+                    <TabsContent value="requirements" className="mt-6">
+                      <IdeaDocumentTab ideaId={id} documentType="ProjectRequirements" />
                     </TabsContent>
 
-                    {/* Functional Requirements */}
-                    {/* <TabsContent value="functional" className="mt-6">
-                      <FunctionalRequirementsTab ideaId={ideaId} />
-                    </TabsContent> */}
-                    <TabsContent value='functional'>
-                      <IdeaDocumentTab ideaId={ideaId} documentType='FunctionalRequirements' />
+                    <TabsContent value="business" className="mt-6">
+                      <IdeaDocumentTab ideaId={id} documentType="BusinessRequirements" />
                     </TabsContent>
 
-                    {/* Idea Details */}
+                    <TabsContent value="functional" className="mt-6">
+                      <IdeaDocumentTab ideaId={id} documentType="FunctionalRequirements" />
+                    </TabsContent>
+
+                    <TabsContent value="workflows" className="mt-6">
+                      <IdeaDocumentTab ideaId={id} documentType="Workflows" />
+                    </TabsContent>
+
+                    <TabsContent value="frontend" className="mt-6">
+                      <IdeaDocumentTab ideaId={id} documentType="FrontEndSpecification" />
+                    </TabsContent>
+
+                    <TabsContent value="backend" className="mt-6">
+                      <IdeaDocumentTab ideaId={id} documentType="BackEndSpecification" />
+                    </TabsContent>
+
+                    <TabsContent value="estimate" className="mt-6">
+                      <IdeaDocumentTab ideaId={id} documentType="Estimate" />
+                    </TabsContent>
+
                     <TabsContent value="details" className="mt-6">
                       <IdeaDetailsTab idea={idea} />
-                    </TabsContent>
-
-                    {/* Placeholders for other tabs */}
-                    <TabsContent value="workflows" className="mt-6">
-                      <WorkflowsTab ideaId={ideaId} />
-                    </TabsContent>
-                    <TabsContent value="frontend" className="mt-6">
-                      <FrontendTab ideaId={ideaId} />
-                    </TabsContent>
-                    <TabsContent value="backend" className="mt-6">
-                      <BackendTab ideaId={ideaId} />
-                    </TabsContent>
-                    <TabsContent value="marketing" className="mt-6">
-                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
-                        <h3 className="text-lg font-bold text-neutral-900 mb-2">Marketing Plan</h3>
-                        <p className="text-neutral-600">Coming soon...</p>
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="pitchdeck" className="mt-6">
-                      <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
-                        <h3 className="text-lg font-bold text-neutral-900 mb-2">Pitch Deck</h3>
-                        <p className="text-neutral-600">Coming soon...</p>
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="estimate" className="mt-6">
-                      <EstimateTab ideaId={ideaId} />
-                    </TabsContent>
-                    <TabsContent value="ultimate-website" className="mt-6">
-                      <UltimateWebsiteTab ideaId={ideaId} />
                     </TabsContent>
                   </Tabs>
                 </div>

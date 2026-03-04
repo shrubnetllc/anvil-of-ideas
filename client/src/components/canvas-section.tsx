@@ -7,16 +7,17 @@ import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface CanvasSectionProps {
-  ideaId: number;
+  ideaId: string;
   section: CanvasSection;
-  content: string;
+  content: string | null;
+  isEditing?: boolean;
 }
 
-export function CanvasSectionComponent({ ideaId, section, content }: CanvasSectionProps) {
+export function CanvasSectionComponent({ ideaId, section, content, isEditing: parentEditing }: CanvasSectionProps) {
   const { updateSection, isUpdating } = useLeanCanvas(ideaId);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedContent, setEditedContent] = useState(content);
-  if (!section) return "";
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editedContent, setEditedContent] = useState(content || "");
+  if (!section) return null;
 
   const formatSectionTitle = (section: string) => {
     return section
@@ -26,22 +27,20 @@ export function CanvasSectionComponent({ ideaId, section, content }: CanvasSecti
 
   const handleSave = () => {
     updateSection(section, editedContent);
-    setIsEditing(false);
+    setIsEditDialogOpen(false);
   };
 
   const handleCancel = () => {
-    setEditedContent(content);
-    setIsEditing(false);
+    setEditedContent(content || "");
+    setIsEditDialogOpen(false);
   };
 
-  const formatContent = (content: string) => {
+  const formatContent = (content: string | null) => {
     if (!content) return null;
 
-    // Check if content is in a bullet point format
     const hasBulletPoints = content.includes('•') || content.includes('-') || content.includes('*');
 
     if (hasBulletPoints) {
-      // Split by common bullet point markers
       const lines = content
         .split(/[\n\r]+/)
         .map(line => line.trim())
@@ -68,14 +67,19 @@ export function CanvasSectionComponent({ ideaId, section, content }: CanvasSecti
       <div className="bg-neutral-50 rounded-lg p-4 border border-neutral-200">
         <div className="flex justify-between items-start mb-3">
           <h3 className="font-semibold text-neutral-900">{formatSectionTitle(section)}</h3>
-          <Button variant="ghost" size="icon" className="h-6 w-6 text-neutral-400 hover:text-neutral-600" onClick={() => setIsEditing(true)}>
-            <PencilIcon className="h-4 w-4" />
-          </Button>
+          {parentEditing && (
+            <Button variant="ghost" size="icon" className="h-6 w-6 text-neutral-400 hover:text-neutral-600" onClick={() => {
+              setEditedContent(content || "");
+              setIsEditDialogOpen(true);
+            }}>
+              <PencilIcon className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         {formatContent(content)}
       </div>
 
-      <Dialog open={isEditing} onOpenChange={(open) => !open && handleCancel()}>
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => !open && handleCancel()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit {formatSectionTitle(section)}</DialogTitle>

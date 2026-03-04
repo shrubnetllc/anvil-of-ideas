@@ -1,33 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Idea, InsertIdea, LeanCanvas } from "@shared/schema";
+import { Idea, InsertIdea } from "@shared/schema";
 import { useToast } from "./use-toast";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
 import { useAuth } from "./use-auth";
-
-// Extended type with lean canvas data
-type IdeaWithCanvas = InsertIdea & {
-  leanCanvas?: {
-    problem?: string;
-    customerSegments?: string;
-    uniqueValueProposition?: string;
-    solution?: string;
-    channels?: string;
-    revenueStreams?: string;
-    costStructure?: string;
-    keyMetrics?: string;
-    unfairAdvantage?: string;
-  };
-  tractionEvidence?: {
-    customerInterviews?: number;
-    waitlistSignups?: number;
-    payingCustomers?: number;
-  };
-  additionalNotes?: string;
-  targetLaunchDate?: string;
-  preferredPricingModel?: string;
-};
 
 export function useIdeas() {
   const { toast } = useToast();
@@ -35,14 +12,12 @@ export function useIdeas() {
 
   const { data: ideas, isLoading } = useQuery<Idea[]>({
     queryKey: ["/api/ideas"],
-    // Only enable this query when a user is logged in and
-    // prevent stale data from showing across user sessions
     enabled: !!user,
-    staleTime: 0, // Force a fresh fetch every time to prevent cross-user data leakage
+    staleTime: 0,
   });
 
   const createIdeaMutation = useMutation({
-    mutationFn: async (newIdea: IdeaWithCanvas) => {
+    mutationFn: async (newIdea: InsertIdea) => {
       const res = await apiRequest("POST", "/api/ideas", newIdea);
       return res.json();
     },
@@ -50,7 +25,7 @@ export function useIdeas() {
       queryClient.invalidateQueries({ queryKey: ["/api/ideas"] });
       toast({
         title: "Success",
-        description: "Your idea has been submitted and is being processed.",
+        description: "Your idea has been submitted.",
       });
     },
     onError: (error: Error) => {
@@ -63,7 +38,7 @@ export function useIdeas() {
   });
 
   const generateCanvasMutation = useMutation({
-    mutationFn: async (ideaId: number) => {
+    mutationFn: async (ideaId: string) => {
       const res = await apiRequest("POST", `/api/ideas/${ideaId}/generate`, {});
       return res.json();
     },
@@ -85,7 +60,7 @@ export function useIdeas() {
   });
 
   const deleteIdeaMutation = useMutation({
-    mutationFn: async (ideaId: number) => {
+    mutationFn: async (ideaId: string) => {
       const res = await apiRequest("DELETE", `/api/ideas/${ideaId}`);
       return res.json();
     },
@@ -106,7 +81,7 @@ export function useIdeas() {
   });
 
   const updateIdeaMutation = useMutation({
-    mutationFn: async ({ ideaId, updates }: { ideaId: number, updates: Partial<Idea> }) => {
+    mutationFn: async ({ ideaId, updates }: { ideaId: string, updates: Partial<Idea> }) => {
       const res = await apiRequest("PATCH", `/api/ideas/${ideaId}`, updates);
       return res.json();
     },
@@ -141,19 +116,18 @@ export function useIdeas() {
   };
 }
 
-export function useIdea(id: number) {
+export function useIdea(id: string) {
   const { toast } = useToast();
   const [, navigate] = useLocation();
-  
-  const { 
-    data: idea, 
+
+  const {
+    data: idea,
     isLoading,
     error
   } = useQuery<Idea>({
     queryKey: [`/api/ideas/${id}`],
     enabled: !!id,
     retry: (failureCount, error: any) => {
-      // Don't retry on 403/404 errors (forbidden/not found)
       if (error?.status === 403 || error?.status === 404) {
         return false;
       }
@@ -161,8 +135,7 @@ export function useIdea(id: number) {
     },
     throwOnError: false
   });
-  
-  // Handle unauthorized access or not found errors
+
   useEffect(() => {
     if (error) {
       const status = (error as any)?.status;
@@ -172,14 +145,14 @@ export function useIdea(id: number) {
           description: "You don't have permission to view this idea",
           variant: "destructive"
         });
-        navigate('/'); // Redirect to dashboard
+        navigate('/');
       } else if (status === 404) {
         toast({
           title: "Idea Not Found",
           description: "The requested idea could not be found",
           variant: "destructive"
         });
-        navigate('/'); // Redirect to dashboard
+        navigate('/');
       }
     }
   }, [error, navigate, toast]);

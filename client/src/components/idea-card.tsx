@@ -84,11 +84,11 @@ export function IdeaCard({ idea, onGenerate }: IdeaCardProps) {
           </div>
           
           <h3 className="text-lg font-semibold text-neutral-900 mb-2">
-            {idea.title || idea.companyName || idea.idea.split(' ').slice(0, 3).join(' ') + '...'}
+            {idea.title || idea.companyName || idea.description.split(' ').slice(0, 3).join(' ') + '...'}
           </h3>
           
           <p className="text-sm text-neutral-600 line-clamp-3 mb-4">
-            {idea.idea}
+            {idea.description}
           </p>
           
           <div className="flex items-center justify-between">

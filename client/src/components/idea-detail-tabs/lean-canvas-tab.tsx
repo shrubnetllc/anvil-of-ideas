@@ -1,24 +1,21 @@
 import { useState } from "react";
 import { useLeanCanvas } from "@/hooks/use-lean-canvas";
-import { useSupabaseCanvas } from "@/hooks/use-supabase-data";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, Copy, Download, Sparkles, AlertTriangle, RotateCcw, FileText } from "lucide-react";
+import { Loader2, RefreshCw, Copy, Download, Sparkles } from "lucide-react";
 import { CanvasSectionComponent } from "@/components/canvas-section";
-import { canvasSections } from "@shared/schema";
 import { jsonToCSV, downloadCSV, copyHtmlToClipboard } from "@/lib/utils";
 
 interface LeanCanvasTabProps {
-    ideaId: number;
+    ideaId: string;
 }
 
 export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
     const { toast } = useToast();
     const [canvasNotes, setCanvasNotes] = useState('');
     const [isEditingCanvas, setIsEditingCanvas] = useState(false);
-    const [viewMode, setViewMode] = useState<'grid' | 'html'>('grid');
 
     const {
         canvas,
@@ -27,33 +24,19 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
         isRegenerating: isCanvasRegenerating
     } = useLeanCanvas(ideaId);
 
-    const { data: supabaseData, isLoading: isLoadingSupabase } = useSupabaseCanvas(ideaId);
+    const hasContent = !!canvas?.content;
 
-    const hasHtml = !!supabaseData?.data?.html;
-
-    // Handle regenerating Lean Canvas with notes
     const handleRegenerateLeanCanvasClick = () => {
-        // Pass the notes to the regeneration function if they exist
         regenerateCanvas({ notes: canvasNotes });
-
         toast({
             title: "Canvas regeneration started",
             description: "Your Lean Canvas is now being regenerated. This may take a few moments.",
             variant: "default",
         });
-
-        // Reset the notes field after regeneration starts
         setCanvasNotes('');
     };
 
-    // Check if canvas is timed out - this logic was in the main component, 
-    // but for now we'll rely on the hook or simplified logic. 
-    // The original component had complex timeout logic in useEffect.
-    // For this refactor, we'll assume the hook handles loading state correctly.
-    // If we need the timeout logic, we should move it to the hook or keep it here.
-    // For now, let's use a simple loading state.
-
-    if (isLoadingCanvas || isLoadingSupabase) {
+    if (isLoadingCanvas) {
         return (
             <div className="flex justify-center items-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -73,33 +56,7 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                    {hasHtml && (
-                        <div className="flex bg-neutral-100 p-1 rounded-md mr-2">
-                            <button
-                                onClick={() => {
-                                    setViewMode('html');
-                                    setIsEditingCanvas(false);
-                                }}
-                                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${viewMode === 'html'
-                                    ? 'bg-white text-primary shadow-sm'
-                                    : 'text-neutral-500 hover:text-neutral-900'
-                                    }`}
-                            >
-                                Document
-                            </button>
-                            <button
-                                onClick={() => setViewMode('grid')}
-                                className={`px-3 py-1 text-xs font-medium rounded-sm transition-all ${viewMode === 'grid'
-                                    ? 'bg-white text-primary shadow-sm'
-                                    : 'text-neutral-500 hover:text-neutral-900'
-                                    }`}
-                            >
-                                Grid
-                            </button>
-                        </div>
-                    )}
-
-                    {viewMode === 'grid' && (
+                    {canvas && (
                         <Button
                             variant="outline"
                             size="sm"
@@ -132,12 +89,11 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
                         variant="outline"
                         size="sm"
                         onClick={async () => {
-                            const targetId = viewMode === 'grid' ? "lean-canvas-grid" : "lean-canvas-content";
-                            const success = await copyHtmlToClipboard(targetId);
+                            const success = await copyHtmlToClipboard("lean-canvas-grid");
                             if (success) {
                                 toast({
                                     title: "Copied to clipboard",
-                                    description: "Lean Canvas copied as image/html.",
+                                    description: "Lean Canvas copied.",
                                 });
                             } else {
                                 toast({
@@ -147,7 +103,7 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
                                 });
                             }
                         }}
-                        disabled={!canvas && (!hasHtml || viewMode !== 'html')}
+                        disabled={!canvas}
                     >
                         <Copy className="mr-2 h-4 w-4" />
                         Copy
@@ -203,126 +159,90 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
                         Please wait while we update your Lean Canvas based on the new instructions.
                     </p>
                 </div>
-            ) : viewMode === 'grid' && canvas ? (
+            ) : canvas ? (
                 <div id="lean-canvas-grid" className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
                     {/* Row 1 */}
-                    <div className="md:col-span-1 md:row-span-2 space-y-4">
+                    <div className="md:col-span-1 md:row-span-2">
                         <CanvasSectionComponent
-                            title="Problem"
+                            section="Problem"
                             content={canvas.problem}
-                            sectionKey="problem"
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                        <CanvasSectionComponent
-                            title="Existing Alternatives"
-                            content={canvas.existingAlternatives}
-                            sectionKey="existingAlternatives"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
                     </div>
 
-                    <div className="md:col-span-1 space-y-4">
+                    <div className="md:col-span-1">
                         <CanvasSectionComponent
-                            title="Solution"
+                            section="Solution"
                             content={canvas.solution}
-                            sectionKey="solution"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
                     </div>
 
-                    <div className="md:col-span-1 md:row-span-2 space-y-4">
+                    <div className="md:col-span-1 md:row-span-2">
                         <CanvasSectionComponent
-                            title="Unique Value Proposition"
+                            section="UniqueValueProposition"
                             content={canvas.uniqueValueProposition}
-                            sectionKey="uniqueValueProposition"
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                        <CanvasSectionComponent
-                            title="High-Level Concept"
-                            content={canvas.highLevelConcept}
-                            sectionKey="highLevelConcept"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
                     </div>
 
-                    <div className="md:col-span-1 space-y-4">
+                    <div className="md:col-span-1">
                         <CanvasSectionComponent
-                            title="Unfair Advantage"
+                            section="UnfairAdvantage"
                             content={canvas.unfairAdvantage}
-                            sectionKey="unfairAdvantage"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
                     </div>
 
-                    <div className="md:col-span-1 md:row-span-2 space-y-4">
+                    <div className="md:col-span-1 md:row-span-2">
                         <CanvasSectionComponent
-                            title="Customer Segments"
+                            section="CustomerSegments"
                             content={canvas.customerSegments}
-                            sectionKey="customerSegments"
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                        <CanvasSectionComponent
-                            title="Early Adopters"
-                            content={canvas.earlyAdopters}
-                            sectionKey="earlyAdopters"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
                     </div>
 
                     {/* Row 2 (middle columns) */}
-                    <div className="md:col-span-1 space-y-4">
+                    <div className="md:col-span-1">
                         <CanvasSectionComponent
-                            title="Key Metrics"
+                            section="KeyMetrics"
                             content={canvas.keyMetrics}
-                            sectionKey="keyMetrics"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
                     </div>
 
-                    <div className="md:col-span-1 space-y-4">
+                    <div className="md:col-span-1">
                         <CanvasSectionComponent
-                            title="Channels"
+                            section="Channels"
                             content={canvas.channels}
-                            sectionKey="channels"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
                     </div>
 
                     {/* Row 3 */}
-                    <div className="md:col-span-2.5 space-y-4">
+                    <div className="md:col-span-2">
                         <CanvasSectionComponent
-                            title="Cost Structure"
+                            section="CostStructure"
                             content={canvas.costStructure}
-                            sectionKey="costStructure"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
                     </div>
 
-                    <div className="md:col-span-2.5 space-y-4">
+                    <div className="md:col-span-3">
                         <CanvasSectionComponent
-                            title="Revenue Streams"
+                            section="RevenueStreams"
                             content={canvas.revenueStreams}
-                            sectionKey="revenueStreams"
                             isEditing={isEditingCanvas}
                             ideaId={ideaId}
                         />
-                    </div>
-                </div>
-            ) : viewMode === 'html' && hasHtml && supabaseData?.data?.html ? (
-                <div className="bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
-                    <div id="lean-canvas-content" className="prose max-w-none">
-                        <div dangerouslySetInnerHTML={{ __html: supabaseData.data.html }} />
                     </div>
                 </div>
             ) : (
@@ -337,6 +257,16 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
                     <Button onClick={handleRegenerateLeanCanvasClick}>
                         Generate Lean Canvas
                     </Button>
+                </div>
+            )}
+
+            {/* HTML Content view */}
+            {hasContent && canvas?.content && (
+                <div className="bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-neutral-900 mb-4">Document View</h3>
+                    <div id="lean-canvas-content" className="prose max-w-none">
+                        <div dangerouslySetInnerHTML={{ __html: canvas.content }} />
+                    </div>
                 </div>
             )}
         </div>

@@ -22,13 +22,13 @@ export function IdeaDetailsTab({ idea }: IdeaDetailsTabProps) {
         if (!isEditing && idea) {
             // Initialize form data with current idea values when entering edit mode
             setFormData({
-                title: idea.title || '',
-                idea: idea.idea,
-                companyName: idea.companyName || '',
-                companyStage: idea.companyStage || '',
-                founderName: idea.founderName || '',
-                founderEmail: idea.founderEmail || '',
-                websiteUrl: idea.websiteUrl || ''
+                title: idea.title ?? '',
+                description: idea.description ?? '',
+                companyName: idea.companyName ?? '',
+                companyStage: idea.companyStage ?? '',
+                founderName: idea.founderName ?? '',
+                founderEmail: idea.founderEmail ?? '',
+                websiteUrl: idea.websiteUrl ?? ''
             });
         }
         setIsEditing(!isEditing);
@@ -98,7 +98,7 @@ export function IdeaDetailsTab({ idea }: IdeaDetailsTabProps) {
                                 <Input
                                     id="companyName"
                                     name="companyName"
-                                    value={formData.companyName}
+                                    value={formData.companyName ?? ''}
                                     onChange={handleFormChange}
                                     placeholder="e.g. EcoTrack Solutions Inc."
                                 />
@@ -109,7 +109,7 @@ export function IdeaDetailsTab({ idea }: IdeaDetailsTabProps) {
                                 <Input
                                     id="companyStage"
                                     name="companyStage"
-                                    value={formData.companyStage}
+                                    value={formData.companyStage ?? ''}
                                     onChange={handleFormChange}
                                     placeholder="e.g. Idea, MVP, Seed, Series A"
                                 />
@@ -120,7 +120,7 @@ export function IdeaDetailsTab({ idea }: IdeaDetailsTabProps) {
                                 <Input
                                     id="websiteUrl"
                                     name="websiteUrl"
-                                    value={formData.websiteUrl}
+                                    value={formData.websiteUrl ?? ''}
                                     onChange={handleFormChange}
                                     placeholder="https://example.com"
                                 />
@@ -131,7 +131,7 @@ export function IdeaDetailsTab({ idea }: IdeaDetailsTabProps) {
                                 <Input
                                     id="founderName"
                                     name="founderName"
-                                    value={formData.founderName}
+                                    value={formData.founderName ?? ''}
                                     onChange={handleFormChange}
                                     placeholder="Your Name"
                                 />
@@ -142,7 +142,7 @@ export function IdeaDetailsTab({ idea }: IdeaDetailsTabProps) {
                                 <Input
                                     id="founderEmail"
                                     name="founderEmail"
-                                    value={formData.founderEmail}
+                                    value={formData.founderEmail ?? ''}
                                     onChange={handleFormChange}
                                     placeholder="you@example.com"
                                 />
@@ -150,11 +150,11 @@ export function IdeaDetailsTab({ idea }: IdeaDetailsTabProps) {
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="idea">Idea Description</Label>
+                            <Label htmlFor="description">Idea Description</Label>
                             <Textarea
-                                id="idea"
-                                name="idea"
-                                value={formData.idea}
+                                id="description"
+                                name="description"
+                                value={formData.description}
                                 onChange={handleFormChange}
                                 placeholder="Describe your idea in detail..."
                                 className="min-h-[150px]"
@@ -229,7 +229,7 @@ export function IdeaDetailsTab({ idea }: IdeaDetailsTabProps) {
                         <div>
                             <h3 className="text-sm font-medium text-neutral-500 mb-2">Idea Description</h3>
                             <div className="bg-neutral-50 p-4 rounded-md border border-neutral-100">
-                                <p className="text-neutral-700 whitespace-pre-wrap">{idea.idea}</p>
+                                <p className="text-neutral-700 whitespace-pre-wrap">{idea.description}</p>
                             </div>
                         </div>
                     </div>
