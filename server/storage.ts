@@ -164,10 +164,10 @@ export class DatabaseStorage implements IStorage {
   async deleteIdea(id: string, requestingUserId?: string): Promise<void> {
     try {
       const execute = async (tx: typeof db) => {
-        // Delete related jobs first
-        await tx.delete(jobs).where(eq(jobs.ideaId, id));
-        // Delete related documents
+        // Delete related documents first (documents.job_id references jobs.id)
         await tx.delete(documents).where(eq(documents.ideaId, id));
+        // Then delete related jobs
+        await tx.delete(jobs).where(eq(jobs.ideaId, id));
         // Delete the idea
         const deleted = await tx.delete(ideas).where(eq(ideas.id, id)).returning();
         if (deleted.length === 0) {
