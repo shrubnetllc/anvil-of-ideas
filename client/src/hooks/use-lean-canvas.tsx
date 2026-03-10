@@ -89,7 +89,11 @@ export function useLeanCanvas(ideaId: string) {
 
   const regenerateCanvasMutation = useMutation({
     mutationFn: async (data?: { notes?: string }) => {
-      const res = await apiRequest("POST", `/api/ideas/${ideaId}/generate`, data || {});
+      let res = await apiRequest("POST", `/api/ideas/${ideaId}/generate`, data || {});
+      // If blocked by a stuck job (409), retry with force=true
+      if (res.status === 409) {
+        res = await apiRequest("POST", `/api/ideas/${ideaId}/generate?force=true`, data || {});
+      }
       return res.json();
     },
     onSuccess: () => {

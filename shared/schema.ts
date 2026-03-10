@@ -5,6 +5,9 @@ import { z } from "zod";
 export const ideaStatuses = ["Draft", "Generating", "Completed"] as const;
 export type IdeaStatus = typeof ideaStatuses[number];
 
+export const documentStatuses = ["generating", "completed", "failed"] as const;
+export type DocumentStatus = typeof documentStatuses[number];
+
 // Document types that can be created for each idea
 export const documentTypes = [
   "LeanCanvas",
@@ -92,6 +95,7 @@ export const documents = pgTable("documents", {
   documentType: text("document_type").notNull(),
   content: text("content"),
   contentSections: jsonb("content_sections"),
+  status: text("status").notNull().default("generating"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   generatedAt: timestamp("generated_at").defaultNow(),
@@ -130,6 +134,7 @@ export const insertDocumentSchema = createInsertSchema(documents).omit({
 export const updateDocumentSchema = createInsertSchema(documents).pick({
   content: true,
   contentSections: true,
+  status: true,
   updatedAt: true,
 });
 

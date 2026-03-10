@@ -39,7 +39,11 @@ export function useIdeas() {
 
   const generateCanvasMutation = useMutation({
     mutationFn: async (ideaId: string) => {
-      const res = await apiRequest("POST", `/api/ideas/${ideaId}/generate`, {});
+      let res = await apiRequest("POST", `/api/ideas/${ideaId}/generate`, {});
+      // If blocked by a stuck job (409), retry with force=true
+      if (res.status === 409) {
+        res = await apiRequest("POST", `/api/ideas/${ideaId}/generate?force=true`, {});
+      }
       return res.json();
     },
     onSuccess: (_, ideaId) => {

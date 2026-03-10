@@ -46,6 +46,7 @@ create table public.documents (
   document_type text not null,
   content text,
   content_sections jsonb,
+  status text not null default 'generating',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   generated_at timestamptz default now()

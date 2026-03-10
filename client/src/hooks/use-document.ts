@@ -25,10 +25,12 @@ export function useDocument(ideaId: string, documentType: DocumentType) {
                 const data = await response.json();
                 setDocument(data);
 
-                // Document existence = generation complete
-                if (data) {
+                // Only treat as complete if document has status 'completed'
+                if (data && data.status === "completed") {
                     setIsGenerating(false);
                     setIsTimedOut(false);
+                } else if (data && data.status === "generating") {
+                    setIsGenerating(true);
                 }
             } else {
                 setDocument(null);
@@ -121,11 +123,21 @@ export function useDocument(ideaId: string, documentType: DocumentType) {
                     throw new Error(`Generation not implemented for ${documentType}`);
             }
 
-            const response = await fetch(url, {
+            let response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
+
+            // If blocked by a stuck job (409), retry with force=true
+            if (response.status === 409) {
+                console.warn(`[${documentType}] Generation blocked by existing job — retrying with force`);
+                response = await fetch(`${url}?force=true`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+            }
 
             if (!response.ok) {
                 throw new Error(await response.text());

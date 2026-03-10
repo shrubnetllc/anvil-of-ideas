@@ -145,10 +145,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const existingDocument = await storage.getDocumentByType(ideaId, documentType, req.user!.id);
 
+      // Determine status: if content is provided, mark as completed; otherwise generating
+      const hasContent = !!(content || contentSections);
+      const docStatus = hasContent ? "completed" : "generating";
+
       if (existingDocument) {
         await storage.updateDocument(existingDocument.id, {
           content: content || existingDocument.content,
           contentSections: contentSections || existingDocument.contentSections,
+          status: hasContent ? "completed" : existingDocument.status,
         }, req.user!.id);
         const updatedDocument = await storage.getDocumentById(existingDocument.id, req.user!.id);
         return res.status(200).json(updatedDocument);
@@ -159,6 +164,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           documentType,
           content: content || null,
           contentSections: contentSections || null,
+          status: docStatus,
         }, req.user!.id);
         return res.status(201).json(newDocument);
       }
@@ -399,6 +405,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Idea not found" });
       }
 
+      // Guard: check if there's already a pending/processing job for this idea
+      const existingJob = await storage.getLatestWorkflowJob(ideaId, userId);
+      if (existingJob) {
+        const jobStatus = (existingJob.status || "").toLowerCase();
+        if (jobStatus === "pending" || jobStatus === "processing" || jobStatus === "starting") {
+          // Check if the anvil-api is actually still working on this job.
+          // If no progress update in 5 minutes, it's stuck (e.g. container restart).
+          const jobAge = Date.now() - new Date(existingJob.updatedAt).getTime();
+          const STUCK_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes since last progress update
+          if (jobAge > STUCK_THRESHOLD_MS) {
+            console.warn(`[generate] Job ${existingJob.id} stuck at '${jobStatus}' for ${Math.round(jobAge / 60000)}m — marking as failed`);
+            await storage.updateJob(existingJob.id, {
+              status: "failed",
+              description: "Job timed out — no progress update received within 5 minutes",
+            });
+            await storage.updateIdeaStatus(ideaId, "Draft", userId);
+          } else {
+            // Allow the user to force-override by passing ?force=true
+            const force = req.query.force === "true" || req.body?.force === true;
+            if (force) {
+              console.warn(`[generate] Force-overriding stuck job ${existingJob.id} at '${jobStatus}'`);
+              await storage.updateJob(existingJob.id, {
+                status: "failed",
+                description: "Manually overridden by user — starting new generation",
+              });
+              await storage.updateIdeaStatus(ideaId, "Draft", userId);
+            } else {
+              return res.status(409).json({
+                message: "Generation is already in progress for this idea",
+                jobId: existingJob.id,
+              });
+            }
+          }
+        }
+      }
+
       // Create a job to track the generation
       const job = await storage.createJob({
         userId,
@@ -425,117 +467,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Generate functional requirements - stubbed
-  app.post("/api/ideas/:id/generate-functional-requirements", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = req.params.id;
-      const userId = req.user!.id;
-      const idea = await storage.getIdeaById(ideaId, userId);
+  // Per-document generation endpoints — all route through the full pipeline.
+  // The pipeline skips already-completed documents, so this effectively
+  // resumes from wherever it left off.
+  for (const { path, docType } of [
+    { path: "/api/ideas/:id/generate-functional-requirements", docType: "FunctionalRequirements" },
+    { path: "/api/ideas/:id/generate-business-requirements", docType: "BusinessRequirements" },
+    { path: "/api/ideas/:id/generate-ultimate-website", docType: "FrontEndSpecification" },
+    { path: "/api/ideas/:id/workflows", docType: "Workflows" },
+  ] as const) {
+    app.post(path, isAuthenticated, async (req, res, next) => {
+      try {
+        const ideaId = req.params.id;
+        const userId = req.user!.id;
+        const idea = await storage.getIdeaById(ideaId, userId);
 
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
+        if (!idea) {
+          return res.status(404).json({ message: "Idea not found" });
+        }
+
+        // Check for stuck jobs (same logic as the main generate endpoint)
+        const existingJob = await storage.getLatestWorkflowJob(ideaId, userId);
+        if (existingJob) {
+          const jobStatus = (existingJob.status || "").toLowerCase();
+          if (jobStatus === "pending" || jobStatus === "processing" || jobStatus === "starting") {
+            const jobAge = Date.now() - new Date(existingJob.updatedAt).getTime();
+            const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
+            const force = req.query.force === "true" || req.body?.force === true;
+            if (jobAge > STUCK_THRESHOLD_MS || force) {
+              console.warn(`[generate:${docType}] Clearing stuck job ${existingJob.id} (age=${Math.round(jobAge / 60000)}m, force=${force})`);
+              await storage.updateJob(existingJob.id, {
+                status: "failed",
+                description: force
+                  ? "Manually overridden by user — starting new generation"
+                  : "Job timed out — marked as failed automatically",
+              });
+            } else {
+              return res.status(409).json({
+                message: "Generation is already in progress for this idea",
+                jobId: existingJob.id,
+              });
+            }
+          }
+        }
+
+        const job = await storage.createJob({
+          userId,
+          ideaId,
+          documentType: docType,
+          description: `${docType} generation requested — running full pipeline (completed steps will be skipped)`,
+          status: "pending",
+        });
+
+        await storage.updateIdeaStatus(ideaId, "Generating", userId);
+
+        triggerGeneration(ideaId, job.id).catch((err) => {
+          console.error(`[generate:${docType}] anvil-api trigger failed for idea ${ideaId}:`, err);
+        });
+
+        return res.status(200).json({
+          message: `${docType} generation started`,
+          jobId: job.id,
+        });
+      } catch (error: any) {
+        next(error);
       }
-
-      const job = await storage.createJob({
-        userId,
-        ideaId,
-        documentType: "FunctionalRequirements",
-        description: "Functional requirements generation requested",
-        status: "pending",
-      });
-
-      return res.status(200).json({
-        message: "Functional requirements generation job created",
-        jobId: job.id,
-      });
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  // Generate business requirements - stubbed
-  app.post("/api/ideas/:id/generate-business-requirements", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = req.params.id;
-      const userId = req.user!.id;
-      const idea = await storage.getIdeaById(ideaId, userId);
-
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-      const job = await storage.createJob({
-        userId,
-        ideaId,
-        documentType: "BusinessRequirements",
-        description: "Business requirements generation requested",
-        status: "pending",
-      });
-
-      return res.status(200).json({
-        message: "Business requirements generation job created",
-        jobId: job.id,
-      });
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  // Generate ultimate website - stubbed
-  app.post("/api/ideas/:id/generate-ultimate-website", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = req.params.id;
-      const userId = req.user!.id;
-      const idea = await storage.getIdeaById(ideaId, userId);
-
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-      const job = await storage.createJob({
-        userId,
-        ideaId,
-        documentType: "FrontEndSpecification",
-        description: "Ultimate website generation requested",
-        status: "pending",
-      });
-
-      return res.status(200).json({
-        message: "Ultimate website generation job created",
-        jobId: job.id,
-      });
-    } catch (error: any) {
-      next(error);
-    }
-  });
-
-  // Workflow generation - stubbed
-  app.post("/api/ideas/:id/workflows", isAuthenticated, async (req, res, next) => {
-    try {
-      const ideaId = req.params.id;
-      const userId = req.user!.id;
-      const idea = await storage.getIdeaById(ideaId, userId);
-
-      if (!idea) {
-        return res.status(404).json({ message: "Idea not found" });
-      }
-
-      const job = await storage.createJob({
-        userId,
-        ideaId,
-        documentType: "Workflows",
-        description: "Workflow generation requested",
-        status: "pending",
-      });
-
-      return res.status(201).json({
-        message: "Workflow generation job created",
-        jobId: job.id,
-      });
-    } catch (error: any) {
-      next(error);
-    }
-  });
+    });
+  }
 
   // ==================== INTERNAL WEBHOOK (anvil-api callbacks) ====================
 

@@ -560,6 +560,7 @@ export class MemStorage implements IStorage {
       documentType: document.documentType,
       content: document.content || null,
       contentSections: document.contentSections || null,
+      status: document.status || "generating",
       createdAt: now,
       updatedAt: now,
       generatedAt: now,
