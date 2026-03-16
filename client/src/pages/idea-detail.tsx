@@ -11,6 +11,9 @@ import { queryClient } from "@/lib/queryClient";
 import { LeanCanvasTab } from "@/components/idea-detail-tabs/lean-canvas-tab";
 import { IdeaDocumentTab } from "@/components/idea-detail-tabs/idea-document-tab";
 import { IdeaDetailsTab } from "@/components/idea-detail-tabs/idea-details-tab";
+import { WorkflowsTab } from "@/components/idea-detail-tabs/workflows-tab";
+import { WorkflowSpecTab } from "@/components/idea-detail-tabs/workflow-spec-tab";
+import { UltimateWebsiteTab } from "@/components/idea-detail-tabs/ultimate-website-tab";
 
 export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();
@@ -144,7 +147,8 @@ export default function IdeaDetail() {
                       <TabsTrigger value="workflows" className="text-sm">Workflows</TabsTrigger>
                       <TabsTrigger value="frontend" className="text-sm">Front End Spec</TabsTrigger>
                       <TabsTrigger value="backend" className="text-sm">Back End Spec</TabsTrigger>
-                      <TabsTrigger value="estimate" className="text-sm">Estimate</TabsTrigger>
+                      <TabsTrigger value="swagger" className="text-sm">Swagger</TabsTrigger>
+                      <TabsTrigger value="ultimate-website" className="text-sm">Ultimate Website</TabsTrigger>
                       <TabsTrigger value="details" className="text-sm">
                         <div className="flex items-center">
                           <Info className="h-4 w-4 mr-1" />
@@ -170,19 +174,38 @@ export default function IdeaDetail() {
                     </TabsContent>
 
                     <TabsContent value="workflows" className="mt-6">
-                      <IdeaDocumentTab ideaId={id} documentType="Workflows" />
+                      <WorkflowsTab ideaId={id} />
                     </TabsContent>
 
                     <TabsContent value="frontend" className="mt-6">
-                      <IdeaDocumentTab ideaId={id} documentType="FrontEndSpecification" />
+                      <WorkflowSpecTab
+                        ideaId={id}
+                        field="homepage_spec"
+                        title="Front End Spec"
+                        description="The front end specification will appear here once it has been generated."
+                      />
                     </TabsContent>
 
                     <TabsContent value="backend" className="mt-6">
-                      <IdeaDocumentTab ideaId={id} documentType="BackEndSpecification" />
+                      <WorkflowSpecTab
+                        ideaId={id}
+                        field="backend_spec"
+                        title="Back End Spec"
+                        description="The back end specification will appear here once it has been generated."
+                      />
                     </TabsContent>
 
-                    <TabsContent value="estimate" className="mt-6">
-                      <IdeaDocumentTab ideaId={id} documentType="Estimate" />
+                    <TabsContent value="swagger" className="mt-6">
+                      <WorkflowSpecTab
+                        ideaId={id}
+                        field="swagger"
+                        title="Swagger"
+                        description="The Swagger/OpenAPI specification will appear here once it has been generated."
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="ultimate-website" className="mt-6">
+                      <UltimateWebsiteTab ideaId={id} />
                     </TabsContent>
 
                     <TabsContent value="details" className="mt-6">

@@ -1,10 +1,11 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { useLeanCanvas } from "@/hooks/use-lean-canvas";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, Copy, Download, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, Copy, Download, Sparkles, Flame, Hammer, AlertTriangle, RotateCcw } from "lucide-react";
 import { CanvasSectionComponent } from "@/components/canvas-section";
 import { jsonToCSV, downloadCSV, copyHtmlToClipboard } from "@/lib/utils";
 
@@ -16,12 +17,14 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
     const { toast } = useToast();
     const [canvasNotes, setCanvasNotes] = useState('');
     const [isEditingCanvas, setIsEditingCanvas] = useState(false);
+    const [view, setView] = useState<'document' | 'sections'>('document');
 
     const {
         canvas,
         isLoading: isLoadingCanvas,
         regenerateCanvas,
-        isRegenerating: isCanvasRegenerating
+        isRegenerating: isCanvasRegenerating,
+        isTimedOut: isCanvasTimedOut
     } = useLeanCanvas(ideaId);
 
     const hasContent = !!canvas?.content;
@@ -48,15 +51,32 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
     return (
         <div className="space-y-6">
             {/* Canvas Header Actions */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
+            <div className="bg-white p-4 rounded-lg border border-neutral-200 shadow-sm space-y-4">
                 <div>
                     <h2 className="text-lg font-bold text-neutral-900">Lean Canvas</h2>
                     <p className="text-sm text-neutral-500">
                         A 1-page business plan template that helps you deconstruct your idea into its key assumptions.
                     </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {canvas && (
+                        <div className="flex rounded-md border border-neutral-200 overflow-hidden">
+                            <button
+                                className={`px-3 py-1.5 text-sm font-medium ${view === 'document' ? 'bg-primary text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+                                onClick={() => { setView('document'); setIsEditingCanvas(false); }}
+                            >
+                                Document
+                            </button>
+                            <button
+                                className={`px-3 py-1.5 text-sm font-medium border-l border-neutral-200 ${view === 'sections' ? 'bg-primary text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+                                onClick={() => setView('sections')}
+                            >
+                                Sections
+                            </button>
+                        </div>
+                    )}
+
+                    {canvas && view === 'sections' && (
                         <Button
                             variant="outline"
                             size="sm"
@@ -149,102 +169,123 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
             </div>
 
             {/* Canvas Content */}
-            {isCanvasRegenerating ? (
+            {isCanvasRegenerating && !isCanvasTimedOut ? (
                 <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
-                    <div className="mx-auto w-16 h-16 mb-4 bg-amber-50 rounded-full flex items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <div className="mb-4 mx-auto relative w-16 h-16">
+                        <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                            <Flame className="h-14 w-14 text-amber-400" />
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                            <Hammer className="h-10 w-10 text-primary" />
+                        </div>
                     </div>
-                    <h3 className="text-lg font-bold text-neutral-900 mb-2">Regenerating Canvas...</h3>
-                    <p className="text-neutral-600">
-                        Please wait while we update your Lean Canvas based on the new instructions.
+                    <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
+                        Forging Your Lean Canvas
+                    </h4>
+                    <p className="text-neutral-600 mb-2">
+                        Please wait while we hammer out the Lean Canvas for your idea...
+                    </p>
+                    <p className="text-neutral-500 text-sm italic">
+                        This process usually takes 1-2 minutes.
                     </p>
                 </div>
-            ) : canvas ? (
-                <div id="lean-canvas-grid" className="grid grid-cols-1 md:grid-cols-5 gap-4 bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
-                    {/* Row 1 */}
-                    <div className="md:col-span-1 md:row-span-2">
-                        <CanvasSectionComponent
-                            section="Problem"
-                            content={canvas.problem}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                    </div>
-
-                    <div className="md:col-span-1">
-                        <CanvasSectionComponent
-                            section="Solution"
-                            content={canvas.solution}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                    </div>
-
-                    <div className="md:col-span-1 md:row-span-2">
-                        <CanvasSectionComponent
-                            section="UniqueValueProposition"
-                            content={canvas.uniqueValueProposition}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                    </div>
-
-                    <div className="md:col-span-1">
-                        <CanvasSectionComponent
-                            section="UnfairAdvantage"
-                            content={canvas.unfairAdvantage}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                    </div>
-
-                    <div className="md:col-span-1 md:row-span-2">
-                        <CanvasSectionComponent
-                            section="CustomerSegments"
-                            content={canvas.customerSegments}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                    </div>
-
-                    {/* Row 2 (middle columns) */}
-                    <div className="md:col-span-1">
-                        <CanvasSectionComponent
-                            section="KeyMetrics"
-                            content={canvas.keyMetrics}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                    </div>
-
-                    <div className="md:col-span-1">
-                        <CanvasSectionComponent
-                            section="Channels"
-                            content={canvas.channels}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                    </div>
-
-                    {/* Row 3 */}
-                    <div className="md:col-span-2">
-                        <CanvasSectionComponent
-                            section="CostStructure"
-                            content={canvas.costStructure}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
-                    </div>
-
-                    <div className="md:col-span-3">
-                        <CanvasSectionComponent
-                            section="RevenueStreams"
-                            content={canvas.revenueStreams}
-                            isEditing={isEditingCanvas}
-                            ideaId={ideaId}
-                        />
+            ) : isCanvasTimedOut ? (
+                <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-6">
+                    <div className="border border-destructive rounded-md p-6 bg-destructive/10">
+                        <div className="flex items-start space-x-4">
+                            <div className="mt-1">
+                                <AlertTriangle className="h-6 w-6 text-destructive" />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-destructive mb-2">Generation Timed Out</h4>
+                                <p className="text-neutral-700 mb-4">
+                                    The Lean Canvas generation is taking longer than expected.
+                                </p>
+                                <div className="flex items-center space-x-3">
+                                    <Button
+                                        onClick={handleRegenerateLeanCanvasClick}
+                                        disabled={isCanvasRegenerating}
+                                        className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
+                                    >
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                        Retry Generation
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
+            ) : canvas ? (
+                <>
+                    {view === 'sections' && (
+                        <div id="lean-canvas-grid" className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
+                            <CanvasSectionComponent
+                                section="Problem"
+                                content={canvas.problem}
+                                isEditing={isEditingCanvas}
+                                ideaId={ideaId}
+                            />
+                            <CanvasSectionComponent
+                                section="Solution"
+                                content={canvas.solution}
+                                isEditing={isEditingCanvas}
+                                ideaId={ideaId}
+                            />
+                            <CanvasSectionComponent
+                                section="UniqueValueProposition"
+                                content={canvas.uniqueValueProposition}
+                                isEditing={isEditingCanvas}
+                                ideaId={ideaId}
+                            />
+                            <CanvasSectionComponent
+                                section="UnfairAdvantage"
+                                content={canvas.unfairAdvantage}
+                                isEditing={isEditingCanvas}
+                                ideaId={ideaId}
+                            />
+                            <CanvasSectionComponent
+                                section="CustomerSegments"
+                                content={canvas.customerSegments}
+                                isEditing={isEditingCanvas}
+                                ideaId={ideaId}
+                            />
+                            <CanvasSectionComponent
+                                section="Channels"
+                                content={canvas.channels}
+                                isEditing={isEditingCanvas}
+                                ideaId={ideaId}
+                            />
+                            <CanvasSectionComponent
+                                section="KeyMetrics"
+                                content={canvas.keyMetrics}
+                                isEditing={isEditingCanvas}
+                                ideaId={ideaId}
+                            />
+                            <CanvasSectionComponent
+                                section="CostStructure"
+                                content={canvas.costStructure}
+                                isEditing={isEditingCanvas}
+                                ideaId={ideaId}
+                            />
+                            <div className="md:col-span-2">
+                                <CanvasSectionComponent
+                                    section="RevenueStreams"
+                                    content={canvas.revenueStreams}
+                                    isEditing={isEditingCanvas}
+                                    ideaId={ideaId}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {view === 'document' && canvas.content && (
+                        <div className="bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
+                            <div id="lean-canvas-content" className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700">
+                                <ReactMarkdown>{canvas.content}</ReactMarkdown>
+                            </div>
+                        </div>
+                    )}
+                </>
             ) : (
                 <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
                     <div className="mx-auto w-16 h-16 mb-4 bg-neutral-100 rounded-full flex items-center justify-center">
@@ -257,16 +298,6 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
                     <Button onClick={handleRegenerateLeanCanvasClick}>
                         Generate Lean Canvas
                     </Button>
-                </div>
-            )}
-
-            {/* HTML Content view */}
-            {hasContent && canvas?.content && (
-                <div className="bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
-                    <h3 className="text-lg font-bold text-neutral-900 mb-4">Document View</h3>
-                    <div id="lean-canvas-content" className="prose max-w-none">
-                        <div dangerouslySetInnerHTML={{ __html: canvas.content }} />
-                    </div>
                 </div>
             )}
         </div>
