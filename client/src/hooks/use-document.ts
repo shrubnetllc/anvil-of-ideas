@@ -25,8 +25,10 @@ export function useDocument(ideaId: string, documentType: DocumentType) {
                 const data = await response.json();
                 setDocument(data);
 
-                // Only treat as complete if document has status 'completed'
-                if (data && data.status === "completed") {
+                // Treat as complete if status is 'completed' OR if content exists
+                // (anvil-api may have written content before the status was updated)
+                const hasContent = !!(data.content || data.contentSections);
+                if (data && (data.status === "completed" || hasContent)) {
                     setIsGenerating(false);
                     setIsTimedOut(false);
                 } else if (data && data.status === "generating") {
@@ -85,10 +87,11 @@ export function useDocument(ideaId: string, documentType: DocumentType) {
         };
     }, [isGenerating, checkJobStatus]);
 
-    // Initial fetch
+    // Initial fetch + check for active jobs
     useEffect(() => {
         fetchDocument();
-    }, [fetchDocument]);
+        checkJobStatus();
+    }, [fetchDocument, checkJobStatus]);
 
     const generate = async (instructions: string = "") => {
         try {

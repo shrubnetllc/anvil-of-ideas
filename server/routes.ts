@@ -454,8 +454,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.updateIdeaStatus(ideaId, "Generating", userId);
 
       // Fire-and-forget: trigger anvil-api generation pipeline
-      triggerGeneration(ideaId, job.id).catch((err) => {
+      triggerGeneration(ideaId, job.id).catch(async (err) => {
         console.error(`[generate] anvil-api trigger failed for idea ${ideaId}:`, err);
+        try {
+          await storage.updateJob(job.id, {
+            status: "failed",
+            description: `anvil-api trigger failed: ${err.message || err}`,
+          });
+          await storage.updateIdeaStatus(ideaId, "Draft", userId);
+        } catch (cleanupErr) {
+          console.error(`[generate] failed to clean up after trigger failure:`, cleanupErr);
+        }
       });
 
       return res.status(200).json({
@@ -473,7 +482,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   for (const { path, docType } of [
     { path: "/api/ideas/:id/generate-functional-requirements", docType: "FunctionalRequirements" },
     { path: "/api/ideas/:id/generate-business-requirements", docType: "BusinessRequirements" },
-    { path: "/api/ideas/:id/generate-ultimate-website", docType: "FrontEndSpecification" },
     { path: "/api/ideas/:id/workflows", docType: "Workflows" },
   ] as const) {
     app.post(path, isAuthenticated, async (req, res, next) => {
@@ -521,8 +529,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         await storage.updateIdeaStatus(ideaId, "Generating", userId);
 
-        triggerGeneration(ideaId, job.id).catch((err) => {
+        triggerGeneration(ideaId, job.id).catch(async (err) => {
           console.error(`[generate:${docType}] anvil-api trigger failed for idea ${ideaId}:`, err);
+          try {
+            await storage.updateJob(job.id, {
+              status: "failed",
+              description: `anvil-api trigger failed: ${err.message || err}`,
+            });
+            await storage.updateIdeaStatus(ideaId, "Draft", userId);
+          } catch (cleanupErr) {
+            console.error(`[generate:${docType}] failed to clean up after trigger failure:`, cleanupErr);
+          }
         });
 
         return res.status(200).json({
@@ -534,6 +551,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
   }
+
+  // ==================== ULTIMATE WEBSITE GENERATION ====================
+
+  const ULTIMATE_WEBSITE_GENERATOR_URL = process.env.ULTIMATE_WEBSITE_GENERATOR_URL || "http://localhost:8008";
+
+  app.post("/api/ideas/:id/generate-ultimate-website", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const userId = req.user!.id;
+      const idea = await storage.getIdeaById(ideaId, userId);
+
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      const { businessName, industry, targetAudience, businessDescription } = req.body;
+
+      // Call the ultimate website generator FastAPI app directly
+      const response = await fetch(`${ULTIMATE_WEBSITE_GENERATOR_URL}/api/development/ultimate-homepage-v9-2`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          business_name: businessName,
+          industry,
+          target_audience: targetAudience,
+          business_description: businessDescription,
+        }),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Ultimate website generator failed (${response.status}): ${text}`);
+      }
+
+      const result = await response.json();
+
+      // Store the task_id on the idea for later retrieval
+      await storage.updateIdea(ideaId, { websiteUrl: result.task_id }, userId);
+
+      return res.status(200).json({
+        message: "Ultimate website generation started",
+        taskId: result.task_id,
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  });
 
   // ==================== INTERNAL WEBHOOK (anvil-api callbacks) ====================
 
@@ -566,13 +630,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updates: Partial<UpdateJob> = { status, description };
       await storage.updateJob(jobId, updates);
 
+      // Map description keywords to document types for status updates
+      // Descriptions from anvil-api: "Lean Canvas complete. Starting PRD (2/10)", etc.
+      const DOC_COMPLETE_PATTERNS: Record<string, string> = {
+        "lean canvas complete": "LeanCanvas",
+        "prd complete": "ProjectRequirements",
+        "brd complete": "BusinessRequirements",
+        "frd complete": "FunctionalRequirements",
+      };
+
+      // Check if any document was marked complete in this progress update
+      if (description && job.ideaId) {
+        const lowerDesc = description.toLowerCase();
+        for (const [pattern, docType] of Object.entries(DOC_COMPLETE_PATTERNS)) {
+          if (lowerDesc.includes(pattern)) {
+            const doc = await storage.getDocumentByType(job.ideaId, docType);
+            if (doc && doc.status !== "completed") {
+              await storage.updateDocument(doc.id, { status: "completed" });
+              console.log(`[webhook] Marked ${docType} document as completed for idea ${job.ideaId}`);
+            }
+            break;
+          }
+        }
+      }
+
       // Publish Socket.IO event based on status
       const lowerStatus = status.toLowerCase();
       if (lowerStatus === "completed" || lowerStatus === "done") {
         publishJobEvent(jobId, "done", { message: description || "Completed" });
-        // Also update idea status
+        // Update idea status
         if (job.ideaId) {
           await storage.updateIdeaStatus(job.ideaId, "Completed");
+          // Mark any remaining documents for this idea as completed
+          const docs = await storage.getDocumentsByIdeaId(job.ideaId);
+          for (const doc of docs) {
+            if (doc.status !== "completed" && (doc.content || doc.contentSections)) {
+              await storage.updateDocument(doc.id, { status: "completed" });
+              console.log(`[webhook] Marked ${doc.documentType} document as completed (job done) for idea ${job.ideaId}`);
+            }
+          }
         }
       } else if (lowerStatus === "failed" || lowerStatus === "error") {
         publishJobEvent(jobId, "error", { message: description || "Generation failed" });
@@ -693,6 +789,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/ideas/:id/project-workflows", isAuthenticated, async (req, res, next) => {
     try {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      res.setHeader('Pragma', 'no-cache');
       const ideaId = req.params.id;
       const workflows = await fetchProjectWorkflows(ideaId, req.user!.id);
       return res.status(200).json(workflows);
@@ -715,7 +813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const ideaId = req.params.id;
       const idea = await storage.getIdeaById(ideaId, req.user!.id);
-      return res.status(200).json({ websiteUrl: idea?.websiteUrl || null });
+      return res.status(200).json({ task_id: idea?.websiteUrl || null });
     } catch (error: any) {
       next(error);
     }

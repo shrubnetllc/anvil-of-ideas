@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, RefreshCw, Copy, Download, Sparkles } from "lucide-react";
+import { Loader2, RefreshCw, Copy, Download, Sparkles, Flame, Hammer, AlertTriangle, RotateCcw } from "lucide-react";
 import { CanvasSectionComponent } from "@/components/canvas-section";
 import { jsonToCSV, downloadCSV, copyHtmlToClipboard } from "@/lib/utils";
 
@@ -23,7 +23,8 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
         canvas,
         isLoading: isLoadingCanvas,
         regenerateCanvas,
-        isRegenerating: isCanvasRegenerating
+        isRegenerating: isCanvasRegenerating,
+        isTimedOut: isCanvasTimedOut
     } = useLeanCanvas(ideaId);
 
     const hasContent = !!canvas?.content;
@@ -168,15 +169,51 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
             </div>
 
             {/* Canvas Content */}
-            {isCanvasRegenerating ? (
+            {isCanvasRegenerating && !isCanvasTimedOut ? (
                 <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-12 text-center">
-                    <div className="mx-auto w-16 h-16 mb-4 bg-amber-50 rounded-full flex items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <div className="mb-4 mx-auto relative w-16 h-16">
+                        <div className="absolute inset-0 flex items-center justify-center animate-pulse">
+                            <Flame className="h-14 w-14 text-amber-400" />
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center animate-spin">
+                            <Hammer className="h-10 w-10 text-primary" />
+                        </div>
                     </div>
-                    <h3 className="text-lg font-bold text-neutral-900 mb-2">Regenerating Canvas...</h3>
-                    <p className="text-neutral-600">
-                        Please wait while we update your Lean Canvas based on the new instructions.
+                    <h4 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
+                        Forging Your Lean Canvas
+                    </h4>
+                    <p className="text-neutral-600 mb-2">
+                        Please wait while we hammer out the Lean Canvas for your idea...
                     </p>
+                    <p className="text-neutral-500 text-sm italic">
+                        This process usually takes 1-2 minutes.
+                    </p>
+                </div>
+            ) : isCanvasTimedOut ? (
+                <div className="bg-white rounded-lg border border-neutral-200 shadow-sm p-6">
+                    <div className="border border-destructive rounded-md p-6 bg-destructive/10">
+                        <div className="flex items-start space-x-4">
+                            <div className="mt-1">
+                                <AlertTriangle className="h-6 w-6 text-destructive" />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-destructive mb-2">Generation Timed Out</h4>
+                                <p className="text-neutral-700 mb-4">
+                                    The Lean Canvas generation is taking longer than expected.
+                                </p>
+                                <div className="flex items-center space-x-3">
+                                    <Button
+                                        onClick={handleRegenerateLeanCanvasClick}
+                                        disabled={isCanvasRegenerating}
+                                        className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
+                                    >
+                                        <RefreshCw className="mr-2 h-4 w-4" />
+                                        Retry Generation
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             ) : canvas ? (
                 <>

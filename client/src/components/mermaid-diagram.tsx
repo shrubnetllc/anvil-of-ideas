@@ -17,6 +17,19 @@ type Props = {
 
 let mermaidInitialized = false;
 
+function cleanupMermaidElements(idPrefix: string) {
+    // Remove the rendered SVG element mermaid leaves in the body
+    const orphan = document.getElementById(idPrefix);
+    if (orphan) orphan.remove();
+    // Remove the wrapper div (d + id) mermaid creates
+    const wrapper = document.getElementById('d' + idPrefix);
+    if (wrapper) wrapper.remove();
+    // Remove any stray mermaid error elements appended to body
+    document.querySelectorAll('.mermaid-error, [id^="' + idPrefix + '"]').forEach(el => {
+        if (el.parentElement === document.body) el.remove();
+    });
+}
+
 export function MermaidDiagram({ code, open, onOpenChange, title = "Workflow Diagram" }: Props) {
     const id = useId(); // unique per component instance
     const [svg, setSvg] = useState<string>("");
@@ -36,22 +49,25 @@ export function MermaidDiagram({ code, open, onOpenChange, title = "Workflow Dia
         if (!open || !code) return;
 
         let cancelled = false;
+        const cleanId = `mermaid-${id.replace(/:/g, "-")}`;
 
         async function render() {
             try {
-                // Ensure we have a clean ID for mermaid
-                const cleanId = `mermaid-${id.replace(/:/g, "-")}`;
                 const { svg } = await mermaid.render(cleanId, code);
                 if (!cancelled) setSvg(svg);
             } catch (e: any) {
                 console.error("Mermaid render error:", e);
                 if (!cancelled) setSvg(`<pre style="color:red; white-space: pre-wrap;">Mermaid error: ${String(e?.message ?? e)}</pre>`);
+            } finally {
+                // Mermaid v10 appends error/rendered elements to document.body — clean them up
+                cleanupMermaidElements(cleanId);
             }
         }
 
         render();
         return () => {
             cancelled = true;
+            cleanupMermaidElements(cleanId);
         };
     }, [code, id, open]);
 

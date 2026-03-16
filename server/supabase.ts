@@ -11,6 +11,12 @@ if (!supabaseUrl || !supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Service role client bypasses RLS — use for tables without user_id (e.g. workflows)
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+export const supabaseAdmin = supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey)
+  : supabase;
+
 function getAuthenticatedSupabase(userId?: string) {
   if (!userId) return supabase;
 
@@ -33,14 +39,15 @@ export async function fetchProjectWorkflows(ideaId: string, requestingUserId?: s
   try {
     console.log(`Fetching project workflows for idea ${ideaId} from Supabase`);
 
-    const client = getAuthenticatedSupabase(requestingUserId);
-    const { data, error } = await client
-      .from('documents')
-      .select('content, content_sections')
+    // Use service role client — RLS is enforced at the route level via isAuthenticated
+    const { data, error } = await supabaseAdmin
+      .from('workflows')
+      .select('*')
       .eq('idea_id', ideaId)
-      .eq('document_type', 'Workflows')
       .order('created_at', { ascending: false })
       .limit(1);
+
+    console.log(`Workflows query result - error:`, error, `data:`, JSON.stringify(data));
 
     if (error) {
       throw error;
@@ -48,16 +55,11 @@ export async function fetchProjectWorkflows(ideaId: string, requestingUserId?: s
 
     if (!data || data.length === 0) {
       console.log(`No workflows found for idea ${ideaId} in Supabase`);
-      return [];
+      return null;
     }
 
-    // If content_sections has workflow steps, return them
-    const doc = data[0];
-    if (doc.content_sections && Array.isArray(doc.content_sections)) {
-      return doc.content_sections;
-    }
-
-    return [];
+    console.log(`Found workflow with keys:`, Object.keys(data[0]));
+    return data[0];
   } catch (error) {
     console.error('Error fetching project workflows from Supabase:', error);
     throw error;
