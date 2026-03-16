@@ -64,7 +64,14 @@ export function useLeanCanvas(ideaId: string) {
 
   // Check for active generation job
   const canvasRef = useRef(canvas);
-  useEffect(() => { canvasRef.current = canvas; }, [canvas]);
+  useEffect(() => {
+    canvasRef.current = canvas;
+    // If canvas content arrived while we were showing "timed out", clear it
+    if (canvas?.content) {
+      setIsGenerating(false);
+      setIsTimedOut(false);
+    }
+  }, [canvas]);
 
   const checkJobStatus = useCallback(async () => {
     try {
