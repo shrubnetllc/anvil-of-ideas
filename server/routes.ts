@@ -9,7 +9,7 @@ import { insertIdeaSchema, insertDocumentSchema, DocumentType } from "@shared/sc
 import { fetchProjectWorkflows, fetchProjectEstimate } from "./supabase";
 import { emailService } from "./email";
 import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
-import { triggerGeneration } from "./anvil-api";
+import { triggerGeneration, triggerStepGeneration } from "./anvil-api";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
@@ -551,6 +551,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
     });
   }
+
+  // ==================== PER-STEP REGENERATION ====================
+
+  const VALID_STEPS = ["lean_canvas", "prd", "brd", "frd", "workflows", "specs"];
+
+  app.post("/api/ideas/:id/regenerate/:step", isAuthenticated, async (req, res, next) => {
+    try {
+      const ideaId = req.params.id;
+      const step = req.params.step;
+      const userId = req.user!.id;
+
+      if (!VALID_STEPS.includes(step)) {
+        return res.status(400).json({ message: `Invalid step: ${step}. Must be one of: ${VALID_STEPS.join(", ")}` });
+      }
+
+      const idea = await storage.getIdeaById(ideaId, userId);
+      if (!idea) {
+        return res.status(404).json({ message: "Idea not found" });
+      }
+
+      // Guard: check if there's already a pending/processing job for this idea
+      const existingJob = await storage.getLatestWorkflowJob(ideaId, userId);
+      if (existingJob) {
+        const jobStatus = (existingJob.status || "").toLowerCase();
+        if (jobStatus === "pending" || jobStatus === "processing" || jobStatus === "starting") {
+          const jobAge = Date.now() - new Date(existingJob.updatedAt).getTime();
+          const STUCK_THRESHOLD_MS = 5 * 60 * 1000;
+          const force = req.query.force === "true" || req.body?.force === true;
+          if (jobAge > STUCK_THRESHOLD_MS || force) {
+            console.warn(`[regenerate:${step}] Clearing stuck job ${existingJob.id} (age=${Math.round(jobAge / 60000)}m, force=${force})`);
+            await storage.updateJob(existingJob.id, {
+              status: "failed",
+              description: force
+                ? "Manually overridden by user — starting step regeneration"
+                : "Job timed out — marked as failed automatically",
+            });
+          } else {
+            return res.status(409).json({
+              message: "Generation is already in progress for this idea",
+              jobId: existingJob.id,
+            });
+          }
+        }
+      }
+
+      const job = await storage.createJob({
+        userId,
+        ideaId,
+        documentType: "LeanCanvas",
+        description: `Step '${step}' regeneration started`,
+        status: "pending",
+      });
+
+      await storage.updateIdeaStatus(ideaId, "Generating", userId);
+
+      // Fire-and-forget: trigger step-specific generation
+      triggerStepGeneration(ideaId, job.id, step).catch(async (err) => {
+        console.error(`[regenerate:${step}] anvil-api trigger failed for idea ${ideaId}:`, err);
+        try {
+          await storage.updateJob(job.id, {
+            status: "failed",
+            description: `anvil-api trigger failed: ${err.message || err}`,
+          });
+          await storage.updateIdeaStatus(ideaId, "Draft", userId);
+        } catch (cleanupErr) {
+          console.error(`[regenerate:${step}] failed to clean up after trigger failure:`, cleanupErr);
+        }
+      });
+
+      return res.status(200).json({
+        message: `Step '${step}' regeneration started`,
+        jobId: job.id,
+      });
+    } catch (error: any) {
+      next(error);
+    }
+  });
 
   // ==================== ULTIMATE WEBSITE GENERATION ====================
 

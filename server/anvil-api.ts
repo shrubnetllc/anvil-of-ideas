@@ -81,3 +81,43 @@ export async function triggerGeneration(
 
   return response.json();
 }
+
+/**
+ * Trigger a single pipeline step for the given idea via the anvil-api.
+ *
+ * @param ideaId - The idea UUID
+ * @param jobId - The job UUID for tracking progress
+ * @param step - One of: lean_canvas, prd, brd, frd, workflows, specs
+ */
+export async function triggerStepGeneration(
+  ideaId: string,
+  jobId: string,
+  step: string,
+): Promise<{ message: string; idea_id: string }> {
+  if (!isConfigured()) {
+    throw new Error(
+      "anvil-api not configured. Set ANVIL_API_URL, ANVIL_API_USERNAME, and ANVIL_API_PASSWORD."
+    );
+  }
+
+  const token = await getToken();
+  const response = await fetch(`${ANVIL_API_URL}/jobs/generate/${ideaId}/step/${step}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      job_id: jobId,
+      callback_url: ANVIL_CALLBACK_URL || null,
+      webhook_secret: ANVIL_WEBHOOK_SECRET || null,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`anvil-api step generation failed (${response.status}): ${text}`);
+  }
+
+  return response.json();
+}

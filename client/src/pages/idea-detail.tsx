@@ -1,5 +1,5 @@
 import { useParams, useLocation } from "wouter";
-import { useIdea } from "@/hooks/use-ideas";
+import { useIdea, useIdeas } from "@/hooks/use-ideas";
 import { Sidebar } from "@/components/sidebar";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Hammer, Info } from "lucide-react";
@@ -20,6 +20,7 @@ export default function IdeaDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
   const { idea, isLoading: isLoadingIdea } = useIdea(id);
+  const { generateCanvas, isGenerating } = useIdeas();
 
   // URL-based tab state management
   const getTabFromUrl = () => {
@@ -121,14 +122,25 @@ export default function IdeaDetail() {
               <Button variant="ghost" size="icon" className="mr-4 mt-1" onClick={handleBackClick}>
                 <ArrowLeft className="h-6 w-6" />
               </Button>
-              <div>
-                <div className="mb-1">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-1">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
                     ${idea.status === 'Completed' ? 'bg-green-100 text-green-800' : ''}
                     ${(idea.status === 'Generating' || idea.status === 'Processing') ? 'bg-amber-100 text-amber-800' : ''}
                     ${idea.status === 'Draft' ? 'bg-neutral-100 text-neutral-800' : ''}`}>
                     {idea.status}
                   </span>
+                  {idea.status === 'Draft' && (
+                    <Button
+                      size="sm"
+                      onClick={() => generateCanvas(id)}
+                      disabled={isGenerating}
+                      className="bg-gradient-to-r from-amber-500 to-amber-700 hover:from-amber-600 hover:to-amber-800"
+                    >
+                      <Hammer className="mr-2 h-4 w-4" />
+                      Start Forging
+                    </Button>
+                  )}
                 </div>
                 <h1 className="text-2xl font-bold text-neutral-900">
                   {idea.title || idea.companyName || idea.description.split(' ').slice(0, 5).join(' ') + '...'}

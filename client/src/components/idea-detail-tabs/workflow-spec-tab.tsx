@@ -1,8 +1,9 @@
 import ReactMarkdown from "react-markdown";
 import { useWorkflows } from "@/hooks/use-workflows";
+import { useIdeas } from "@/hooks/use-ideas";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Copy, Sparkles } from "lucide-react";
+import { Loader2, Copy, Sparkles, RefreshCw } from "lucide-react";
 import { copyHtmlToClipboard } from "@/lib/utils";
 import { WorkflowData } from "@/hooks/use-workflows";
 
@@ -18,6 +19,7 @@ interface WorkflowSpecTabProps {
 export function WorkflowSpecTab({ ideaId, field, title, description }: WorkflowSpecTabProps) {
     const { toast } = useToast();
     const { workflow, isLoading } = useWorkflows(ideaId);
+    const { regenerateStep, isRegeneratingStep } = useIdeas();
 
     const content = workflow?.[field] as string | null | undefined;
 
@@ -76,6 +78,15 @@ export function WorkflowSpecTab({ ideaId, field, title, description }: WorkflowS
                     >
                         <Copy className="mr-2 h-4 w-4" />
                         Copy
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => regenerateStep({ ideaId, step: "specs" })}
+                        disabled={isRegeneratingStep}
+                    >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Regenerate
                     </Button>
                 </div>
             </div>

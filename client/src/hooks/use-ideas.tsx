@@ -50,14 +50,14 @@ export function useIdeas() {
       queryClient.invalidateQueries({ queryKey: ["/api/ideas"] });
       queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
       toast({
-        title: "Canvas generation started",
-        description: "Your Lean Canvas is being generated. You'll be notified when it's ready.",
+        title: "Forging started",
+        description: "Your documents are being forged. You'll be notified when they're ready.",
       });
     },
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to start canvas generation",
+        description: error.message || "Failed to start forging",
         variant: "destructive",
       });
     },
@@ -79,6 +79,31 @@ export function useIdeas() {
       toast({
         title: "Error",
         description: error.message || "Failed to delete idea",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const regenerateStepMutation = useMutation({
+    mutationFn: async ({ ideaId, step }: { ideaId: string; step: string }) => {
+      let res = await apiRequest("POST", `/api/ideas/${ideaId}/regenerate/${step}`, {});
+      if (res.status === 409) {
+        res = await apiRequest("POST", `/api/ideas/${ideaId}/regenerate/${step}?force=true`, {});
+      }
+      return res.json();
+    },
+    onSuccess: (_, { ideaId, step }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/ideas"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
+      toast({
+        title: "Regeneration started",
+        description: `Regenerating ${step.replace(/_/g, " ")}. You'll be notified when it's ready.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start regeneration",
         variant: "destructive",
       });
     },
@@ -115,6 +140,8 @@ export function useIdeas() {
     isUpdating: updateIdeaMutation.isPending,
     generateCanvas: generateCanvasMutation.mutate,
     isGenerating: generateCanvasMutation.isPending,
+    regenerateStep: regenerateStepMutation.mutate,
+    isRegeneratingStep: regenerateStepMutation.isPending,
     deleteIdea: deleteIdeaMutation.mutate,
     isDeleting: deleteIdeaMutation.isPending,
   };

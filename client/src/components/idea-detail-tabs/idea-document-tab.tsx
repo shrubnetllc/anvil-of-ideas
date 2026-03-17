@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useDocument } from "@/hooks/use-document";
+import { useIdeas } from "@/hooks/use-ideas";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,10 +15,19 @@ interface IdeaDocumentTabProps {
     documentType: DocumentType;
 }
 
+const DOC_TYPE_TO_STEP: Record<string, string> = {
+    ProjectRequirements: "prd",
+    BusinessRequirements: "brd",
+    FunctionalRequirements: "frd",
+};
+
 export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) {
     const { toast } = useToast();
     const [tabNotes, setTabNotes] = useState('');
     const [view, setView] = useState<'document' | 'sections'>('document');
+    const { regenerateStep, isRegeneratingStep } = useIdeas();
+
+    const stepName = DOC_TYPE_TO_STEP[documentType];
 
     const {
         document,
@@ -146,13 +156,12 @@ export function IdeaDocumentTab({ ideaId, documentType }: IdeaDocumentTabProps) 
                         <Button
                             size="sm"
                             variant="outline"
-                            onClick={async () => {
-                                if (document?.id) {
-                                    await deleteDocument();
-                                    handleGenerate(tabNotes);
+                            onClick={() => {
+                                if (stepName) {
+                                    regenerateStep({ ideaId, step: stepName });
                                 }
                             }}
-                            disabled={documentGenerating}
+                            disabled={documentGenerating || isRegeneratingStep}
                         >
                             <RefreshCw className="mr-2 h-4 w-4" />
                             Regenerate

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useWorkflows, WorkflowStep } from "@/hooks/use-workflows";
+import { useIdeas } from "@/hooks/use-ideas";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Copy, Sparkles, GitBranch } from "lucide-react";
+import { Loader2, Copy, Sparkles, GitBranch, RefreshCw } from "lucide-react";
 import { copyHtmlToClipboard } from "@/lib/utils";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 
@@ -14,6 +15,7 @@ interface WorkflowsTabProps {
 export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
     const { toast } = useToast();
     const { workflow, steps, isLoading } = useWorkflows(ideaId);
+    const { regenerateStep, isRegeneratingStep } = useIdeas();
     const [diagramOpen, setDiagramOpen] = useState(false);
 
     const formatStepTitle = (key: string) => {
@@ -87,6 +89,15 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                     >
                         <Copy className="mr-2 h-4 w-4" />
                         Copy
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => regenerateStep({ ideaId, step: "workflows" })}
+                        disabled={isRegeneratingStep}
+                    >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Regenerate
                     </Button>
                 </div>
             </div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useLeanCanvas } from "@/hooks/use-lean-canvas";
+import { useIdeas } from "@/hooks/use-ideas";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -18,6 +19,7 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
     const [canvasNotes, setCanvasNotes] = useState('');
     const [isEditingCanvas, setIsEditingCanvas] = useState(false);
     const [view, setView] = useState<'document' | 'sections'>('document');
+    const { regenerateStep, isRegeneratingStep } = useIdeas();
 
     const {
         canvas,
@@ -30,12 +32,7 @@ export function LeanCanvasTab({ ideaId }: LeanCanvasTabProps) {
     const hasContent = !!canvas?.content;
 
     const handleRegenerateLeanCanvasClick = () => {
-        regenerateCanvas({ notes: canvasNotes });
-        toast({
-            title: "Canvas regeneration started",
-            description: "Your Lean Canvas is now being regenerated. This may take a few moments.",
-            variant: "default",
-        });
+        regenerateStep({ ideaId, step: "lean_canvas" });
         setCanvasNotes('');
     };
 
