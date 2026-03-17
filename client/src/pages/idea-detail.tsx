@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect } from "react";
 import { queryClient } from "@/lib/queryClient";
 
+import { PipelineProgress } from "@/components/pipeline-progress";
 import { LeanCanvasTab } from "@/components/idea-detail-tabs/lean-canvas-tab";
 import { IdeaDocumentTab } from "@/components/idea-detail-tabs/idea-document-tab";
 import { IdeaDetailsTab } from "@/components/idea-detail-tabs/idea-details-tab";
@@ -48,7 +49,7 @@ export default function IdeaDetail() {
   useEffect(() => {
     let timer: number | null = null;
 
-    if (idea?.status === "Generating") {
+    if (idea?.status === "Generating" || idea?.status === "Processing") {
       timer = window.setInterval(() => {
         queryClient.invalidateQueries({ queryKey: [`/api/ideas/${id}`] });
         queryClient.invalidateQueries({ queryKey: [`/api/ideas/${id}/canvas`] });
@@ -124,7 +125,7 @@ export default function IdeaDetail() {
                 <div className="mb-1">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
                     ${idea.status === 'Completed' ? 'bg-green-100 text-green-800' : ''}
-                    ${idea.status === 'Generating' ? 'bg-amber-100 text-amber-800' : ''}
+                    ${(idea.status === 'Generating' || idea.status === 'Processing') ? 'bg-amber-100 text-amber-800' : ''}
                     ${idea.status === 'Draft' ? 'bg-neutral-100 text-neutral-800' : ''}`}>
                     {idea.status}
                   </span>
@@ -134,6 +135,10 @@ export default function IdeaDetail() {
                 </h1>
               </div>
             </div>
+
+            {(idea.status === "Generating" || idea.status === "Processing") && (
+              <PipelineProgress ideaId={id} />
+            )}
 
             <div className="flex flex-col lg:flex-row lg:space-x-6">
               <div className="w-full">
