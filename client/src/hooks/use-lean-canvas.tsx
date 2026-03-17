@@ -120,10 +120,14 @@ export function useLeanCanvas(ideaId: string) {
     }
   }, [ideaId]);
 
-  // Check for active job on mount
+  // Check for active job on mount — but only after canvas query settles.
+  // Without this guard, checkJobStatus can race ahead of the query and
+  // flag a stale pending job as "timed out" before we know canvas exists.
   useEffect(() => {
-    checkJobStatus();
-  }, [checkJobStatus]);
+    if (!isLoading) {
+      checkJobStatus();
+    }
+  }, [isLoading, checkJobStatus]);
 
   // Poll job status while generating
   useEffect(() => {
