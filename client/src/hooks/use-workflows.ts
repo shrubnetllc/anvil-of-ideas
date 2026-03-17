@@ -15,6 +15,7 @@ export interface WorkflowData {
     workflow_spec?: string | null;
     backend_spec?: string | null;
     swagger?: string | null;
+    estimate?: string | null;
     status?: string;
     created_at?: string;
     updated_at?: string;
