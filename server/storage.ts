@@ -1,12 +1,13 @@
 import {
-  users, ideas, documents, appSettings,
+  users, ideas, documents, appSettings, auditLogs,
   type User, type InsertUser,
   type Idea, type InsertIdea,
   type IdeaStatus, type DocumentType,
   type AppSetting,
   type Document, type InsertDocument, type UpdateDocument,
   type LeanCanvasContent,
-  jobs, type Job, type InsertJob, type UpdateJob
+  jobs, type Job, type InsertJob, type UpdateJob,
+  type AuditLog, type InsertAuditLog
 } from "@shared/schema";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -23,7 +24,11 @@ export interface IStorage {
   // User operations
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+
+  // Audit log operations
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
 
   // Idea operations
   getIdeasByUser(userId: string): Promise<Idea[]>;
@@ -80,6 +85,16 @@ export class DatabaseStorage implements IStorage {
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.username, username));
     return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [entry] = await db.insert(auditLogs).values(log).returning();
+    return entry;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -454,6 +469,8 @@ export class MemStorage implements IStorage {
     this.sessionStore = new MemoryStore({ checkPeriod: 86400000 });
   }
 
+  private auditLogs: Map<string, AuditLog> = new Map();
+
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     return this.users.get(id);
@@ -463,12 +480,33 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values()).find(u => u.username === username);
   }
 
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find(u => u.email === email);
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const id = uuidv4();
+    const entry: AuditLog = {
+      id,
+      actorId: log.actorId || null,
+      action: log.action,
+      targetType: log.targetType,
+      targetId: log.targetId,
+      details: log.details || null,
+      ipAddress: log.ipAddress || null,
+      createdAt: new Date(),
+    };
+    this.auditLogs.set(id, entry);
+    return entry;
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = uuidv4();
     const user: User = {
       ...insertUser,
       id,
       email: insertUser.email || null,
+      role: insertUser.role || "user",
       emailVerified: "false",
       verificationToken: null,
       verificationTokenExpiry: null

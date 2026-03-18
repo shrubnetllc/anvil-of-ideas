@@ -8,7 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle, Save, User, RefreshCw, X, Info as InfoIcon } from "lucide-react";
+import { Send, Settings as SettingsIcon, Mail, AlertCircle, CheckCircle, Save, User, RefreshCw, X, Info as InfoIcon, UserPlus, Shield } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,15 @@ export default function Settings() {
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState<boolean | null>(null);
   const [isResendingVerification, setIsResendingVerification] = useState(false);
+
+  // Admin: Create User state
+  const [newUsername, setNewUsername] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newRole, setNewRole] = useState<"user" | "superadmin">("user");
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  const isSuperadmin = user?.role === "superadmin";
 
   // Load email configuration when component mounts
   useEffect(() => {
@@ -286,7 +296,47 @@ export default function Settings() {
     }
   };
 
-  // We've removed the tabClass helper since we're using inline styles now
+  const handleCreateUser = async () => {
+    if (!newUsername || !newEmail || !newPassword) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingUser(true);
+
+    try {
+      const response = await apiRequest("POST", "/api/admin/users", {
+        username: newUsername,
+        email: newEmail,
+        password: newPassword,
+        role: newRole,
+      });
+      const data = await response.json();
+
+      toast({
+        title: "User Created",
+        description: `User "${data.username}" has been created with role "${data.role}".`,
+      });
+
+      // Reset form
+      setNewUsername("");
+      setNewEmail("");
+      setNewPassword("");
+      setNewRole("user");
+    } catch (error) {
+      toast({
+        title: "Failed to Create User",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
 
   return (
     <div className="flex min-h-screen">
@@ -327,16 +377,28 @@ export default function Settings() {
                 >
                   Account
                 </button>
-                <button 
+                <button
                   className={`py-2 px-4 font-medium text-sm border-b-2 ${
-                    currentTab === "notifications" 
-                      ? "border-primary text-primary" 
+                    currentTab === "notifications"
+                      ? "border-primary text-primary"
                       : "border-transparent text-neutral-500 hover:text-neutral-900"
                   }`}
                   onClick={() => setCurrentTab("notifications")}
                 >
                   Notifications
                 </button>
+                {isSuperadmin && (
+                  <button
+                    className={`py-2 px-4 font-medium text-sm border-b-2 ${
+                      currentTab === "admin"
+                        ? "border-primary text-primary"
+                        : "border-transparent text-neutral-500 hover:text-neutral-900"
+                    }`}
+                    onClick={() => setCurrentTab("admin")}
+                  >
+                    Admin
+                  </button>
+                )}
               </div>
             </div>
             
@@ -602,6 +664,89 @@ export default function Settings() {
                   <CardContent>
                     <p className="text-neutral-500">Notification preferences will be implemented in a future update.</p>
                   </CardContent>
+                </Card>
+              </div>
+            )}
+            {/* Admin Tab Content */}
+            {currentTab === "admin" && isSuperadmin && (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <UserPlus className="h-5 w-5 mr-2 text-primary" />
+                      Create User
+                    </CardTitle>
+                    <CardDescription>
+                      Add a new user to the platform. Only superadmins can create accounts.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="new-username">Username</Label>
+                        <Input
+                          id="new-username"
+                          placeholder="Enter username"
+                          value={newUsername}
+                          onChange={(e) => setNewUsername(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="new-email">Email</Label>
+                        <Input
+                          id="new-email"
+                          type="email"
+                          placeholder="Enter email address"
+                          value={newEmail}
+                          onChange={(e) => setNewEmail(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="new-password">Password</Label>
+                        <Input
+                          id="new-password"
+                          type="password"
+                          placeholder="Enter password (min 6 characters)"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="new-role">Role</Label>
+                        <Select value={newRole} onValueChange={(v) => setNewRole(v as "user" | "superadmin")}>
+                          <SelectTrigger id="new-role">
+                            <SelectValue placeholder="Select a role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="user">User</SelectItem>
+                            <SelectItem value="superadmin">Superadmin</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        onClick={handleCreateUser}
+                        disabled={isCreatingUser || !newUsername || !newEmail || !newPassword}
+                      >
+                        {isCreatingUser ? (
+                          <span className="flex items-center">
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Creating...
+                          </span>
+                        ) : (
+                          <span className="flex items-center">
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            Create User
+                          </span>
+                        )}
+                      </Button>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="bg-neutral-50 border-t px-6 py-4">
+                    <div className="flex items-center text-sm text-neutral-500">
+                      <Shield className="h-4 w-4 mr-2 text-primary" />
+                      User creation is logged for audit purposes
+                    </div>
+                  </CardFooter>
                 </Card>
               </div>
             )}

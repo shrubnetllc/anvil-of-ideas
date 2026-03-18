@@ -17,7 +17,7 @@ declare global {
 
 const scryptAsync = promisify(scrypt);
 
-async function hashPassword(password: string) {
+export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
   return `${buf.toString("hex")}.${salt}`;
@@ -65,49 +65,8 @@ export function setupAuth(app: Express) {
     done(null, user);
   });
 
-  app.post("/api/register", async (req, res, next) => {
-    try {
-      const existingUser = await storage.getUserByUsername(req.body.username);
-      if (existingUser) {
-        return res.status(400).send("Username already exists");
-      }
-
-      const user = await storage.createUser({
-        ...req.body,
-        password: await hashPassword(req.body.password),
-      });
-
-      req.login(user, async (err) => {
-        if (err) return next(err);
-        
-        // Handle email verification and welcome email if email address was provided
-        if (req.body.email) {
-          try {
-            // Generate verification token
-            const token = generateVerificationToken();
-            const expiryDate = generateTokenExpiry(24); // 24 hours
-            
-            // Store token in database
-            await storage.setVerificationToken(user.id, token, expiryDate);
-            
-            // Determine base URL for verification link
-            const baseUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
-            const verificationUrl = buildVerificationUrl(baseUrl, user.id, token);
-            
-            // Send only verification email during registration
-            await emailService.sendVerificationEmail(req.body.email, user.username, verificationUrl);
-            console.log(`Verification email sent to ${req.body.email}`);
-          } catch (emailError) {
-            console.error('Failed to send email:', emailError);
-            // Continue even if email sending fails
-          }
-        }
-        
-        res.status(201).json(user);
-      });
-    } catch (error) {
-      next(error);
-    }
+  app.post("/api/register", (_req, res) => {
+    res.status(403).json({ message: "Public registration is disabled" });
   });
 
   app.post("/api/login", passport.authenticate("local"), (req, res) => {
