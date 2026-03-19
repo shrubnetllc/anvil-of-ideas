@@ -6,7 +6,7 @@ import { Loader2, Copy, Sparkles } from "lucide-react";
 import { copyHtmlToClipboard } from "@/lib/utils";
 import { WorkflowData } from "@/hooks/use-workflows";
 
-type WorkflowSpecField = "homepage_spec" | "backend_spec" | "swagger";
+type WorkflowSpecField = "homepage_spec" | "backend_spec" | "swagger" | "estimate";
 
 interface WorkflowSpecTabProps {
     ideaId: string;
