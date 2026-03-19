@@ -4,7 +4,7 @@ import { Idea } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
-import { CalendarIcon, MoreHorizontal, ExternalLink, Zap } from "lucide-react";
+import { CalendarIcon, MoreHorizontal, ExternalLink, Hammer } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +23,7 @@ export function IdeaCard({ idea, onGenerate }: IdeaCardProps) {
   const [, navigate] = useLocation();
   const { deleteIdea } = useIdeas();
   const [showDeleteAlert, setShowDeleteAlert] = useState(false);
-  
+
   const formatTimeAgo = (date: string | Date) => {
     try {
       return formatDistanceToNow(new Date(date), { addSuffix: true });
@@ -31,7 +31,7 @@ export function IdeaCard({ idea, onGenerate }: IdeaCardProps) {
       return "Unknown time";
     }
   };
-  
+
   const getStatusClasses = (status: string) => {
     switch(status) {
       case 'Completed':
@@ -42,24 +42,31 @@ export function IdeaCard({ idea, onGenerate }: IdeaCardProps) {
         return 'bg-neutral-100 text-neutral-800';
     }
   };
-  
-  const handleViewClick = () => {
+
+  const handleCardClick = () => {
     navigate(`/ideas/${idea.id}`);
   };
-  
+
   const handleGenerateClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     onGenerate();
   };
-  
+
+  const handleDropdownClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   const handleDelete = () => {
     deleteIdea(idea.id);
     setShowDeleteAlert(false);
   };
-  
+
   return (
     <>
-      <Card className="border border-neutral-200 shadow-sm overflow-hidden hover:shadow-md transition duration-200">
+      <Card
+        className="border border-neutral-200 shadow-sm overflow-hidden hover:shadow-md transition duration-200 cursor-pointer"
+        onClick={handleCardClick}
+      >
         <CardContent className="p-5">
           <div className="flex items-center justify-between mb-3">
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusClasses(idea.status)}`}>
@@ -67,45 +74,50 @@ export function IdeaCard({ idea, onGenerate }: IdeaCardProps) {
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-neutral-400 hover:text-neutral-500">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-neutral-400 hover:text-neutral-500"
+                  onClick={handleDropdownClick}
+                >
                   <MoreHorizontal className="h-5 w-5" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleViewClick}>View Details</DropdownMenuItem>
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); navigate(`/ideas/${idea.id}`); }}>View Details</DropdownMenuItem>
                 {idea.status === 'Draft' && (
-                  <DropdownMenuItem onClick={() => onGenerate()}>Generate Canvas</DropdownMenuItem>
+                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onGenerate(); }}>Start Forging</DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={() => setShowDeleteAlert(true)} className="text-red-600">
+                <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setShowDeleteAlert(true); }} className="text-red-600">
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          
+
           <h3 className="text-lg font-semibold text-neutral-900 mb-2">
             {idea.title || idea.companyName || idea.description.split(' ').slice(0, 3).join(' ') + '...'}
           </h3>
-          
+
           <p className="text-sm text-neutral-600 line-clamp-3 mb-4">
             {idea.description}
           </p>
-          
+
           <div className="flex items-center justify-between">
             <div className="flex items-center text-xs text-neutral-500">
               <CalendarIcon className="h-4 w-4 mr-1" />
               <span>{formatTimeAgo(idea.createdAt)}</span>
             </div>
-            
+
             {idea.status === 'Draft' ? (
-              <Button 
-                variant="link" 
-                size="sm" 
+              <Button
+                variant="link"
+                size="sm"
                 className="text-xs h-6 p-0 text-primary-600 hover:text-primary-800"
                 onClick={handleGenerateClick}
               >
-                Generate Canvas
-                <Zap className="ml-1 h-3 w-3" />
+                Start Forging
+                <Hammer className="ml-1 h-3 w-3" />
               </Button>
             ) : idea.status === 'Generating' ? (
               <div className="inline-flex items-center text-xs font-medium text-neutral-500">
@@ -116,11 +128,11 @@ export function IdeaCard({ idea, onGenerate }: IdeaCardProps) {
                 </svg>
               </div>
             ) : (
-              <Button 
-                variant="link" 
-                size="sm" 
+              <Button
+                variant="link"
+                size="sm"
                 className="text-xs h-6 p-0 text-primary-600 hover:text-primary-800"
-                onClick={handleViewClick}
+                onClick={(e) => { e.stopPropagation(); navigate(`/ideas/${idea.id}`); }}
               >
                 View Canvas
                 <ExternalLink className="ml-1 h-3 w-3" />
@@ -129,7 +141,7 @@ export function IdeaCard({ idea, onGenerate }: IdeaCardProps) {
           </div>
         </CardContent>
       </Card>
-      
+
       <AlertDialog open={showDeleteAlert} onOpenChange={setShowDeleteAlert}>
         <AlertDialogContent>
           <AlertDialogHeader>
