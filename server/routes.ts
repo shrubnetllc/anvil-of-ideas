@@ -694,7 +694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const jobId = req.params.id;
-      const { status, description, step } = req.body;
+      const { status, description, step, substep, totalSubsteps } = req.body;
 
       if (!status) {
         return res.status(400).json({ message: "status is required" });
@@ -735,6 +735,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Publish Socket.IO event based on status
       const stepNum = typeof step === "number" ? step : undefined;
+      const substepNum = typeof substep === "number" ? substep : undefined;
+      const totalSubstepsNum = typeof totalSubsteps === "number" ? totalSubsteps : undefined;
+      console.log(`[webhook] Received progress: step=${stepNum} substep=${substepNum}/${totalSubstepsNum} status=${status}`);
       const lowerStatus = status.toLowerCase();
       if (lowerStatus === "completed" || lowerStatus === "done") {
         publishJobEvent(jobId, "done", { message: description || "Completed", step: stepNum });
@@ -756,7 +759,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.updateIdeaStatus(job.ideaId, "Draft");
         }
       } else {
-        publishJobEvent(jobId, "progress", { message: description, step: stepNum });
+        publishJobEvent(jobId, "progress", { message: description, step: stepNum, substep: substepNum, totalSubsteps: totalSubstepsNum });
       }
 
       return res.status(200).json({ ok: true });

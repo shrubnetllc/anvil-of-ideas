@@ -12,6 +12,8 @@ interface UseJobSocketResult {
   eventType: JobEvent["type"] | null;
   progress: number | null;
   step: number | null;
+  substep: number | null;
+  totalSubsteps: number | null;
   isSubscribed: boolean;
 }
 
@@ -20,6 +22,8 @@ export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): U
   const [eventType, setEventType] = useState<JobEvent["type"] | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [step, setStep] = useState<number | null>(null);
+  const [substep, setSubstep] = useState<number | null>(null);
+  const [totalSubsteps, setTotalSubsteps] = useState<number | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
 
   const onDoneRef = useRef(onDone);
@@ -33,6 +37,8 @@ export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): U
       setEventType(null);
       setProgress(null);
       setStep(null);
+      setSubstep(null);
+      setTotalSubsteps(null);
       setIsSubscribed(false);
       return;
     }
@@ -48,6 +54,8 @@ export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): U
       if (event.data.step != null) {
         setStep(event.data.step);
       }
+      setSubstep(event.data.substep ?? null);
+      setTotalSubsteps(event.data.totalSubsteps ?? null);
 
       if (event.type === "done") {
         onDoneRef.current?.();
@@ -64,5 +72,5 @@ export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): U
     };
   }, [jobId]);
 
-  return { message, eventType, progress, step, isSubscribed };
+  return { message, eventType, progress, step, substep, totalSubsteps, isSubscribed };
 }

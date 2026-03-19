@@ -8,6 +8,8 @@ export interface JobEvent {
     message?: string;
     progress?: number;
     step?: number;
+    substep?: number;
+    totalSubsteps?: number;
   };
 }
 

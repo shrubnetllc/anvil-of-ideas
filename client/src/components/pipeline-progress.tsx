@@ -19,16 +19,25 @@ const PIPELINE_STEPS = [
 
 const TOTAL_SUBSTEPS = PIPELINE_STEPS.reduce((sum, s) => sum + s.substeps, 0);
 
-/** Compute weighted progress (0–100) at the start of a step (1-based). */
-function computeProgress(step: number): number {
-  if (step <= 1) return 0;
+/** Compute weighted progress (0–100), interpolating within a step using substep data. */
+function computeProgress(step: number, substep?: number | null, totalSubsteps?: number | null): number {
+  if (step <= 0) return 0;
   if (step > PIPELINE_STEPS.length) return 100;
 
-  let completed = 0;
+  // Sum weights of fully completed steps (before current step)
+  let completedWeight = 0;
   for (let i = 0; i < step - 1; i++) {
-    completed += PIPELINE_STEPS[i].substeps;
+    completedWeight += PIPELINE_STEPS[i].substeps;
   }
-  return Math.round((completed / TOTAL_SUBSTEPS) * 100);
+
+  // Interpolate within current step if substep data is available
+  const currentStepWeight = PIPELINE_STEPS[step - 1].substeps;
+  let fraction = 0;
+  if (substep != null && totalSubsteps != null && totalSubsteps > 0) {
+    fraction = Math.min(substep / totalSubsteps, 1);
+  }
+
+  return Math.round(((completedWeight + currentStepWeight * fraction) / TOTAL_SUBSTEPS) * 100);
 }
 
 /** Parse step number from description like "Starting PRD (2/10)" or "BRD complete. Starting FRD (4/10)". */
@@ -68,7 +77,7 @@ export function PipelineProgress({ ideaId }: PipelineProgressProps) {
   }, [fetchCurrentJob]);
 
   // Subscribe to real-time socket events for this job
-  const { message, eventType, step } = useJobSocket({
+  const { message, eventType, step, substep, totalSubsteps } = useJobSocket({
     jobId,
     onDone: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
@@ -91,7 +100,7 @@ export function PipelineProgress({ ideaId }: PipelineProgressProps) {
   }
 
   const currentStep = step ?? parseStepFromDescription(statusMessage) ?? 1;
-  const progressPercent = computeProgress(currentStep);
+  const progressPercent = computeProgress(currentStep, substep, totalSubsteps);
   const stepName = PIPELINE_STEPS[currentStep - 1]?.name ?? "Processing";
 
   return (
