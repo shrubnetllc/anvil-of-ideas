@@ -165,6 +165,7 @@ export default function IdeaDetail() {
                       <TabsTrigger value="frontend" className="text-sm">Front End Spec</TabsTrigger>
                       <TabsTrigger value="backend" className="text-sm">Back End Spec</TabsTrigger>
                       <TabsTrigger value="swagger" className="text-sm">Swagger</TabsTrigger>
+                      <TabsTrigger value="estimate" className="text-sm">Estimate</TabsTrigger>
                       <TabsTrigger value="ultimate-website" className="text-sm">Ultimate Website</TabsTrigger>
                       <TabsTrigger value="details" className="text-sm">
                         <div className="flex items-center">
@@ -218,6 +219,15 @@ export default function IdeaDetail() {
                         field="swagger"
                         title="Swagger"
                         description="The Swagger/OpenAPI specification will appear here once it has been generated."
+                      />
+                    </TabsContent>
+
+                    <TabsContent value="estimate" className="mt-6">
+                      <WorkflowSpecTab
+                        ideaId={id}
+                        field="estimate"
+                        title="Estimate"
+                        description="The estimate will appear here once it has been generated."
                       />
                     </TabsContent>
 

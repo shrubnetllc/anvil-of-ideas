@@ -10,6 +10,7 @@ import { fetchProjectWorkflows, fetchProjectEstimate } from "./supabase";
 import { emailService } from "./email";
 import { generateVerificationToken, generateTokenExpiry, buildVerificationUrl } from "./utils/auth-utils";
 import { triggerGeneration, triggerStepGeneration } from "./anvil-api";
+import { setupAdminRoutes } from "./admin";
 
 function isAuthenticated(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) {
@@ -20,6 +21,7 @@ function isAuthenticated(req: Request, res: Response, next: NextFunction) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
+  setupAdminRoutes(app);
 
   // ==================== IDEAS ROUTES ====================
 
