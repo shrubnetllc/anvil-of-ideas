@@ -66,7 +66,7 @@ export function setupSocketIO(httpServer: HttpServer, sessionMiddleware: Request
 export function publishJobEvent(
   jobId: string,
   type: "status" | "progress" | "log" | "done" | "error",
-  data: { message?: string; progress?: number }
+  data: { message?: string; progress?: number; step?: number }
 ) {
   if (!io) return;
 

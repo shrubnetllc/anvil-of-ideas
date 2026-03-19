@@ -7,6 +7,7 @@ export interface JobEvent {
   data: {
     message?: string;
     progress?: number;
+    step?: number;
   };
 }
 

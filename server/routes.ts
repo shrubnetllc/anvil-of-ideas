@@ -694,7 +694,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const jobId = req.params.id;
-      const { status, description } = req.body;
+      const { status, description, step } = req.body;
 
       if (!status) {
         return res.status(400).json({ message: "status is required" });
@@ -734,9 +734,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Publish Socket.IO event based on status
+      const stepNum = typeof step === "number" ? step : undefined;
       const lowerStatus = status.toLowerCase();
       if (lowerStatus === "completed" || lowerStatus === "done") {
-        publishJobEvent(jobId, "done", { message: description || "Completed" });
+        publishJobEvent(jobId, "done", { message: description || "Completed", step: stepNum });
         // Update idea status
         if (job.ideaId) {
           await storage.updateIdeaStatus(job.ideaId, "Completed");
@@ -755,7 +756,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.updateIdeaStatus(job.ideaId, "Draft");
         }
       } else {
-        publishJobEvent(jobId, "progress", { message: description });
+        publishJobEvent(jobId, "progress", { message: description, step: stepNum });
       }
 
       return res.status(200).json({ ok: true });
