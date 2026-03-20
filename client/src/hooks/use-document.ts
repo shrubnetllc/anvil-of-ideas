@@ -25,10 +25,12 @@ export function useDocument(ideaId: string, documentType: DocumentType) {
                 const data = await response.json();
                 setDocument(data);
 
+                if (!data) return;
+
                 // Treat as complete if status is 'completed' OR if content exists
                 // (anvil-api may have written content before the status was updated)
                 const hasContent = !!(data.content || data.contentSections);
-                if (data && (data.status === "completed" || hasContent)) {
+                if (data.status === "completed" || hasContent) {
                     setIsGenerating(false);
                     setIsTimedOut(false);
                 } else if (data && data.status === "generating") {
