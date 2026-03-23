@@ -30,6 +30,7 @@ export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): U
   onDoneRef.current = onDone;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const lastStepRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!jobId) {
@@ -40,6 +41,7 @@ export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): U
       setSubstep(null);
       setTotalSubsteps(null);
       setIsSubscribed(false);
+      lastStepRef.current = null;
       return;
     }
 
@@ -52,10 +54,20 @@ export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): U
         setProgress(event.data.progress);
       }
       if (event.data.step != null) {
+        if (event.data.step !== lastStepRef.current) {
+          lastStepRef.current = event.data.step;
+          setSubstep(null);
+          setTotalSubsteps(null);
+        }
+
         setStep(event.data.step);
       }
-      setSubstep(event.data.substep ?? null);
-      setTotalSubsteps(event.data.totalSubsteps ?? null);
+      if (event.data.substep != null) {
+        setSubstep(event.data.substep);
+      }
+      if (event.data.totalSubsteps != null) {
+        setTotalSubsteps(event.data.totalSubsteps);
+      }
 
       if (event.type === "done") {
         onDoneRef.current?.();

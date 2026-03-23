@@ -94,7 +94,11 @@ export function WorkflowSpecTab({ ideaId, field, title, description }: WorkflowS
             {/* Content */}
             <div className="bg-white p-4 rounded-lg border border-neutral-200 shadow-sm">
                 <div id={`spec-content-${field}`} className="prose max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-md prose-p:text-neutral-700">
-                    <ReactMarkdown>{content}</ReactMarkdown>
+                    {field === "swagger" ? (
+                        <pre className="bg-white text-neutral-900 p-4 rounded-md overflow-x-auto text-sm"><code>{content}</code></pre>
+                    ) : (
+                        <ReactMarkdown>{content}</ReactMarkdown>
+                    )}
                 </div>
             </div>
         </div>
