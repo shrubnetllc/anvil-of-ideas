@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Copy, Sparkles, GitBranch, RefreshCw } from "lucide-react";
 import { copyHtmlToClipboard } from "@/lib/utils";
-import { MermaidDiagram } from "@/components/mermaid-diagram";
+import { MermaidDiagram, parseDiagrams } from "@/components/mermaid-diagram";
 
 interface WorkflowsTabProps {
     ideaId: string;
@@ -16,7 +16,7 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
     const { toast } = useToast();
     const { workflow, steps, isLoading } = useWorkflows(ideaId);
     const { regenerateStep, isRegeneratingStep } = useIdeas();
-    const [diagramOpen, setDiagramOpen] = useState(false);
+    const [diagramStepIndex, setDiagramStepIndex] = useState<number | null>(null);
 
     const formatStepTitle = (key: string) => {
         return key
@@ -111,7 +111,7 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                                 size="icon"
                                 variant="ghost"
                                 className="absolute top-3 right-3 h-8 w-8 text-neutral-400 hover:text-primary"
-                                onClick={() => setDiagramOpen(true)}
+                                onClick={() => setDiagramStepIndex(index)}
                                 title="View workflow diagram"
                             >
                                 <GitBranch className="h-4 w-4" />
@@ -141,13 +141,18 @@ export function WorkflowsTab({ ideaId }: WorkflowsTabProps) {
                 ))}
             </div>
 
-            {workflow?.mermaid_code && (
-                <MermaidDiagram
-                    code={workflow.mermaid_code}
-                    open={diagramOpen}
-                    onOpenChange={setDiagramOpen}
-                />
-            )}
+            {workflow?.mermaid_code && diagramStepIndex !== null && (() => {
+                const diagrams = parseDiagrams(workflow.mermaid_code);
+                const diagram = diagrams[diagramStepIndex] ?? diagrams[0];
+                return (
+                    <MermaidDiagram
+                        code={diagram.code}
+                        open={true}
+                        onOpenChange={(open) => { if (!open) setDiagramStepIndex(null); }}
+                        title={diagram.label ? `Step ${diagramStepIndex + 1}: ${diagram.label}` : "Workflow Diagram"}
+                    />
+                );
+            })()}
         </div>
     );
 }
