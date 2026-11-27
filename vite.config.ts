@@ -3,6 +3,8 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
+const apiOrigin = process.env.FASTAPI_ORIGIN || "http://127.0.0.1:8000";
+
 export default defineConfig({
   plugins: [
     react(),
@@ -16,6 +18,17 @@ export default defineConfig({
         ]
       : []),
   ],
+  server: {
+    host: "0.0.0.0",
+    port: 5000,
+    strictPort: true,
+    proxy: {
+      "^/api/(admin|email|health|ideas|jobs|login|logout|register|resend-verification|settings|user|verify-email)(/|\\?|$)":
+        apiOrigin,
+      "^/api/internal/jobs/[0-9A-Fa-f-]+/progress$": apiOrigin,
+      "/confirm-email/": apiOrigin,
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

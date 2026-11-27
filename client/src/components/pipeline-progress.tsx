@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useJobSocket } from "@/hooks/use-job-socket";
 import { queryClient } from "@/lib/queryClient";
 import { Progress } from "@/components/ui/progress";
@@ -17,32 +17,44 @@ const PIPELINE_STEPS = [
   { name: "Estimate", substeps: 10 },
 ] as const;
 
-const TOTAL_SUBSTEPS = PIPELINE_STEPS.reduce((sum, s) => sum + s.substeps, 0);
+const REGENERATION_STEPS: Record<string, readonly (typeof PIPELINE_STEPS)[number][]> = {
+  lean_canvas: [PIPELINE_STEPS[0]],
+  prd: [PIPELINE_STEPS[1]],
+  brd: [PIPELINE_STEPS[2]],
+  frd: [PIPELINE_STEPS[3]],
+  workflows: PIPELINE_STEPS.slice(4, 8),
+  specs: [PIPELINE_STEPS[8]],
+};
 
-/** Compute weighted progress (0–100), interpolating within a step using substep data. */
-function computeProgress(step: number, substep?: number | null, totalSubsteps?: number | null): number {
+function computeProgress(
+  steps: readonly (typeof PIPELINE_STEPS)[number][],
+  step: number,
+  substep?: number | null,
+  totalSubsteps?: number | null,
+): number {
+  const totalWeight = steps.reduce((sum, s) => sum + s.substeps, 0);
   if (step <= 0) return 0;
-  if (step > PIPELINE_STEPS.length) return 100;
+  if (step > steps.length) return 100;
 
   // Sum weights of fully completed steps (before current step)
   let completedWeight = 0;
   for (let i = 0; i < step - 1; i++) {
-    completedWeight += PIPELINE_STEPS[i].substeps;
+    completedWeight += steps[i].substeps;
   }
 
   // Interpolate within current step if substep data is available
-  const currentStepWeight = PIPELINE_STEPS[step - 1].substeps;
+  const currentStepWeight = steps[step - 1].substeps;
   let fraction = 0;
   if (substep != null && totalSubsteps != null && totalSubsteps > 0) {
     fraction = Math.min(substep / totalSubsteps, 1);
   }
 
-  return Math.round(((completedWeight + currentStepWeight * fraction) / TOTAL_SUBSTEPS) * 100);
+  return Math.round(((completedWeight + currentStepWeight * fraction) / totalWeight) * 100);
 }
 
 /** Parse step number from description like "Starting PRD (2/10)" or "BRD complete. Starting FRD (4/10)". */
 function parseStepFromDescription(description: string): number | null {
-  const match = description.match(/\((\d+)\/10\)/);
+  const match = description.match(/\((\d+)\/\d+\)/);
   return match ? parseInt(match[1], 10) : null;
 }
 
@@ -51,57 +63,38 @@ interface PipelineProgressProps {
 }
 
 export function PipelineProgress({ ideaId }: PipelineProgressProps) {
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string>("Starting pipeline...");
-
-  // Fetch the current active job for this idea
-  const fetchCurrentJob = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/ideas/${ideaId}/current-workflow-job?documentType=LeanCanvas`);
-      if (response.ok) {
-        const job = await response.json();
-        if (job) {
-          setJobId(job.id);
-          if (job.description) {
-            setStatusMessage(job.description);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error fetching current job:", error);
-    }
-  }, [ideaId]);
-
-  useEffect(() => {
-    fetchCurrentJob();
-  }, [fetchCurrentJob]);
-
-  // Subscribe to real-time socket events for this job
-  const { message, eventType, step, substep, totalSubsteps } = useJobSocket({
-    jobId,
-    onDone: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
-      queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}/canvas`] });
-    },
-    onError: (msg) => {
-      setStatusMessage(msg || "Generation failed");
-    },
+  const { data: job, refetch } = useQuery<{
+    id: string;
+    description: string | null;
+    generationStep: string | null;
+  } | null>({
+    queryKey: [`/api/ideas/${ideaId}/current-workflow-job`],
+    staleTime: 0,
+    retry: 2,
   });
 
-  // Update status message when socket events arrive
-  useEffect(() => {
-    if (message) {
-      setStatusMessage(message);
-    }
-  }, [message]);
+  const refresh = () => {
+    void queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}`] });
+    void queryClient.invalidateQueries({ queryKey: [`/api/ideas/${ideaId}/canvas`] });
+    // A superseded job can finish after its replacement has started.
+    void refetch();
+  };
+
+  const { message, eventType, step, substep, totalSubsteps } = useJobSocket({
+    jobId: job?.id,
+    onDone: refresh,
+    onError: refresh,
+  });
+  const statusMessage = message ?? job?.description ?? "Starting pipeline...";
+  const steps = REGENERATION_STEPS[job?.generationStep ?? ""] ?? PIPELINE_STEPS;
 
   if (eventType === "done" || eventType === "error") {
     return null;
   }
 
   const currentStep = step ?? parseStepFromDescription(statusMessage) ?? 1;
-  const progressPercent = computeProgress(currentStep, substep, totalSubsteps);
-  const stepName = PIPELINE_STEPS[currentStep - 1]?.name ?? "Processing";
+  const progressPercent = computeProgress(steps, currentStep, substep, totalSubsteps);
+  const stepName = steps[currentStep - 1]?.name ?? "Processing";
 
   return (
     <div className="mb-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-4">
@@ -120,7 +113,7 @@ export function PipelineProgress({ ideaId }: PipelineProgressProps) {
               Pipeline In Progress
             </h4>
             <span className="text-xs text-neutral-500">
-              Step {currentStep}/{PIPELINE_STEPS.length}
+              Step {currentStep}/{steps.length}
             </span>
           </div>
           <p className="text-sm text-neutral-600 truncate">

@@ -18,57 +18,15 @@ interface UseJobSocketResult {
 }
 
 export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): UseJobSocketResult {
-  const [message, setMessage] = useState<string | null>(null);
-  const [eventType, setEventType] = useState<JobEvent["type"] | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
-  const [step, setStep] = useState<number | null>(null);
-  const [substep, setSubstep] = useState<number | null>(null);
-  const [totalSubsteps, setTotalSubsteps] = useState<number | null>(null);
-  const [isSubscribed, setIsSubscribed] = useState(false);
-
+  const [event, setEvent] = useState<JobEvent | null>(null);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
-  const lastStepRef = useRef<number | null>(null);
-
   useEffect(() => {
-    if (!jobId) {
-      setMessage(null);
-      setEventType(null);
-      setProgress(null);
-      setStep(null);
-      setSubstep(null);
-      setTotalSubsteps(null);
-      setIsSubscribed(false);
-      lastStepRef.current = null;
-      return;
-    }
-
-    const channel = `job:${jobId}`;
-
-    const unsubscribe = subscribe(channel, (event: JobEvent) => {
-      setMessage(event.data.message ?? null);
-      setEventType(event.type);
-      if (event.data.progress != null) {
-        setProgress(event.data.progress);
-      }
-      if (event.data.step != null) {
-        if (event.data.step !== lastStepRef.current) {
-          lastStepRef.current = event.data.step;
-          setSubstep(null);
-          setTotalSubsteps(null);
-        }
-
-        setStep(event.data.step);
-      }
-      if (event.data.substep != null) {
-        setSubstep(event.data.substep);
-      }
-      if (event.data.totalSubsteps != null) {
-        setTotalSubsteps(event.data.totalSubsteps);
-      }
-
+    if (!jobId) return;
+    const unsubscribe = subscribe(`job:${jobId}`, (event: JobEvent) => {
+      setEvent(event);
       if (event.type === "done") {
         onDoneRef.current?.();
       } else if (event.type === "error") {
@@ -76,13 +34,17 @@ export function useJobSocket({ jobId, onDone, onError }: UseJobSocketOptions): U
       }
     });
 
-    setIsSubscribed(true);
-
-    return () => {
-      unsubscribe();
-      setIsSubscribed(false);
-    };
+    return unsubscribe;
   }, [jobId]);
 
-  return { message, eventType, progress, step, substep, totalSubsteps, isSubscribed };
+  const snapshot = event?.channel === `job:${jobId}` ? event : null;
+  return {
+    message: snapshot?.data.message ?? null,
+    eventType: snapshot?.type ?? null,
+    progress: snapshot?.data.progress ?? null,
+    step: snapshot?.data.step ?? null,
+    substep: snapshot?.data.substep ?? null,
+    totalSubsteps: snapshot?.data.totalSubsteps ?? null,
+    isSubscribed: Boolean(jobId && snapshot?.type !== "done" && snapshot?.type !== "error"),
+  };
 }

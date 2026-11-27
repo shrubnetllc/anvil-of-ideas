@@ -1,111 +1,31 @@
-# Anvil of Ideas ⚒️
-> Forge Your Future: An AI-Powered Platform for Crafting and Refining Business Ideas.
+# Anvil of Ideas
 
-Anvil of Ideas is a powerful platform designed for founders and entrepreneurs to transform raw concepts into structured, valid business models. By leveraging AI-driven generation and n8n-powered workflows, it automates the creation of critical business documents and technical specifications.
+The React dashboard helps founders develop ideas into Lean Canvases, requirements documents, workflow specifications and estimates. The browser calls the dashboard endpoints in `shrubnetllc/anvil-api`. FastAPI manages sessions and stores project data in PostgreSQL. Its RabbitMQ worker runs document generation through Hermes Agent.
 
-## ✨ Key Features
+## Local development
 
-- **🚀 Idea Forge**: A centralized dashboard to manage and brainstorm business ideas.
-- **📋 AI Lean Canvas**: Automatically generate structured lean canvases from simple idea descriptions.
-- **📄 Document Generation**: AI-powered creation of:
-  - Business Requirements Documents (BRD)
-  - Functional Requirements Documents (FRD)
-  - Project Requirements Documents (PRD)
-- **⚙️ Integrated Workflows**: Seamless integration with **n8n** for backend automation and document synchronization.
-- **💾 Supabase Integration**: Robust persistence layer for managing documents and project states.
-- **🎨 Modern UI**: A sleek, responsive dashboard built with React and Tailwind CSS.
+Use Node.js 22 and start the FastAPI dashboard service (`app.dashboard.main:app`) using the instructions in the companion repository. [Backend setup](https://github.com/shrubnetllc/anvil-api/blob/main/dashboard.md)
 
-## 🏗️ Architecture
-
-The system follows a modular architecture connecting the frontend application to powerful automation engines.
-
-```mermaid
-flowchart LR
-    UI[Anvil App Frontend]
-    API[Anvil App API]
-    DB[(Supabase)]
-    N8N[n8n]
-    LLM[LLM Providers]
-    UW[Ultimate Website]
-    PD[Ultimate Pitch Deck]
-    CF[ComfyUI Image Generator]
-
-    UI --> API
-    API --> DB
-    API --> N8N
-    N8N --> LLM
-    LLM --> N8N
-    N8N --> DB
-    N8N --> UW
-    N8N --> PD
-    UW --> CF
-    DB --> API
+```sh
+npm ci
+npm run dev
 ```
 
-## 🛠️ Tech Stack
+Open http://localhost:5000. Vite forwards dashboard requests and email verification links to http://127.0.0.1:8000. To use another backend, set the `FASTAPI_ORIGIN` environment variable in the shell that starts Vite.
 
-- **Frontend**: React, TypeScript, Vite, Tailwind CSS, Lucide Icons, Shadcn UI.
-- **Backend**: Node.js, Express, tsx.
-- **Database/Storage**: Supabase (PostgreSQL), Drizzle ORM.
-- **Automation**: n8n Workflows.
-- **Documentation**: Markdown, Mermaid.
+## Production
 
-## 📁 Project Structure
+The Dockerfile builds the React app and serves it with Caddy. Set `FASTAPI_ORIGIN` to the FastAPI service origin reachable from the frontend container. The image defaults to `http://backend:8000` and listens on port 5000. Configure the backend's public frontend URL to match the origin users open in their browser so email verification links work.
 
-```text
-├── client/          # React frontend application
-├── server/          # Express API server & Supabase integration
-├── shared/          # Shared Zod schemas and types
-├── docs/            # Architecture and workflow documentation
-├── scripts/         # Utility scripts
-├── sql/             # Database migrations and setups
-└── public/          # Static assets
+```sh
+docker build -t anvil-dashboard .
+docker run --network anvil -p 5000:5000 -e FASTAPI_ORIGIN=http://backend:8000 anvil-dashboard
 ```
 
-## 🚀 Getting Started
+The example assumes the dashboard and backend share a Docker network named `anvil`. For a deployment outside Docker, run `npm ci && npm run build`, install Caddy 2, then run `npm start` from the project root. Caddy serves the assets from `dist/public` and proxies dashboard requests on the same origin so the browser can send its session cookie. Set `PORT` to change its listening port.
 
-### Prerequisites
+Set `VITE_ULTIMATE_WEBSITE_GENERATOR_URL` at build time to enable links to your website generator. The database connection, model provider credentials and Hermes gateway settings belong on the backend.
 
-- Node.js (v18+)
-- npm or yarn
-- A Supabase account and project
-- An n8n instance for workflow execution
+## License
 
-### Installation
-
-1. **Clone the repository**:
-   ```bash
-   git clone <repository-url>
-   cd anvil-of-ideas
-   ```
-
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
-
-3. **Configure Environment Variables**:
-   Create a `.env` file in the root directory and add the following:
-   ```env
-   # Database & Supabase
-   SUPABASE_URL=your_supabase_url
-   SUPABASE_API_KEY=your_supabase_key
-   DATABASE_URL=your_db_url
-
-   # n8n Integration
-   N8N_AUTH_USERNAME=your_username
-   N8N_AUTH_PASSWORD=your_password
-   N8N_BRD_WEBHOOK_URL=your_brd_webhook
-   N8N_FUNCTIONAL_WEBHOOK_URL=your_frd_webhook
-   N8N_WF_VECTOR_WEBHOOK_URL=your_wf_vector_webhook
-   ```
-
-4. **Run the Development Server**:
-   ```bash
-   npm run dev
-   ```
-   The application will be available at `http://localhost:5000`.
-
-## 📜 License
-
-This project is licensed under the MIT License - see the `package.json` file for details.
+MIT. See [LICENSE](LICENSE).
