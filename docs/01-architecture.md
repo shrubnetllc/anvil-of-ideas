@@ -1,25 +1,17 @@
-# System Architecture
+# System architecture
 
-# High Level Architecture
-
+```mermaid
 flowchart LR
-    UI[Anvil App Frontend]
-    API[Anvil App API]
-    DB[(Supabase)]
-    N8N[n8n]
-    LLM[LLM Providers]
-    UW[Ultimate Website]
-    PD[Ultimate Pitch Deck]
-    CF[ComfyUI Image Generator]
+    UI[React dashboard] --> Proxy[Vite or Caddy]
+    Proxy --> API[FastAPI dashboard API]
+    API --> DB[(PostgreSQL)]
+    API --> Q[RabbitMQ]
+    Q --> Worker[Generation worker]
+    Worker --> Hermes[Hermes Agent]
+    Hermes --> LLM[Model provider]
+    Worker --> DB
+    API -->|Job events| Proxy
+    API --> Website[Ultimate Website service]
+```
 
-    UI --> API
-    API --> DB
-    API --> N8N
-    N8N --> LLM
-    LLM --> N8N
-    N8N --> DB
-    N8N --> UW
-    N8N --> PD
-    UW --> CF
-    DB --> API
-    
+The browser sends authenticated requests to its own origin. FastAPI checks the user's session, submits generation jobs and streams job status updates. The worker applies the project’s generation steps and saves their outputs in PostgreSQL. [Deployment and configuration](https://github.com/shrubnetllc/anvil-api/blob/main/dashboard.md)

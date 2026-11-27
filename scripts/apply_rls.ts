@@ -1,7 +1,11 @@
 
 import fs from 'fs';
-import path from 'path';
-import { pool } from '../server/db';
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: process.env.NODE_ENV === 'development' ? '.env.development' : '.env' });
+if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required');
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function applyRLS() {
     const sqlPath = 'sql/enable_rls.sql';

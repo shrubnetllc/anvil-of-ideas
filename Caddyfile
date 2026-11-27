@@ -1,0 +1,12 @@
+:{$PORT:5000} {
+	@dashboard path /api/health /api/admin/* /api/email/* /api/ideas /api/ideas/* /api/jobs/* /api/login /api/logout /api/register /api/resend-verification /api/settings /api/settings/* /api/user /api/verify-email /confirm-email/*
+	@legacyProgress path_regexp ^/api/internal/jobs/[0-9A-Fa-f-]+/progress$
+	route {
+		reverse_proxy @legacyProgress {$FASTAPI_ORIGIN:http://127.0.0.1:8000}
+		reverse_proxy @dashboard {$FASTAPI_ORIGIN:http://127.0.0.1:8000}
+		respond /api/* 404
+		root * dist/public
+		try_files {path} /index.html
+		file_server
+	}
+}

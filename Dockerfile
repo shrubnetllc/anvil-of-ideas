@@ -1,33 +1,17 @@
-# Use Node.js 20 on Alpine Linux as the base image
-FROM node:20-alpine
-
-# Set the working directory
+FROM node:22-alpine AS build
 WORKDIR /app
-
-# Copy package.json and package-lock.json
 COPY package*.json ./
-
-# Install dependencies (ci ensures exact versions from lockfile)
-RUN npm config set fetch-retries 5 \
-    && npm config set fetch-retry-mintimeout 20000 \
-    && npm config set fetch-retry-maxtimeout 120000 \
-    && npm config set fetch-timeout 600000
 RUN npm ci
-
-# Copy the rest of the application code
 COPY . .
-
-# Build args
-ARG VITE_API_URL
 ARG VITE_ULTIMATE_WEBSITE_GENERATOR_URL
-ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_ULTIMATE_WEBSITE_GENERATOR_URL=$VITE_ULTIMATE_WEBSITE_GENERATOR_URL
-
-# Build the application
+ARG VITE_ENABLE_GTM
+ARG VITE_GTM_ID
 RUN npm run build
 
-# Expose the application port
+FROM caddy:2-alpine
+WORKDIR /app
+ENV FASTAPI_ORIGIN=http://backend:8000
+COPY Caddyfile ./
+COPY --from=build /app/dist/public ./dist/public
 EXPOSE 5000
-
-# Start the application
-CMD ["npm", "run", "start"]
+CMD ["caddy", "run", "--config", "/app/Caddyfile"]
